@@ -1,0 +1,12 @@
+[package]
+name = "pem"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "PEM related crate"
+
+[dependencies]
+regex = "1.11.1"
+rstest ={ workspace = true }
+thiserror ={ workspace = true }

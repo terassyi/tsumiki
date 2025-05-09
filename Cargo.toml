@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "tsumiki" ]
+members = [ "pem", "tsumiki" ]
 
 [workspace.package]
 version = "0.0.1"
@@ -9,3 +9,5 @@ edition = "2024"
 rust-version = "1.86.0"
 
 [workspace.dependencies]
+thiserror = "2.0.12"
+rstest = "0.25.0"
