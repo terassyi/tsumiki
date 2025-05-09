@@ -1,0 +1,11 @@
+[workspace]
+resolver = "2"
+members = [ "tsumiki" ]
+
+[workspace.package]
+version = "0.0.1"
+authors = [ "terassyi" ]
+edition = "2024"
+rust-version = "1.86.0"
+
+[workspace.dependencies]
