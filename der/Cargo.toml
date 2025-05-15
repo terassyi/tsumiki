@@ -1,0 +1,12 @@
+[package]
+name = "der"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "DER related crate"
+
+[dependencies]
+nom = "8.0.0"
+rstest = { workspace = true }
+thiserror = { workspace = true }

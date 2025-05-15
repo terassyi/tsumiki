@@ -46,7 +46,7 @@ impl FromStr for Label {
 
 impl Label {
     fn get_label(line: &str) -> Result<Label, Error> {
-        let re = Regex::new(&format!(r"-----(?:BEGIN|END) ([A-Z ]+)-----\s*"))
+        let re = Regex::new(r"-----(?:BEGIN|END) ([A-Z ]+)-----\s*")
             .map_err(|_| Error::InvalidEncapsulationBoundary)?;
         if let Some(captured) = re.captures(line) {
             if captured.len() != 2 {
@@ -135,13 +135,11 @@ impl FromStr for Pem {
                                 return Err(Error::LabelMissMatch);
                             }
                             state = PemParsingState::PostEncapsulationBoundary;
+                        } else if is_base64_finl(line) {
+                            base64_finl_lines.push(line);
+                            state = PemParsingState::Base64Finl;
                         } else {
-                            if is_base64_finl(line) {
-                                base64_finl_lines.push(line);
-                                state = PemParsingState::Base64Finl;
-                            } else {
-                                base64_lines.push(line);
-                            }
+                            base64_lines.push(line);
                         }
                     }
                     None => return Err(Error::MissingPostEncapsulationBoundary),
@@ -196,7 +194,7 @@ enum PemParsingState {
 
 fn base64_line(line: &str) -> Result<String, Error> {
     let content = line.trim_end();
-    if content.len() == 0 {
+    if content.is_empty() {
         return Err(Error::InvalidBase64Line);
     }
     Ok(content.to_string())
@@ -209,7 +207,7 @@ fn base64_finl(lines: &[&str]) -> Result<String, Error> {
     // =\s\s\n
     // exp-2)
     // ..AB==\s\s\n
-    if lines.iter().find(|l| l.is_empty()).is_some() {
+    if lines.iter().any(|l| l.is_empty()) {
         return Err(Error::InvalidBase64Finl);
     }
     let lines = lines.iter().map(|l| l.trim()).collect::<Vec<&str>>();
