@@ -7,6 +7,8 @@ rust-version.workspace = true
 description = "DER related crate"
 
 [dependencies]
+pem = { path = "../pem" }
 nom = "8.0.0"
 rstest = { workspace = true }
 thiserror = { workspace = true }
+tsumiki = { path = "../tsumiki" }

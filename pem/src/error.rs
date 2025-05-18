@@ -1,7 +1,8 @@
+use base64::DecodeError;
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq, Eq)]
-pub(crate) enum Error {
+pub enum Error {
     #[error("missing a pre encapsulation boundary")]
     MissingPreEncapsulationBoundary,
     #[error("missing a post encapsulation boundary")]
@@ -18,4 +19,6 @@ pub(crate) enum Error {
     InvalidBase64Line,
     #[error("invalid base64finl")]
     InvalidBase64Finl,
+    #[error("base64 decode: {0}")]
+    Base64Decode(DecodeError),
 }

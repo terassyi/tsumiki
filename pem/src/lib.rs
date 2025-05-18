@@ -1,12 +1,14 @@
-mod error;
+pub mod error;
 
 use std::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use error::Error;
 use regex::Regex;
+use tsumiki::decoder::{DecodableFrom, Decoder};
 
 const PRIVATE_KEY_LABEL: &str = "PRIVATE KEY";
 const PUBLIC_KEY_LABEL: &str = "PUBLIC KEY";
@@ -67,18 +69,50 @@ ref: https://www.rfc-editor.org/rfc/rfc7468.html#section-3
 */
 
 #[derive(Debug, Clone)]
-pub(crate) struct Pem {
+pub struct Pem {
     label: Label,
     base64_data: String, // base64 encoded data
 }
 
 impl Pem {
-    fn label(&self) -> Label {
+    pub fn label(&self) -> Label {
         self.label
     }
 
-    fn data(&self) -> &str {
+    pub fn data(&self) -> &str {
         &self.base64_data
+    }
+}
+
+impl DecodableFrom<Pem> for Vec<u8> {}
+
+impl Decoder<Pem, Vec<u8>> for Pem {
+    type Error = Error;
+
+    fn decode(&self) -> Result<Vec<u8>, Self::Error> {
+        // This discards label information from Pem format.
+        let decoded = STANDARD.decode(self.data()).map_err(Error::Base64Decode)?;
+        Ok(decoded)
+    }
+}
+
+impl DecodableFrom<String> for Pem {}
+
+impl Decoder<String, Pem> for String {
+    type Error = Error;
+
+    fn decode(&self) -> Result<Pem, Self::Error> {
+        Pem::from_str(&self)
+    }
+}
+
+impl DecodableFrom<&str> for Pem {}
+
+impl Decoder<&str, Pem> for &str {
+    type Error = Error;
+
+    fn decode(&self) -> Result<Pem, Self::Error> {
+        Pem::from_str(self)
     }
 }
 
