@@ -10,6 +10,12 @@ pub struct Der {
     elements: Vec<Tlv>,
 }
 
+impl Der {
+    pub fn elements(&self) -> &[Tlv] {
+        &self.elements
+    }
+}
+
 impl DecodableFrom<Vec<u8>> for Der {}
 
 impl Decoder<Vec<u8>, Der> for Vec<u8> {
@@ -18,7 +24,7 @@ impl Decoder<Vec<u8>, Der> for Vec<u8> {
     fn decode(&self) -> Result<Der, Self::Error> {
         let mut tlvs = Vec::new();
         let mut input = self.as_slice();
-        while input.len() != 0 {
+        while !input.is_empty() {
             let (new_input, tlv) = Tlv::parse(input).map_err(|e| match e {
                 nom::Err::Error(e) => Error::Parser(e.code),
                 nom::Err::Incomplete(e) => Error::ParserIncomplete(e),
@@ -46,7 +52,7 @@ impl Decoder<Pem, Der> for Pem {
 // TODO: implement to parse tag class.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
-enum Tag {
+pub enum Tag {
     Integer = 0x02,
     BitString = 0x03,
     OctetString = 0x04,
@@ -83,9 +89,9 @@ impl From<u8> for Tag {
 }
 
 #[derive(Debug, Clone)]
-struct Tlv {
+pub struct Tlv {
     tag: Tag,
-    length: u64,
+    // length: u64,
     value: Value,
 }
 
@@ -96,6 +102,24 @@ enum Value {
 }
 
 impl Tlv {
+    pub fn tag(&self) -> Tag {
+        self.tag
+    }
+
+    pub fn data(&self) -> Option<&[u8]> {
+        match &self.value {
+            Value::Data(data) => Some(data),
+            Value::Tlv(_) => None,
+        }
+    }
+
+    pub fn tlvs(&self) -> Option<&[Tlv]> {
+        match &self.value {
+            Value::Tlv(tlvs) => Some(tlvs),
+            Value::Data(_) => None,
+        }
+    }
+
     fn parse(input: &[u8]) -> IResult<&[u8], Tlv> {
         let (input, tag) = parse_tag(input)?;
         let (input, length) = parse_length(input)?;
@@ -115,7 +139,6 @@ impl Tlv {
                 input,
                 Tlv {
                     tag,
-                    length,
                     value: Value::Tlv(tlvs),
                 },
             ));
@@ -125,7 +148,6 @@ impl Tlv {
             input,
             Tlv {
                 tag,
-                length,
                 value: Value::Data(data.to_vec()),
             },
         ))
@@ -185,27 +207,27 @@ mod tests {
     }
 
     #[rstest(input, expected,
-        case(vec![0x02, 0x01, 0x01], Tlv{tag: Tag::Integer, length: 1, value: Value::Data(vec![0x01])}),
-        case(vec![0x02, 0x09, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01], Tlv{tag: Tag::Integer, length: 9, value: Value::Data(vec![0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01])}),
-        case(vec![0x13, 0x02, 0x68, 0x69], Tlv{tag: Tag::PrintableString, length: 2, value: Value::Data(vec![0x68, 0x69])}),
-        case(vec![0x16, 0x02, 0x68, 0x69], Tlv{tag: Tag::IA5String, length: 2, value: Value::Data(vec![0x68, 0x69])}),
-        case(vec![0x0c, 0x04, 0xf0, 0x9f, 0x98, 0x8e], Tlv{tag: Tag::UTF8String, length: 4, value: Value::Data(vec![0xf0, 0x9f, 0x98, 0x8e])}),
+        case(vec![0x02, 0x01, 0x01], Tlv{tag: Tag::Integer, value: Value::Data(vec![0x01])}),
+        case(vec![0x02, 0x09, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01], Tlv{tag: Tag::Integer, value: Value::Data(vec![0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01])}),
+        case(vec![0x13, 0x02, 0x68, 0x69], Tlv{tag: Tag::PrintableString, value: Value::Data(vec![0x68, 0x69])}),
+        case(vec![0x16, 0x02, 0x68, 0x69], Tlv{tag: Tag::IA5String, value: Value::Data(vec![0x68, 0x69])}),
+        case(vec![0x0c, 0x04, 0xf0, 0x9f, 0x98, 0x8e], Tlv{tag: Tag::UTF8String, value: Value::Data(vec![0xf0, 0x9f, 0x98, 0x8e])}),
         case(vec![
             0x17, 0x11, 0x31, 0x39, 0x31, 0x32, 0x31, 0x35, 0x31, 0x39, 0x30, 0x32, 0x31, 0x30, 0x2d, 0x30,
             0x38, 0x30, 0x30,
-        ], Tlv { tag: Tag::UTCTime, length: 17, value: Value::Data(vec![
+        ], Tlv { tag: Tag::UTCTime, value: Value::Data(vec![
             0x31, 0x39, 0x31, 0x32, 0x31, 0x35, 0x31, 0x39, 0x30, 0x32, 0x31, 0x30, 0x2d, 0x30,
             0x38, 0x30, 0x30,
         ])}),
         case(vec![
             0x18, 0x0d, 0x31, 0x39, 0x31, 0x32, 0x31, 0x36, 0x30, 0x33, 0x30, 0x32, 0x31, 0x30, 0x5a,
-        ], Tlv{tag: Tag::GeneralizedTime, length: 13, value: Value::Data(vec![
+        ], Tlv{tag: Tag::GeneralizedTime, value: Value::Data(vec![
             0x31, 0x39, 0x31, 0x32, 0x31, 0x36, 0x30, 0x33, 0x30, 0x32, 0x31, 0x30, 0x5a,
         ])}),
-        case(vec![0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b], Tlv { tag: Tag::ObjectIdentifier, length: 9, value: Value::Data(vec![0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b]) }),
-        case(vec![0x05, 0x00], Tlv { tag: Tag::Null, length: 0, value: Value::Data(vec![]) }),
-        case(vec![0x04, 0x04, 0x03, 0x02, 0x06, 0xa0], Tlv { tag: Tag::OctetString, length: 4, value: Value::Data(vec![0x03, 0x02, 0x06, 0xa0]) }),
-        case(vec![0x03, 0x04, 0x06, 0x6e, 0x5d, 0xc0], Tlv { tag: Tag::BitString, length: 4, value: Value::Data(vec![0x06, 0x6e, 0x5d, 0xc0]) })
+        case(vec![0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b], Tlv { tag: Tag::ObjectIdentifier, value: Value::Data(vec![0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b]) }),
+        case(vec![0x05, 0x00], Tlv { tag: Tag::Null, value: Value::Data(vec![]) }),
+        case(vec![0x04, 0x04, 0x03, 0x02, 0x06, 0xa0], Tlv { tag: Tag::OctetString, value: Value::Data(vec![0x03, 0x02, 0x06, 0xa0]) }),
+        case(vec![0x03, 0x04, 0x06, 0x6e, 0x5d, 0xc0], Tlv { tag: Tag::BitString, value: Value::Data(vec![0x06, 0x6e, 0x5d, 0xc0]) })
     )]
     fn test_tlv_parse_primitive(input: Vec<u8>, expected: Tlv) {
         let (_, actual) = Tlv::parse(&input).unwrap();
@@ -213,12 +235,11 @@ mod tests {
     }
 
     #[rstest(input, expected,
-        case(vec![0x30, 0x09, 0x02, 0x01, 0x07, 0x02, 0x01, 0x08, 0x02, 0x01, 0x09], Tlv { tag: Tag::Sequence, length: 9, value: Value::Tlv(vec![Tlv { tag: Tag::Integer, length: 1, value: Value::Data(vec![0x07]) }, Tlv { tag: Tag::Integer, length: 1, value: Value::Data(vec![0x08]) }, Tlv { tag: Tag::Integer, length: 1, value: Value::Data(vec![0x09]) }]) })
+        case(vec![0x30, 0x09, 0x02, 0x01, 0x07, 0x02, 0x01, 0x08, 0x02, 0x01, 0x09], Tlv { tag: Tag::Sequence, value: Value::Tlv(vec![Tlv { tag: Tag::Integer, value: Value::Data(vec![0x07]) }, Tlv { tag: Tag::Integer, value: Value::Data(vec![0x08]) }, Tlv { tag: Tag::Integer, value: Value::Data(vec![0x09]) }]) })
     )]
     fn test_tlv_parse_structured(input: Vec<u8>, expected: Tlv) {
         let (_, actual) = Tlv::parse(&input).unwrap();
         assert_eq!(expected.tag, actual.tag);
-        assert_eq!(expected.length, actual.length);
         match actual.value {
             Value::Data(_) => panic!("expected: Value::Tlv, but got Value::Data"),
             Value::Tlv(actual_tlvs) => match expected.value {
@@ -241,7 +262,6 @@ mod tests {
 
     fn compare_primitive_tlv(v1: &Tlv, v2: &Tlv) {
         assert_eq!(v1.tag, v2.tag);
-        assert_eq!(v1.length, v2.length);
         match &v2.value {
             Value::Data(v2_data) => match &v1.value {
                 Value::Data(v1_data) => assert_eq!(v2_data, v1_data),
@@ -330,14 +350,14 @@ e8ZYGIc4gvs5McdrVUyYGUs=
 
     #[rstest(
         input,
-        expected,
+        _expected,
         case(TEST_PEM_CERT1, None),
         case(TEST_PEM_CERT2, None),
         case(TEST_PEM_PRIV_KEY1, None)
     )]
-    fn test_decode_der_from_pem(input: &str, expected: Option<()>) {
+    fn test_decode_der_from_pem(input: &str, _expected: Option<()>) {
         let pem = input.decode().unwrap();
-        let der: Der = pem.decode().unwrap();
-        println!("{:?}", der);
+        // Assuming not to panic here.
+        let _der: Der = pem.decode().unwrap();
     }
 }

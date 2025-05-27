@@ -6,3 +6,12 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+chrono = "0.4.41"
+der = { path = "../der" }
+num-bigint = "0.4.6"
+rstest = { workspace = true }
+thiserror = { workspace = true }
+tsumiki ={ path = "../tsumiki" }
+
+[dev-dependencies]
+pem = { path = "../pem" }

@@ -75,7 +75,7 @@ pub struct Pem {
 }
 
 impl Pem {
-    pub fn label(&self) -> Label {
+    fn label(&self) -> Label {
         self.label
     }
 
@@ -102,7 +102,7 @@ impl Decoder<String, Pem> for String {
     type Error = Error;
 
     fn decode(&self) -> Result<Pem, Self::Error> {
-        Pem::from_str(&self)
+        Pem::from_str(self)
     }
 }
 
@@ -224,14 +224,6 @@ enum PemParsingState {
     Base64Lines,
     Base64Finl,
     PostEncapsulationBoundary,
-}
-
-fn base64_line(line: &str) -> Result<String, Error> {
-    let content = line.trim_end();
-    if content.is_empty() {
-        return Err(Error::InvalidBase64Line);
-    }
-    Ok(content.to_string())
 }
 
 fn base64_finl(lines: &[&str]) -> Result<String, Error> {
