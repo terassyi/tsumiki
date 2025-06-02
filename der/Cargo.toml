@@ -1,15 +1,14 @@
 [package]
-name = "pem"
+name = "der"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "PEM related crate"
+description = "DER related crate"
 
 [dependencies]
-base64 = "0.22.1"
-regex = "1.11.1"
-rstest ={ workspace = true }
-thiserror ={ workspace = true }
-
+pem = { path = "../pem" }
+nom = "8.0.0"
+rstest = { workspace = true }
+thiserror = { workspace = true }
 tsumiki = { path = "../tsumiki" }

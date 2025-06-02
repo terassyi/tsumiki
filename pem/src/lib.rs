@@ -1,12 +1,14 @@
-mod error;
+pub mod error;
 
 use std::{
     fmt::{Display, Formatter},
     str::FromStr,
 };
 
+use base64::{Engine, engine::general_purpose::STANDARD};
 use error::Error;
 use regex::Regex;
+use tsumiki::decoder::{DecodableFrom, Decoder};
 
 const PRIVATE_KEY_LABEL: &str = "PRIVATE KEY";
 const PUBLIC_KEY_LABEL: &str = "PUBLIC KEY";
@@ -46,7 +48,7 @@ impl FromStr for Label {
 
 impl Label {
     fn get_label(line: &str) -> Result<Label, Error> {
-        let re = Regex::new(&format!(r"-----(?:BEGIN|END) ([A-Z ]+)-----\s*"))
+        let re = Regex::new(r"-----(?:BEGIN|END) ([A-Z ]+)-----\s*")
             .map_err(|_| Error::InvalidEncapsulationBoundary)?;
         if let Some(captured) = re.captures(line) {
             if captured.len() != 2 {
@@ -67,7 +69,7 @@ ref: https://www.rfc-editor.org/rfc/rfc7468.html#section-3
 */
 
 #[derive(Debug, Clone)]
-pub(crate) struct Pem {
+pub struct Pem {
     label: Label,
     base64_data: String, // base64 encoded data
 }
@@ -77,8 +79,40 @@ impl Pem {
         self.label
     }
 
-    fn data(&self) -> &str {
+    pub fn data(&self) -> &str {
         &self.base64_data
+    }
+}
+
+impl DecodableFrom<Pem> for Vec<u8> {}
+
+impl Decoder<Pem, Vec<u8>> for Pem {
+    type Error = Error;
+
+    fn decode(&self) -> Result<Vec<u8>, Self::Error> {
+        // This discards label information from Pem format.
+        let decoded = STANDARD.decode(self.data()).map_err(Error::Base64Decode)?;
+        Ok(decoded)
+    }
+}
+
+impl DecodableFrom<String> for Pem {}
+
+impl Decoder<String, Pem> for String {
+    type Error = Error;
+
+    fn decode(&self) -> Result<Pem, Self::Error> {
+        Pem::from_str(self)
+    }
+}
+
+impl DecodableFrom<&str> for Pem {}
+
+impl Decoder<&str, Pem> for &str {
+    type Error = Error;
+
+    fn decode(&self) -> Result<Pem, Self::Error> {
+        Pem::from_str(self)
     }
 }
 
@@ -135,13 +169,11 @@ impl FromStr for Pem {
                                 return Err(Error::LabelMissMatch);
                             }
                             state = PemParsingState::PostEncapsulationBoundary;
+                        } else if is_base64_finl(line) {
+                            base64_finl_lines.push(line);
+                            state = PemParsingState::Base64Finl;
                         } else {
-                            if is_base64_finl(line) {
-                                base64_finl_lines.push(line);
-                                state = PemParsingState::Base64Finl;
-                            } else {
-                                base64_lines.push(line);
-                            }
+                            base64_lines.push(line);
                         }
                     }
                     None => return Err(Error::MissingPostEncapsulationBoundary),
@@ -194,14 +226,6 @@ enum PemParsingState {
     PostEncapsulationBoundary,
 }
 
-fn base64_line(line: &str) -> Result<String, Error> {
-    let content = line.trim_end();
-    if content.len() == 0 {
-        return Err(Error::InvalidBase64Line);
-    }
-    Ok(content.to_string())
-}
-
 fn base64_finl(lines: &[&str]) -> Result<String, Error> {
     // base64finl = *base64char (base64pad *WSP eol base64pad / *2base64pad) *WSP eol
     // exp-1)
@@ -209,7 +233,7 @@ fn base64_finl(lines: &[&str]) -> Result<String, Error> {
     // =\s\s\n
     // exp-2)
     // ..AB==\s\s\n
-    if lines.iter().find(|l| l.is_empty()).is_some() {
+    if lines.iter().any(|l| l.is_empty()) {
         return Err(Error::InvalidBase64Finl);
     }
     let lines = lines.iter().map(|l| l.trim()).collect::<Vec<&str>>();
