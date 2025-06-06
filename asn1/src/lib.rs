@@ -1,7 +1,7 @@
 use std::{fmt::Display, str::FromStr};
 
 use chrono::NaiveDateTime;
-use der::{Der, Tag, Tlv};
+use der::{Der, PrimitiveTag, Tlv};
 use error::Error;
 use num_bigint::BigInt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
@@ -35,6 +35,7 @@ impl Decoder<Der, ASN1Object> for Der {
 
 #[derive(Debug, Clone)]
 enum Element {
+    Boolean(bool),
     Integer(Integer),
     BitString(BitString),
     OctetString(OctetString),
@@ -47,6 +48,7 @@ enum Element {
     IA5String(String),
     UTCTime(NaiveDateTime),
     GeneralizedTime(NaiveDateTime),
+    Version(Integer),
     Unimplemented(Tlv),
 }
 
@@ -55,7 +57,18 @@ impl TryFrom<&Tlv> for Element {
 
     fn try_from(tlv: &Tlv) -> Result<Self, Self::Error> {
         match tlv.tag() {
-            Tag::Integer => {
+            PrimitiveTag::Boolean => {
+                if let Some(data) = tlv.data() {
+                    match data.first().as_deref() {
+                        Some(0x00) => Ok(Element::Boolean(false)),
+                        Some(0xff) => Ok(Element::Boolean(true)),
+                        _ => Err(Error::InvalidBoolean),
+                    }
+                } else {
+                    Err(Error::InvalidBoolean)
+                }
+            }
+            PrimitiveTag::Integer => {
                 if let Some(data) = tlv.data() {
                     let integer = Integer::from(data);
                     Ok(Element::Integer(integer))
@@ -63,7 +76,7 @@ impl TryFrom<&Tlv> for Element {
                     Err(Error::InvalidInteger("Integer tag has no data".to_string()))
                 }
             }
-            Tag::BitString => {
+            PrimitiveTag::BitString => {
                 if let Some(data) = tlv.data() {
                     let bit_string = BitString::try_from(data)?;
                     Ok(Element::BitString(bit_string))
@@ -74,7 +87,7 @@ impl TryFrom<&Tlv> for Element {
                     ))
                 }
             }
-            Tag::OctetString => {
+            PrimitiveTag::OctetString => {
                 if let Some(data) = tlv.data() {
                     let octet_string = OctetString::from(data);
                     Ok(Element::OctetString(octet_string))
@@ -83,8 +96,8 @@ impl TryFrom<&Tlv> for Element {
                     Ok(Element::OctetString(OctetString { inner: Vec::new() }))
                 }
             }
-            Tag::Null => Ok(Element::Null),
-            Tag::ObjectIdentifier => {
+            PrimitiveTag::Null => Ok(Element::Null),
+            PrimitiveTag::ObjectIdentifier => {
                 if let Some(data) = tlv.data() {
                     let oid = ObjectIdentifier::try_from(data)?;
                     Ok(Element::ObjectIdentifier(oid))
@@ -94,7 +107,7 @@ impl TryFrom<&Tlv> for Element {
                     ))
                 }
             }
-            Tag::UTF8String => {
+            PrimitiveTag::UTF8String => {
                 if let Some(data) = tlv.data() {
                     let utf8_string = String::from_utf8(data.to_vec())
                         .map_err(|e| Error::InvalidUTF8String(e.to_string()))?;
@@ -103,7 +116,7 @@ impl TryFrom<&Tlv> for Element {
                     Ok(Element::UTF8String(String::new()))
                 }
             }
-            Tag::Sequence => {
+            PrimitiveTag::Sequence => {
                 if let Some(tlvs) = tlv.tlvs() {
                     let mut elements = Vec::new();
                     for sub_tlv in tlvs.iter() {
@@ -115,7 +128,7 @@ impl TryFrom<&Tlv> for Element {
                     Ok(Element::Sequence(Vec::new()))
                 }
             }
-            Tag::Set => {
+            PrimitiveTag::Set => {
                 if let Some(tlvs) = tlv.tlvs() {
                     let mut elements = Vec::new();
                     for sub_tlv in tlvs.iter() {
@@ -127,7 +140,7 @@ impl TryFrom<&Tlv> for Element {
                     Ok(Element::Set(Vec::new()))
                 }
             }
-            Tag::PrintableString => {
+            PrimitiveTag::PrintableString => {
                 if let Some(data) = tlv.data() {
                     let printable_string = String::from_utf8(data.to_vec())
                         .map_err(|e| Error::InvalidPrintableString(e.to_string()))?;
@@ -136,7 +149,7 @@ impl TryFrom<&Tlv> for Element {
                     Ok(Element::PrintableString(String::new()))
                 }
             }
-            Tag::IA5String => {
+            PrimitiveTag::IA5String => {
                 if let Some(data) = tlv.data() {
                     let ia5_string = String::from_utf8(data.to_vec())
                         .map_err(|e| Error::InvalidIA5String(e.to_string()))?;
@@ -145,7 +158,7 @@ impl TryFrom<&Tlv> for Element {
                     Ok(Element::IA5String(String::new()))
                 }
             }
-            Tag::UTCTime => {
+            PrimitiveTag::UTCTime => {
                 if let Some(data) = tlv.data() {
                     let time = parse_utc_time(data)?;
                     Ok(Element::UTCTime(time))
@@ -153,7 +166,7 @@ impl TryFrom<&Tlv> for Element {
                     Err(Error::InvalidUTCTime("UTCTime tag has no data".to_string()))
                 }
             }
-            Tag::GeneralizedTime => {
+            PrimitiveTag::GeneralizedTime => {
                 if let Some(data) = tlv.data() {
                     let time = parse_generalized_time(data)?;
                     Ok(Element::GeneralizedTime(time))
@@ -163,7 +176,30 @@ impl TryFrom<&Tlv> for Element {
                     ))
                 }
             }
-            Tag::Unimplemented(_) => {
+            PrimitiveTag::Version => {
+                if let Some(tlvs) = tlv.tlvs() {
+                    match tlvs.first() {
+                        Some(tlv) => {
+                            if let Some(data) = tlv.data() {
+                                let version = Integer::from(data);
+                                Ok(Element::Version(version))
+                            } else {
+                                return Err(Error::InvalidVersion(
+                                    "version must have one value".to_string(),
+                                ));
+                            }
+                        }
+                        None => {
+                            return Err(Error::InvalidVersion(
+                                "version must have one value".to_string(),
+                            ));
+                        }
+                    }
+                } else {
+                    Ok(Element::Set(Vec::new()))
+                }
+            }
+            PrimitiveTag::Unimplemented(_) => {
                 // Handle unimplemented tags gracefully
                 Ok(Element::Unimplemented(tlv.clone()))
             }
@@ -648,6 +684,7 @@ e8ZYGIc4gvs5McdrVUyYGUs=
         let pem: Pem = input.decode().unwrap();
         let der: Der = pem.decode().unwrap();
         // Only ensure not to panic.
-        let _obj = der.decode().unwrap();
+        let obj = der.decode().unwrap();
+        println!("{:?}", obj);
     }
 }
