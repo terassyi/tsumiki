@@ -24,6 +24,6 @@ pub enum Error {
     InvalidUTCTime(String),
     #[error("invalid generalized time: {0}")]
     InvalidGeneralizedTime(String),
-    #[error("invalid version: {0}")]
-    InvalidVersion(String),
+    #[error("invalid context-specific value: {slot}, {msg}")]
+    InvalidContextSpecific { slot: u8, msg: String },
 }
