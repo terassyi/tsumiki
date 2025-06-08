@@ -49,18 +49,69 @@ impl Decoder<Pem, Der> for Pem {
     }
 }
 
-// TODO: implement to parse tag class.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Tag {
+    Primitive(PrimitiveTag, u8), // This variant has a primitive tag number and an actual value.
+    ContextSpecific(u8),         // TThis variant has a slot number.
+}
+
+impl Tag {
+    fn is_constructed(&self) -> bool {
+        match self {
+            Tag::Primitive(_, inner) => u8::from(*inner) & 0b0010_0000 != 0,
+            Tag::ContextSpecific(_) => true, // Context-specific tags are always constructed.
+        }
+    }
+
+    fn is_context_specific(&self) -> bool {
+        match self {
+            Tag::Primitive(_, _) => false,
+            Tag::ContextSpecific(_) => true,
+        }
+    }
+
+    fn primitive_tag(&self) -> Option<PrimitiveTag> {
+        match self {
+            Tag::Primitive(primitive, _) => Some(*primitive),
+            Tag::ContextSpecific(_) => None,
+        }
+    }
+
+    fn slot_number(&self) -> Option<u8> {
+        match self {
+            Tag::Primitive(_, _) => None,
+            Tag::ContextSpecific(slot) => Some(*slot),
+        }
+    }
+}
+
+impl From<u8> for Tag {
+    fn from(value: u8) -> Self {
+        let is_context_specific = value & 0b1000_0000 != 0;
+
+        if is_context_specific {
+            // Context-specific tag
+            let slot_number = value & 0b0001_1111; // Mask to get the slot number, but I'm not sure how many bits are used for the slot number.
+            Tag::ContextSpecific(slot_number)
+        } else {
+            let primitive = PrimitiveTag::from(value & 0b0001_1111);
+            Tag::Primitive(primitive, value)
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
-pub enum Tag {
+pub enum PrimitiveTag {
+    Boolean = 0x01,
     Integer = 0x02,
     BitString = 0x03,
     OctetString = 0x04,
     Null = 0x05,
     ObjectIdentifier = 0x06,
     UTF8String = 0x0c,
-    Sequence = 0x30,
-    Set = 0x31,
+    Sequence = 0x10,
+    Set = 0x11,
     PrintableString = 0x13,
     IA5String = 0x16,
     UTCTime = 0x17,
@@ -68,22 +119,46 @@ pub enum Tag {
     Unimplemented(u8),
 }
 
-impl From<u8> for Tag {
+impl PrimitiveTag {}
+
+impl From<u8> for PrimitiveTag {
     fn from(value: u8) -> Self {
         match value {
+            0x01 => Self::Boolean,
             0x02 => Self::Integer,
             0x03 => Self::BitString,
             0x04 => Self::OctetString,
             0x05 => Self::Null,
             0x06 => Self::ObjectIdentifier,
             0x0c => Self::UTF8String,
-            0x30 => Self::Sequence,
-            0x31 => Self::Set,
+            0x10 => Self::Sequence,
+            0x11 => Self::Set,
             0x13 => Self::PrintableString,
             0x16 => Self::IA5String,
             0x17 => Self::UTCTime,
             0x18 => Self::GeneralizedTime,
-            _ => Tag::Unimplemented(value),
+            _ => PrimitiveTag::Unimplemented(value),
+        }
+    }
+}
+
+impl From<&PrimitiveTag> for u8 {
+    fn from(value: &PrimitiveTag) -> Self {
+        match value {
+            PrimitiveTag::Boolean => 0x01,
+            PrimitiveTag::Integer => 0x02,
+            PrimitiveTag::BitString => 0x03,
+            PrimitiveTag::OctetString => 0x04,
+            PrimitiveTag::Null => 0x05,
+            PrimitiveTag::ObjectIdentifier => 0x06,
+            PrimitiveTag::UTF8String => 0x0c,
+            PrimitiveTag::Sequence => 0x10,
+            PrimitiveTag::Set => 0x11,
+            PrimitiveTag::PrintableString => 0x13,
+            PrimitiveTag::IA5String => 0x16,
+            PrimitiveTag::UTCTime => 0x17,
+            PrimitiveTag::GeneralizedTime => 0x18,
+            PrimitiveTag::Unimplemented(value) => *value,
         }
     }
 }
@@ -102,8 +177,8 @@ enum Value {
 }
 
 impl Tlv {
-    pub fn tag(&self) -> Tag {
-        self.tag
+    pub fn tag(&self) -> &Tag {
+        &self.tag
     }
 
     pub fn data(&self) -> Option<&[u8]> {
@@ -125,7 +200,7 @@ impl Tlv {
         let (input, length) = parse_length(input)?;
         let (input, data) = nom::bytes::complete::take(length).parse(input)?;
 
-        if tag.eq(&Tag::Sequence) || tag.eq(&Tag::Set) {
+        if tag.is_constructed() {
             // parse TLV recursively.
             let mut tlvs = Vec::new();
             let mut data = data;
@@ -180,10 +255,19 @@ fn parse_length(input: &[u8]) -> IResult<&[u8], u64> {
 mod tests {
     use rstest::rstest;
 
-    use crate::{Der, Tag, Tlv, Value, parse_length};
+    use crate::{Der, PrimitiveTag, Tag, Tlv, Value, parse_length};
     use tsumiki::decoder::Decoder;
 
-    #[rstest(input, expected, case(vec![0x02], Tag::Integer), case(vec![0x02, 0x01], Tag::Integer), case(vec![0x30, 0x01], Tag::Sequence))]
+    #[rstest(
+        input,
+        expected,
+        case(vec![0x02], Tag::Primitive(PrimitiveTag::Integer, 0x02)),
+        case(vec![0x02, 0x01], Tag::Primitive(PrimitiveTag::Integer, 0x02)),
+        case(vec![0x30, 0x01], Tag::Primitive(PrimitiveTag::Sequence, 0x30)),
+        case(vec![0x0a, 0x02, 0x10], Tag::Primitive(PrimitiveTag::Unimplemented(0x0a), 0x0a)),
+        case(vec![0xa0], Tag::ContextSpecific(0x00)),
+        case(vec![0xa3], Tag::ContextSpecific(0x03)),
+    )]
     fn test_parse_tag(input: Vec<u8>, expected: Tag) {
         use crate::parse_tag;
 
@@ -207,27 +291,84 @@ mod tests {
     }
 
     #[rstest(input, expected,
-        case(vec![0x02, 0x01, 0x01], Tlv{tag: Tag::Integer, value: Value::Data(vec![0x01])}),
-        case(vec![0x02, 0x09, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01], Tlv{tag: Tag::Integer, value: Value::Data(vec![0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01])}),
-        case(vec![0x13, 0x02, 0x68, 0x69], Tlv{tag: Tag::PrintableString, value: Value::Data(vec![0x68, 0x69])}),
-        case(vec![0x16, 0x02, 0x68, 0x69], Tlv{tag: Tag::IA5String, value: Value::Data(vec![0x68, 0x69])}),
-        case(vec![0x0c, 0x04, 0xf0, 0x9f, 0x98, 0x8e], Tlv{tag: Tag::UTF8String, value: Value::Data(vec![0xf0, 0x9f, 0x98, 0x8e])}),
-        case(vec![
-            0x17, 0x11, 0x31, 0x39, 0x31, 0x32, 0x31, 0x35, 0x31, 0x39, 0x30, 0x32, 0x31, 0x30, 0x2d, 0x30,
-            0x38, 0x30, 0x30,
-        ], Tlv { tag: Tag::UTCTime, value: Value::Data(vec![
-            0x31, 0x39, 0x31, 0x32, 0x31, 0x35, 0x31, 0x39, 0x30, 0x32, 0x31, 0x30, 0x2d, 0x30,
-            0x38, 0x30, 0x30,
+        case(
+            vec![0x02, 0x01, 0x01],
+            Tlv{
+                tag: Tag::Primitive(PrimitiveTag::Integer, 0x02) ,
+                value: Value::Data(vec![0x01])
+            }
+        ),
+        case(
+            vec![0x02, 0x09, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01],
+            Tlv {
+                tag: Tag::Primitive(PrimitiveTag::Integer, 0x02),
+                value: Value::Data(vec![0x00, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01])
+            }
+        ),
+        case(
+            vec![0x13, 0x02, 0x68, 0x69],
+            Tlv{
+                tag: Tag::Primitive(PrimitiveTag::PrintableString, 0x13),
+                value: Value::Data(vec![0x68, 0x69])
+            }
+        ),
+        case(
+            vec![0x16, 0x02, 0x68, 0x69],
+            Tlv{
+                tag: Tag::Primitive(PrimitiveTag::IA5String, 0x16),
+                value: Value::Data(vec![0x68, 0x69])
+            }
+        ),
+        case(
+            vec![0x0c, 0x04, 0xf0, 0x9f, 0x98, 0x8e],
+            Tlv{
+                tag: Tag::Primitive(PrimitiveTag::UTF8String, 0x0c),
+                value: Value::Data(vec![0xf0, 0x9f, 0x98, 0x8e])
+            }
+        ),
+        case(
+            vec![0x17, 0x11, 0x31, 0x39, 0x31, 0x32, 0x31, 0x35, 0x31, 0x39, 0x30, 0x32, 0x31, 0x30, 0x2d, 0x30, 0x38, 0x30, 0x30],
+            Tlv {
+            tag: Tag::Primitive(PrimitiveTag::UTCTime, 0x17),
+            value: Value::Data(vec![
+                0x31, 0x39, 0x31, 0x32, 0x31, 0x35, 0x31, 0x39, 0x30, 0x32, 0x31, 0x30, 0x2d, 0x30,
+                0x38, 0x30, 0x30,
         ])}),
-        case(vec![
-            0x18, 0x0d, 0x31, 0x39, 0x31, 0x32, 0x31, 0x36, 0x30, 0x33, 0x30, 0x32, 0x31, 0x30, 0x5a,
-        ], Tlv{tag: Tag::GeneralizedTime, value: Value::Data(vec![
-            0x31, 0x39, 0x31, 0x32, 0x31, 0x36, 0x30, 0x33, 0x30, 0x32, 0x31, 0x30, 0x5a,
-        ])}),
-        case(vec![0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b], Tlv { tag: Tag::ObjectIdentifier, value: Value::Data(vec![0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b]) }),
-        case(vec![0x05, 0x00], Tlv { tag: Tag::Null, value: Value::Data(vec![]) }),
-        case(vec![0x04, 0x04, 0x03, 0x02, 0x06, 0xa0], Tlv { tag: Tag::OctetString, value: Value::Data(vec![0x03, 0x02, 0x06, 0xa0]) }),
-        case(vec![0x03, 0x04, 0x06, 0x6e, 0x5d, 0xc0], Tlv { tag: Tag::BitString, value: Value::Data(vec![0x06, 0x6e, 0x5d, 0xc0]) })
+        case(
+            vec![0x18, 0x0d, 0x31, 0x39, 0x31, 0x32, 0x31, 0x36, 0x30, 0x33, 0x30, 0x32, 0x31, 0x30, 0x5a],
+            Tlv{
+                tag: Tag::Primitive(PrimitiveTag::GeneralizedTime, 0x18),
+                value: Value::Data(vec![0x31, 0x39, 0x31, 0x32, 0x31, 0x36, 0x30, 0x33, 0x30, 0x32, 0x31, 0x30, 0x5a])
+            }
+        ),
+        case(
+            vec![0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b],
+            Tlv {
+                tag: Tag::Primitive(PrimitiveTag::ObjectIdentifier, 0x06),
+                 value: Value::Data(vec![0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b])
+            }
+        ),
+        case(
+            vec![0x05, 0x00],
+            Tlv {
+                tag: Tag::Primitive(PrimitiveTag::Null, 0x05),
+                value: Value::Data(vec![])
+            }
+        ),
+        case(
+            vec![0x04, 0x04, 0x03, 0x02, 0x06, 0xa0],
+            Tlv {
+                tag: Tag::Primitive(PrimitiveTag::OctetString, 0x04),
+                value: Value::Data(vec![0x03, 0x02, 0x06, 0xa0])
+            }
+        ),
+        case(
+            vec![0x03, 0x04, 0x06, 0x6e, 0x5d, 0xc0],
+            Tlv {
+                tag: Tag::Primitive(PrimitiveTag::BitString, 0x03),
+                value: Value::Data(vec![0x06, 0x6e, 0x5d, 0xc0])
+            }
+        )
     )]
     fn test_tlv_parse_primitive(input: Vec<u8>, expected: Tlv) {
         let (_, actual) = Tlv::parse(&input).unwrap();
@@ -235,7 +376,28 @@ mod tests {
     }
 
     #[rstest(input, expected,
-        case(vec![0x30, 0x09, 0x02, 0x01, 0x07, 0x02, 0x01, 0x08, 0x02, 0x01, 0x09], Tlv { tag: Tag::Sequence, value: Value::Tlv(vec![Tlv { tag: Tag::Integer, value: Value::Data(vec![0x07]) }, Tlv { tag: Tag::Integer, value: Value::Data(vec![0x08]) }, Tlv { tag: Tag::Integer, value: Value::Data(vec![0x09]) }]) })
+        case(
+            vec![0x30, 0x09, 0x02, 0x01, 0x07, 0x02, 0x01, 0x08, 0x02, 0x01, 0x09],
+            Tlv {
+                tag: Tag::Primitive(PrimitiveTag::Sequence,  0x30),
+                value: Value::Tlv(
+                    vec![
+                        Tlv {
+                            tag: Tag::Primitive(PrimitiveTag::Integer, 0x02),
+                            value: Value::Data(vec![0x07])
+                        },
+                        Tlv {
+                            tag: Tag::Primitive(PrimitiveTag::Integer, 0x02),
+                            value: Value::Data(vec![0x08])
+                        },
+                        Tlv {
+                            tag: Tag::Primitive(PrimitiveTag::Integer, 0x02),
+                            value: Value::Data(vec![0x09])
+                        }
+                    ]
+                )
+            }
+        )
     )]
     fn test_tlv_parse_structured(input: Vec<u8>, expected: Tlv) {
         let (_, actual) = Tlv::parse(&input).unwrap();
@@ -358,6 +520,7 @@ e8ZYGIc4gvs5McdrVUyYGUs=
     fn test_decode_der_from_pem(input: &str, _expected: Option<()>) {
         let pem = input.decode().unwrap();
         // Assuming not to panic here.
-        let _der: Der = pem.decode().unwrap();
+        let der: Der = pem.decode().unwrap();
+        println!("{:?}", der);
     }
 }

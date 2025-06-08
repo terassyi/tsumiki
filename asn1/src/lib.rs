@@ -1,7 +1,7 @@
 use std::{fmt::Display, str::FromStr};
 
 use chrono::NaiveDateTime;
-use der::{Der, Tag, Tlv};
+use der::{Der, PrimitiveTag, Tlv};
 use error::Error;
 use num_bigint::BigInt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
@@ -35,6 +35,7 @@ impl Decoder<Der, ASN1Object> for Der {
 
 #[derive(Debug, Clone)]
 enum Element {
+    Boolean(bool),
     Integer(Integer),
     BitString(BitString),
     OctetString(OctetString),
@@ -47,6 +48,7 @@ enum Element {
     IA5String(String),
     UTCTime(NaiveDateTime),
     GeneralizedTime(NaiveDateTime),
+    ContextSpecific { slot: u8, element: Box<Element> },
     Unimplemented(Tlv),
 }
 
@@ -55,118 +57,182 @@ impl TryFrom<&Tlv> for Element {
 
     fn try_from(tlv: &Tlv) -> Result<Self, Self::Error> {
         match tlv.tag() {
-            Tag::Integer => {
-                if let Some(data) = tlv.data() {
-                    let integer = Integer::from(data);
-                    Ok(Element::Integer(integer))
-                } else {
-                    Err(Error::InvalidInteger("Integer tag has no data".to_string()))
-                }
-            }
-            Tag::BitString => {
-                if let Some(data) = tlv.data() {
-                    let bit_string = BitString::try_from(data)?;
-                    Ok(Element::BitString(bit_string))
-                } else {
-                    // Can we have a BitString with no data?
-                    Err(Error::InvalidBitString(
-                        "BitString tag has no data".to_string(),
-                    ))
-                }
-            }
-            Tag::OctetString => {
-                if let Some(data) = tlv.data() {
-                    let octet_string = OctetString::from(data);
-                    Ok(Element::OctetString(octet_string))
-                } else {
-                    // I'm not sure if we can have an OctetString with no data.
-                    Ok(Element::OctetString(OctetString { inner: Vec::new() }))
-                }
-            }
-            Tag::Null => Ok(Element::Null),
-            Tag::ObjectIdentifier => {
-                if let Some(data) = tlv.data() {
-                    let oid = ObjectIdentifier::try_from(data)?;
-                    Ok(Element::ObjectIdentifier(oid))
-                } else {
-                    Err(Error::InvalidObjectIdentifier(
-                        "ObjectIdentifier tag has no data".to_string(),
-                    ))
-                }
-            }
-            Tag::UTF8String => {
-                if let Some(data) = tlv.data() {
-                    let utf8_string = String::from_utf8(data.to_vec())
-                        .map_err(|e| Error::InvalidUTF8String(e.to_string()))?;
-                    Ok(Element::UTF8String(utf8_string))
-                } else {
-                    Ok(Element::UTF8String(String::new()))
-                }
-            }
-            Tag::Sequence => {
-                if let Some(tlvs) = tlv.tlvs() {
-                    let mut elements = Vec::new();
-                    for sub_tlv in tlvs.iter() {
-                        let element = Element::try_from(sub_tlv)?;
-                        elements.push(element);
+            der::Tag::Primitive(primitive_tag, _value) => match primitive_tag {
+                PrimitiveTag::Boolean => {
+                    if let Some(data) = tlv.data() {
+                        match data.first().as_deref() {
+                            Some(0x00) => Ok(Element::Boolean(false)),
+                            Some(0xff) => Ok(Element::Boolean(true)),
+                            _ => Err(Error::InvalidBoolean),
+                        }
+                    } else {
+                        Err(Error::InvalidBoolean)
                     }
-                    Ok(Element::Sequence(elements))
-                } else {
-                    Ok(Element::Sequence(Vec::new()))
                 }
-            }
-            Tag::Set => {
-                if let Some(tlvs) = tlv.tlvs() {
-                    let mut elements = Vec::new();
-                    for sub_tlv in tlvs.iter() {
-                        let element = Element::try_from(sub_tlv)?;
-                        elements.push(element);
+                PrimitiveTag::Integer => {
+                    if let Some(data) = tlv.data() {
+                        let integer = Integer::from(data);
+                        Ok(Element::Integer(integer))
+                    } else {
+                        Err(Error::InvalidInteger("Integer tag has no data".to_string()))
                     }
-                    Ok(Element::Set(elements))
+                }
+                PrimitiveTag::BitString => {
+                    if let Some(data) = tlv.data() {
+                        let bit_string = BitString::try_from(data)?;
+                        Ok(Element::BitString(bit_string))
+                    } else {
+                        // Can we have a BitString with no data?
+                        Err(Error::InvalidBitString(
+                            "BitString tag has no data".to_string(),
+                        ))
+                    }
+                }
+                PrimitiveTag::OctetString => {
+                    if let Some(data) = tlv.data() {
+                        let octet_string = OctetString::from(data);
+                        Ok(Element::OctetString(octet_string))
+                    } else {
+                        // I'm not sure if we can have an OctetString with no data.
+                        Ok(Element::OctetString(OctetString { inner: Vec::new() }))
+                    }
+                }
+                PrimitiveTag::Null => Ok(Element::Null),
+                PrimitiveTag::ObjectIdentifier => {
+                    if let Some(data) = tlv.data() {
+                        let oid = ObjectIdentifier::try_from(data)?;
+                        Ok(Element::ObjectIdentifier(oid))
+                    } else {
+                        Err(Error::InvalidObjectIdentifier(
+                            "ObjectIdentifier tag has no data".to_string(),
+                        ))
+                    }
+                }
+                PrimitiveTag::UTF8String => {
+                    if let Some(data) = tlv.data() {
+                        let utf8_string = String::from_utf8(data.to_vec())
+                            .map_err(|e| Error::InvalidUTF8String(e.to_string()))?;
+                        Ok(Element::UTF8String(utf8_string))
+                    } else {
+                        Ok(Element::UTF8String(String::new()))
+                    }
+                }
+                PrimitiveTag::Sequence => {
+                    if let Some(tlvs) = tlv.tlvs() {
+                        let mut elements = Vec::new();
+                        for sub_tlv in tlvs.iter() {
+                            let element = Element::try_from(sub_tlv)?;
+                            elements.push(element);
+                        }
+                        Ok(Element::Sequence(elements))
+                    } else {
+                        Ok(Element::Sequence(Vec::new()))
+                    }
+                }
+                PrimitiveTag::Set => {
+                    if let Some(tlvs) = tlv.tlvs() {
+                        let mut elements = Vec::new();
+                        for sub_tlv in tlvs.iter() {
+                            let element = Element::try_from(sub_tlv)?;
+                            elements.push(element);
+                        }
+                        Ok(Element::Set(elements))
+                    } else {
+                        Ok(Element::Set(Vec::new()))
+                    }
+                }
+                PrimitiveTag::PrintableString => {
+                    if let Some(data) = tlv.data() {
+                        let printable_string = String::from_utf8(data.to_vec())
+                            .map_err(|e| Error::InvalidPrintableString(e.to_string()))?;
+                        Ok(Element::PrintableString(printable_string))
+                    } else {
+                        Ok(Element::PrintableString(String::new()))
+                    }
+                }
+                PrimitiveTag::IA5String => {
+                    if let Some(data) = tlv.data() {
+                        let ia5_string = String::from_utf8(data.to_vec())
+                            .map_err(|e| Error::InvalidIA5String(e.to_string()))?;
+                        Ok(Element::IA5String(ia5_string))
+                    } else {
+                        Ok(Element::IA5String(String::new()))
+                    }
+                }
+                PrimitiveTag::UTCTime => {
+                    if let Some(data) = tlv.data() {
+                        let time = parse_utc_time(data)?;
+                        Ok(Element::UTCTime(time))
+                    } else {
+                        Err(Error::InvalidUTCTime("UTCTime tag has no data".to_string()))
+                    }
+                }
+                PrimitiveTag::GeneralizedTime => {
+                    if let Some(data) = tlv.data() {
+                        let time = parse_generalized_time(data)?;
+                        Ok(Element::GeneralizedTime(time))
+                    } else {
+                        Err(Error::InvalidGeneralizedTime(
+                            "GeneralizedTime tag has no data".to_string(),
+                        ))
+                    }
+                }
+                PrimitiveTag::Unimplemented(_) => {
+                    // Handle unimplemented tags gracefully
+                    Ok(Element::Unimplemented(tlv.clone()))
+                }
+            },
+            der::Tag::ContextSpecific(slot) => {
+                if let Some(tlvs) = tlv.tlvs() {
+                    if tlvs.len() != 1 {
+                        return Err(Error::InvalidContextSpecific {
+                            slot: *slot,
+                            msg: "context-specific tlv must have exactly one sub-tlv".to_string(),
+                        });
+                    }
+                    if let Some(tlv) = tlvs.first() {
+                        let element = Element::try_from(tlv)?;
+                        Ok(Element::ContextSpecific {
+                            slot: *slot,
+                            element: Box::new(element),
+                        })
+                    } else {
+                        return Err(Error::InvalidContextSpecific {
+                            slot: *slot,
+                            msg: "context-specific tlv has no data".to_string(),
+                        });
+                    }
                 } else {
-                    Ok(Element::Set(Vec::new()))
+                    Err(Error::InvalidContextSpecific {
+                        slot: *slot,
+                        msg: "context-specific tlv has no data".to_string(),
+                    })
                 }
             }
-            Tag::PrintableString => {
-                if let Some(data) = tlv.data() {
-                    let printable_string = String::from_utf8(data.to_vec())
-                        .map_err(|e| Error::InvalidPrintableString(e.to_string()))?;
-                    Ok(Element::PrintableString(printable_string))
-                } else {
-                    Ok(Element::PrintableString(String::new()))
-                }
+        }
+    }
+}
+
+impl Display for Element {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Element::Boolean(b) => write!(f, "Boolean({})", b),
+            Element::Integer(i) => write!(f, "Integer({})", i),
+            Element::BitString(bs) => write!(f, "BitString({})", bs),
+            Element::OctetString(os) => write!(f, "OctetString({})", os),
+            Element::Null => write!(f, "Null"),
+            Element::ObjectIdentifier(oid) => write!(f, "ObjectIdentifier({})", oid),
+            Element::UTF8String(s) => write!(f, "UTF8String({})", s),
+            Element::Sequence(seq) => write!(f, "Sequence({:?})", seq),
+            Element::Set(set) => write!(f, "Set({:?})", set),
+            Element::PrintableString(s) => write!(f, "PrintableString({})", s),
+            Element::IA5String(s) => write!(f, "IA5String({})", s),
+            Element::UTCTime(dt) => write!(f, "UTCTime({})", dt),
+            Element::GeneralizedTime(dt) => write!(f, "GeneralizedTime({})", dt),
+            Element::ContextSpecific { slot, element } => {
+                write!(f, "ContextSpecific(slot: {}, element: {})", slot, element)
             }
-            Tag::IA5String => {
-                if let Some(data) = tlv.data() {
-                    let ia5_string = String::from_utf8(data.to_vec())
-                        .map_err(|e| Error::InvalidIA5String(e.to_string()))?;
-                    Ok(Element::IA5String(ia5_string))
-                } else {
-                    Ok(Element::IA5String(String::new()))
-                }
-            }
-            Tag::UTCTime => {
-                if let Some(data) = tlv.data() {
-                    let time = parse_utc_time(data)?;
-                    Ok(Element::UTCTime(time))
-                } else {
-                    Err(Error::InvalidUTCTime("UTCTime tag has no data".to_string()))
-                }
-            }
-            Tag::GeneralizedTime => {
-                if let Some(data) = tlv.data() {
-                    let time = parse_generalized_time(data)?;
-                    Ok(Element::GeneralizedTime(time))
-                } else {
-                    Err(Error::InvalidGeneralizedTime(
-                        "GeneralizedTime tag has no data".to_string(),
-                    ))
-                }
-            }
-            Tag::Unimplemented(_) => {
-                // Handle unimplemented tags gracefully
-                Ok(Element::Unimplemented(tlv.clone()))
-            }
+            Element::Unimplemented(tlv) => write!(f, "Unimplemented({:?})", tlv),
         }
     }
 }
@@ -648,6 +714,7 @@ e8ZYGIc4gvs5McdrVUyYGUs=
         let pem: Pem = input.decode().unwrap();
         let der: Der = pem.decode().unwrap();
         // Only ensure not to panic.
-        let _obj = der.decode().unwrap();
+        let obj = der.decode().unwrap();
+        println!("{:?}", obj);
     }
 }

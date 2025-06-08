@@ -4,6 +4,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("invalid boolean")]
+    InvalidBoolean,
     #[error("invalid integer: {0}")]
     InvalidInteger(String),
     #[error("invalid object identifier: {0}")]
@@ -22,4 +24,6 @@ pub enum Error {
     InvalidUTCTime(String),
     #[error("invalid generalized time: {0}")]
     InvalidGeneralizedTime(String),
+    #[error("invalid context-specific value: {slot}, {msg}")]
+    InvalidContextSpecific { slot: u8, msg: String },
 }
