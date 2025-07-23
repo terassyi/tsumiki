@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "asn1", "cli", "der", "pem", "tsumiki" ]
+members = [ "asn1", "cli", "der", "pem", "tsumiki" , "x509"]
 
 [workspace.package]
 version = "0.0.1"
@@ -9,5 +9,6 @@ edition = "2024"
 rust-version = "1.86.0"
 
 [workspace.dependencies]
-thiserror = "2.0.12"
-rstest = "0.25.0"
+chrono = { version = "0.4.42", features = ["serde"] }
+thiserror = "2.0.17"
+rstest = "0.26.1"

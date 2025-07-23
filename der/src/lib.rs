@@ -58,7 +58,7 @@ pub enum Tag {
 impl Tag {
     fn is_constructed(&self) -> bool {
         match self {
-            Tag::Primitive(_, inner) => u8::from(*inner) & 0b0010_0000 != 0,
+            Tag::Primitive(_, inner) => (*inner) & 0b0010_0000 != 0,
             Tag::ContextSpecific(_) => true, // Context-specific tags are always constructed.
         }
     }
@@ -163,14 +163,14 @@ impl From<&PrimitiveTag> for u8 {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tlv {
     tag: Tag,
     // length: u64,
     value: Value,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Value {
     Tlv(Vec<Tlv>),
     Data(Vec<u8>),

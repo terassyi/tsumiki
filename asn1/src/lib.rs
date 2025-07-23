@@ -4,12 +4,13 @@ use chrono::NaiveDateTime;
 use der::{Der, PrimitiveTag, Tlv};
 use error::Error;
 use num_bigint::BigInt;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
 pub mod error;
 
 #[derive(Debug, Clone)]
-struct ASN1Object {
+pub struct ASN1Object {
     elements: Vec<Element>,
 }
 
@@ -33,8 +34,8 @@ impl Decoder<Der, ASN1Object> for Der {
     }
 }
 
-#[derive(Debug, Clone)]
-enum Element {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Element {
     Boolean(bool),
     Integer(Integer),
     BitString(BitString),
@@ -60,7 +61,7 @@ impl TryFrom<&Tlv> for Element {
             der::Tag::Primitive(primitive_tag, _value) => match primitive_tag {
                 PrimitiveTag::Boolean => {
                     if let Some(data) = tlv.data() {
-                        match data.first().as_deref() {
+                        match data.first() {
                             Some(0x00) => Ok(Element::Boolean(false)),
                             Some(0xff) => Ok(Element::Boolean(true)),
                             _ => Err(Error::InvalidBoolean),
@@ -197,10 +198,10 @@ impl TryFrom<&Tlv> for Element {
                             element: Box::new(element),
                         })
                     } else {
-                        return Err(Error::InvalidContextSpecific {
+                        Err(Error::InvalidContextSpecific {
                             slot: *slot,
                             msg: "context-specific tlv has no data".to_string(),
-                        });
+                        })
                     }
                 } else {
                     Err(Error::InvalidContextSpecific {
@@ -241,8 +242,28 @@ impl Display for Element {
 // This can be arbitrary sized values.
 // In this implementation, we implement DER only. So this only accepts by 126 bytes length.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-struct Integer {
+pub struct Integer {
     inner: BigInt,
+}
+
+impl Serialize for Integer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.inner.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for Integer {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let inner = s.parse::<BigInt>().map_err(serde::de::Error::custom)?;
+        Ok(Integer { inner })
+    }
 }
 
 impl From<&[u8]> for Integer {
@@ -276,8 +297,37 @@ impl Display for Integer {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ObjectIdentifier {
+pub struct ObjectIdentifier {
     inner: Vec<u64>,
+}
+
+impl Serialize for ObjectIdentifier {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = match self.inner.first() {
+            Some(n) => self.inner[1..]
+                .iter()
+                .fold(n.to_string(), |s, n| s + "." + &n.to_string()),
+            None => String::new(),
+        };
+        serializer.serialize_str(&s)
+    }
+}
+
+impl<'de> Deserialize<'de> for ObjectIdentifier {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        let inner = s
+            .split('.')
+            .map(|s| s.parse::<u64>().map_err(serde::de::Error::custom))
+            .collect::<Result<Vec<u64>, _>>()?;
+        Ok(ObjectIdentifier { inner })
+    }
 }
 
 impl TryFrom<&[u8]> for ObjectIdentifier {
@@ -379,10 +429,76 @@ impl FromStr for ObjectIdentifier {
     }
 }
 
-#[derive(Debug, Clone)]
-struct BitString {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BitString {
     unused: u8,
     data: Vec<u8>,
+}
+
+impl serde::Serialize for BitString {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if serializer.is_human_readable() {
+            use serde::ser::SerializeStruct;
+            let mut state = serializer.serialize_struct("BitString", 2)?;
+            state.serialize_field("bit_length", &self.bit_len())?;
+            state.serialize_field("bits", &self.to_string())?;
+            state.end()
+        } else {
+            (self.unused, &self.data).serialize(serializer)
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for BitString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        if deserializer.is_human_readable() {
+            let _bit_str = String::deserialize(deserializer)?;
+            Err(serde::de::Error::custom(
+                "BitString deserialization from bit string not supported",
+            ))
+        } else {
+            let (unused, data) = <(u8, Vec<u8>)>::deserialize(deserializer)?;
+            Ok(BitString { unused, data })
+        }
+    }
+}
+
+impl BitString {
+    /// Returns the number of unused bits in the last byte
+    pub fn unused_bits(&self) -> u8 {
+        self.unused
+    }
+
+    /// Returns a reference to the underlying byte data
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.data
+    }
+
+    /// Consumes the BitString and returns the underlying byte data
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.data
+    }
+
+    /// Returns the total number of bits (excluding unused bits)
+    pub fn bit_len(&self) -> usize {
+        if self.data.is_empty() {
+            0
+        } else {
+            self.data.len() * 8 - self.unused as usize
+        }
+    }
+}
+
+impl AsRef<[u8]> for BitString {
+    fn as_ref(&self) -> &[u8] {
+        &self.data
+    }
 }
 
 impl TryFrom<Vec<u8>> for BitString {
@@ -449,8 +565,37 @@ impl Display for BitString {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct OctetString {
+pub struct OctetString {
     inner: Vec<u8>,
+}
+
+impl OctetString {
+    /// Returns the inner bytes as a slice
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.inner
+    }
+
+    /// Returns a mutable reference to the inner bytes
+    pub fn as_bytes_mut(&mut self) -> &mut [u8] {
+        &mut self.inner
+    }
+
+    /// Consumes self and returns the inner bytes
+    pub fn into_bytes(self) -> Vec<u8> {
+        self.inner
+    }
+}
+
+impl AsRef<[u8]> for OctetString {
+    fn as_ref(&self) -> &[u8] {
+        &self.inner
+    }
+}
+
+impl AsMut<[u8]> for OctetString {
+    fn as_mut(&mut self) -> &mut [u8] {
+        &mut self.inner
+    }
 }
 
 impl From<Vec<u8>> for OctetString {
@@ -513,6 +658,49 @@ mod tests {
         let value = Integer::from(input.as_slice());
 
         assert_eq!(expected_num, value);
+    }
+
+    #[rstest(
+        input,
+        expected_json,
+        case(Integer { inner: BigInt::from(0) }, r#""0""#),
+        case(Integer { inner: BigInt::from(1) }, r#""1""#),
+        case(Integer { inner: BigInt::from(255) }, r#""255""#),
+        case(Integer { inner: BigInt::from(-1) }, r#""-1""#),
+        case(Integer { inner: BigInt::from_str("333504890676592408951587385614406537514249").unwrap() }, r#""333504890676592408951587385614406537514249""#)
+    )]
+    fn test_integer_serialize(input: Integer, expected_json: &str) {
+        let json = serde_json::to_string(&input).unwrap();
+        assert_eq!(expected_json, json);
+    }
+
+    #[rstest(
+        json_input,
+        expected,
+        case(r#""0""#, Integer { inner: BigInt::from(0) }),
+        case(r#""1""#, Integer { inner: BigInt::from(1) }),
+        case(r#""255""#, Integer { inner: BigInt::from(255) }),
+        case(r#""-1""#, Integer { inner: BigInt::from(-1) }),
+        case(r#""333504890676592408951587385614406537514249""#, Integer { inner: BigInt::from_str("333504890676592408951587385614406537514249").unwrap() })
+    )]
+    fn test_integer_deserialize(json_input: &str, expected: Integer) {
+        let integer: Integer = serde_json::from_str(json_input).unwrap();
+        assert_eq!(expected, integer);
+    }
+
+    #[rstest(
+        input,
+        case(Integer { inner: BigInt::from(0) }),
+        case(Integer { inner: BigInt::from(1) }),
+        case(Integer { inner: BigInt::from(255) }),
+        case(Integer { inner: BigInt::from(-1) }),
+        case(Integer { inner: BigInt::from_str("12345678901234567890").unwrap() }),
+        case(Integer { inner: BigInt::from_str("333504890676592408951587385614406537514249").unwrap() })
+    )]
+    fn test_integer_serialize_deserialize_roundtrip(input: Integer) {
+        let json = serde_json::to_string(&input).unwrap();
+        let deserialized: Integer = serde_json::from_str(&json).unwrap();
+        assert_eq!(input, deserialized);
     }
 
     #[rstest(input, expected, case(ObjectIdentifier { inner: vec![0x01, 0x02, 0x03, 0x04]}, "1.2.3.4"))]
@@ -716,5 +904,58 @@ e8ZYGIc4gvs5McdrVUyYGUs=
         // Only ensure not to panic.
         let obj = der.decode().unwrap();
         println!("{:?}", obj);
+    }
+
+    #[rstest(
+        input,
+        expected_json,
+        // Test case for ISO/ITU-T joint standards (1.2)
+        case(ObjectIdentifier { inner: vec![1, 2] }, r#""1.2""#),
+        // Test case for ISO/IEC standard (1.3.6.1.4.1)
+        case(ObjectIdentifier { inner: vec![1, 3, 6, 1, 4, 1] }, r#""1.3.6.1.4.1""#),
+        // Test case for large values (1.2.840.113549)
+        case(ObjectIdentifier { inner: vec![1, 2, 840, 113549] }, r#""1.2.840.113549""#),
+        // Test case for multi-byte encoding (1.2.840.113549.1.1.5)
+        case(ObjectIdentifier { inner: vec![1, 2, 840, 113549, 1, 1, 5] }, r#""1.2.840.113549.1.1.5""#),
+        // Test case for SHA-256 with RSA encryption OID
+        case(ObjectIdentifier { inner: vec![1, 2, 840, 113549, 1, 1, 11] }, r#""1.2.840.113549.1.1.11""#)
+    )]
+    fn test_object_identifier_serialize(input: ObjectIdentifier, expected_json: &str) {
+        let json = serde_json::to_string(&input).unwrap();
+        assert_eq!(expected_json, json);
+    }
+
+    #[rstest(
+        json_input,
+        expected,
+        // Test case for ISO/ITU-T joint standards (1.2)
+        case(r#""1.2""#, ObjectIdentifier { inner: vec![1, 2] }),
+        // Test case for ISO/IEC standard (1.3.6.1.4.1)
+        case(r#""1.3.6.1.4.1""#, ObjectIdentifier { inner: vec![1, 3, 6, 1, 4, 1] }),
+        // Test case for large values (1.2.840.113549)
+        case(r#""1.2.840.113549""#, ObjectIdentifier { inner: vec![1, 2, 840, 113549] }),
+        // Test case for multi-byte encoding (1.2.840.113549.1.1.5)
+        case(r#""1.2.840.113549.1.1.5""#, ObjectIdentifier { inner: vec![1, 2, 840, 113549, 1, 1, 5] }),
+        // Test case for SHA-256 with RSA encryption OID
+        case(r#""1.2.840.113549.1.1.11""#, ObjectIdentifier { inner: vec![1, 2, 840, 113549, 1, 1, 11] })
+    )]
+    fn test_object_identifier_deserialize(json_input: &str, expected: ObjectIdentifier) {
+        let oid: ObjectIdentifier = serde_json::from_str(json_input).unwrap();
+        assert_eq!(expected, oid);
+    }
+
+    #[rstest(
+        input,
+        // Test case for round-trip serialization
+        case(ObjectIdentifier { inner: vec![1, 2] }),
+        case(ObjectIdentifier { inner: vec![1, 3, 6, 1, 4, 1] }),
+        case(ObjectIdentifier { inner: vec![1, 2, 840, 113549] }),
+        case(ObjectIdentifier { inner: vec![1, 2, 840, 113549, 1, 1, 5] }),
+        case(ObjectIdentifier { inner: vec![0, 9, 2342, 19200300, 100, 1, 1] })
+    )]
+    fn test_object_identifier_serialize_deserialize_roundtrip(input: ObjectIdentifier) {
+        let json = serde_json::to_string(&input).unwrap();
+        let deserialized: ObjectIdentifier = serde_json::from_str(&json).unwrap();
+        assert_eq!(input, deserialized);
     }
 }
