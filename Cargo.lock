@@ -27,6 +27,7 @@ dependencies = [
  "chrono",
  "der",
  "num-bigint",
+ "num-traits",
  "pem",
  "rstest",
  "serde",

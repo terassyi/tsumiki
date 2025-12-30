@@ -3,7 +3,7 @@ use nom::{IResult, Parser};
 use pem::Pem;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
-mod error;
+pub mod error;
 
 #[derive(Debug, Clone)]
 pub struct Der {
@@ -37,6 +37,28 @@ impl Decoder<Vec<u8>, Der> for Vec<u8> {
     }
 }
 
+impl DecodableFrom<&[u8]> for Der {}
+
+impl Decoder<&[u8], Der> for &[u8] {
+    type Error = Error;
+
+    fn decode(&self) -> Result<Der, Self::Error> {
+        let mut tlvs = Vec::new();
+        #[warn(suspicious_double_ref_op)]
+        let mut input = *self;
+        while !input.is_empty() {
+            let (new_input, tlv) = Tlv::parse(input).map_err(|e| match e {
+                nom::Err::Error(e) => Error::Parser(e.code),
+                nom::Err::Incomplete(e) => Error::ParserIncomplete(e),
+                nom::Err::Failure(e) => Error::Parser(e.code),
+            })?;
+            input = new_input;
+            tlvs.push(tlv);
+        }
+        Ok(Der { elements: tlvs })
+    }
+}
+
 impl DecodableFrom<Pem> for Der {}
 
 impl Decoder<Pem, Der> for Pem {
@@ -52,35 +74,35 @@ impl Decoder<Pem, Der> for Pem {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tag {
     Primitive(PrimitiveTag, u8), // This variant has a primitive tag number and an actual value.
-    ContextSpecific(u8),         // TThis variant has a slot number.
+    ContextSpecific { slot: u8, constructed: bool }, // Context-specific tag with slot number and constructed flag
 }
 
 impl Tag {
     fn is_constructed(&self) -> bool {
         match self {
             Tag::Primitive(_, inner) => (*inner) & 0b0010_0000 != 0,
-            Tag::ContextSpecific(_) => true, // Context-specific tags are always constructed.
+            Tag::ContextSpecific { constructed, .. } => *constructed,
         }
     }
 
     fn is_context_specific(&self) -> bool {
         match self {
             Tag::Primitive(_, _) => false,
-            Tag::ContextSpecific(_) => true,
+            Tag::ContextSpecific { .. } => true,
         }
     }
 
     fn primitive_tag(&self) -> Option<PrimitiveTag> {
         match self {
             Tag::Primitive(primitive, _) => Some(*primitive),
-            Tag::ContextSpecific(_) => None,
+            Tag::ContextSpecific { .. } => None,
         }
     }
 
     fn slot_number(&self) -> Option<u8> {
         match self {
             Tag::Primitive(_, _) => None,
-            Tag::ContextSpecific(slot) => Some(*slot),
+            Tag::ContextSpecific { slot, .. } => Some(*slot),
         }
     }
 }
@@ -91,8 +113,10 @@ impl From<u8> for Tag {
 
         if is_context_specific {
             // Context-specific tag
-            let slot_number = value & 0b0001_1111; // Mask to get the slot number, but I'm not sure how many bits are used for the slot number.
-            Tag::ContextSpecific(slot_number)
+            // Bit 6 (0x20) indicates constructed (1) or primitive (0)
+            let constructed = value & 0b0010_0000 != 0;
+            let slot_number = value & 0b0001_1111; // Bits 0-4 are the slot number
+            Tag::ContextSpecific { slot: slot_number, constructed }
         } else {
             let primitive = PrimitiveTag::from(value & 0b0001_1111);
             Tag::Primitive(primitive, value)
@@ -265,8 +289,12 @@ mod tests {
         case(vec![0x02, 0x01], Tag::Primitive(PrimitiveTag::Integer, 0x02)),
         case(vec![0x30, 0x01], Tag::Primitive(PrimitiveTag::Sequence, 0x30)),
         case(vec![0x0a, 0x02, 0x10], Tag::Primitive(PrimitiveTag::Unimplemented(0x0a), 0x0a)),
-        case(vec![0xa0], Tag::ContextSpecific(0x00)),
-        case(vec![0xa3], Tag::ContextSpecific(0x03)),
+        // 0xA0 = 10100000 = context-specific [0] constructed
+        case(vec![0xa0], Tag::ContextSpecific { slot: 0x00, constructed: true }),
+        case(vec![0xa3], Tag::ContextSpecific { slot: 0x03, constructed: true }),
+        // 0x80 = 10000000 = context-specific [0] primitive
+        case(vec![0x80], Tag::ContextSpecific { slot: 0x00, constructed: false }),
+        case(vec![0x82], Tag::ContextSpecific { slot: 0x02, constructed: false }),
     )]
     fn test_parse_tag(input: Vec<u8>, expected: Tag) {
         use crate::parse_tag;

@@ -4,6 +4,7 @@ use chrono::NaiveDateTime;
 use der::{Der, PrimitiveTag, Tlv};
 use error::Error;
 use num_bigint::BigInt;
+use num_traits::ToPrimitive;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
@@ -183,31 +184,51 @@ impl TryFrom<&Tlv> for Element {
                     Ok(Element::Unimplemented(tlv.clone()))
                 }
             },
-            der::Tag::ContextSpecific(slot) => {
-                if let Some(tlvs) = tlv.tlvs() {
-                    if tlvs.len() != 1 {
-                        return Err(Error::InvalidContextSpecific {
+            der::Tag::ContextSpecific { slot, constructed } => {
+                if *constructed {
+                    // Constructed: contains nested TLV(s)
+                    if let Some(tlvs) = tlv.tlvs() {
+                        if tlvs.len() != 1 {
+                            return Err(Error::InvalidContextSpecific {
+                                slot: *slot,
+                                msg: "context-specific constructed must have exactly one sub-tlv"
+                                    .to_string(),
+                            });
+                        }
+                        if let Some(tlv) = tlvs.first() {
+                            let element = Element::try_from(tlv)?;
+                            Ok(Element::ContextSpecific {
+                                slot: *slot,
+                                element: Box::new(element),
+                            })
+                        } else {
+                            Err(Error::InvalidContextSpecific {
+                                slot: *slot,
+                                msg: "context-specific constructed has no data".to_string(),
+                            })
+                        }
+                    } else {
+                        Err(Error::InvalidContextSpecific {
                             slot: *slot,
-                            msg: "context-specific tlv must have exactly one sub-tlv".to_string(),
-                        });
+                            msg: "context-specific constructed has no tlvs".to_string(),
+                        })
                     }
-                    if let Some(tlv) = tlvs.first() {
-                        let element = Element::try_from(tlv)?;
+                } else {
+                    // Primitive: IMPLICIT tagging
+                    // Store raw data as OctetString - the upper layer decoder interprets based on schema
+                    if let Some(data) = tlv.data() {
                         Ok(Element::ContextSpecific {
                             slot: *slot,
-                            element: Box::new(element),
+                            element: Box::new(Element::OctetString(OctetString::from(
+                                data.to_vec(),
+                            ))),
                         })
                     } else {
                         Err(Error::InvalidContextSpecific {
                             slot: *slot,
-                            msg: "context-specific tlv has no data".to_string(),
+                            msg: "context-specific primitive has no data".to_string(),
                         })
                     }
-                } else {
-                    Err(Error::InvalidContextSpecific {
-                        slot: *slot,
-                        msg: "context-specific tlv has no data".to_string(),
-                    })
                 }
             }
         }
@@ -244,6 +265,13 @@ impl Display for Element {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Integer {
     inner: BigInt,
+}
+
+impl Integer {
+    /// Returns a reference to the inner BigInt
+    pub fn as_bigint(&self) -> &BigInt {
+        &self.inner
+    }
 }
 
 impl Serialize for Integer {
@@ -287,6 +315,50 @@ impl From<Vec<u8>> for Integer {
         Integer {
             inner: BigInt::from_signed_bytes_be(&value),
         }
+    }
+}
+
+impl TryFrom<Integer> for i64 {
+    type Error = Error;
+
+    fn try_from(value: Integer) -> Result<Self, Self::Error> {
+        value
+            .inner
+            .to_i64()
+            .ok_or_else(|| Error::InvalidInteger("Integer value out of range for i64".to_string()))
+    }
+}
+
+impl TryFrom<&Integer> for i64 {
+    type Error = Error;
+
+    fn try_from(value: &Integer) -> Result<Self, Self::Error> {
+        value
+            .inner
+            .to_i64()
+            .ok_or_else(|| Error::InvalidInteger("Integer value out of range for i64".to_string()))
+    }
+}
+
+impl TryFrom<Integer> for u64 {
+    type Error = Error;
+
+    fn try_from(value: Integer) -> Result<Self, Self::Error> {
+        value
+            .inner
+            .to_u64()
+            .ok_or_else(|| Error::InvalidInteger("Integer value out of range for u64".to_string()))
+    }
+}
+
+impl TryFrom<&Integer> for u64 {
+    type Error = Error;
+
+    fn try_from(value: &Integer) -> Result<Self, Self::Error> {
+        value
+            .inner
+            .to_u64()
+            .ok_or_else(|| Error::InvalidInteger("Integer value out of range for u64".to_string()))
     }
 }
 
@@ -470,6 +542,11 @@ impl<'de> serde::Deserialize<'de> for BitString {
 }
 
 impl BitString {
+    /// Creates a new BitString with the specified number of unused bits and data
+    pub fn new(unused: u8, data: Vec<u8>) -> Self {
+        BitString { unused, data }
+    }
+
     /// Returns the number of unused bits in the last byte
     pub fn unused_bits(&self) -> u8 {
         self.unused
@@ -569,6 +646,57 @@ pub struct OctetString {
     inner: Vec<u8>,
 }
 
+impl Serialize for OctetString {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        if serializer.is_human_readable() {
+            // Serialize as hex string for human-readable formats (JSON, YAML, etc.)
+            let hex_string = self
+                .inner
+                .iter()
+                .map(|b| format!("{:02x}", b))
+                .collect::<String>();
+            serializer.serialize_str(&hex_string)
+        } else {
+            // Serialize as byte array for binary formats
+            self.inner.serialize(serializer)
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for OctetString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        if deserializer.is_human_readable() {
+            // Deserialize from hex string for human-readable formats
+            let hex_string = String::deserialize(deserializer)?;
+            let mut inner = Vec::new();
+            // Remove any whitespace or common separators
+            let cleaned =
+                hex_string.replace(|c: char| c.is_whitespace() || c == ':' || c == '-', "");
+            if cleaned.len() % 2 != 0 {
+                return Err(serde::de::Error::custom("hex string must have even length"));
+            }
+            for i in (0..cleaned.len()).step_by(2) {
+                let byte_str = &cleaned[i..i + 2];
+                let byte = u8::from_str_radix(byte_str, 16)
+                    .map_err(|e| serde::de::Error::custom(format!("invalid hex string: {}", e)))?;
+                inner.push(byte);
+            }
+
+            Ok(OctetString { inner })
+        } else {
+            // Deserialize from byte array for binary formats
+            let inner = Vec::<u8>::deserialize(deserializer)?;
+            Ok(OctetString { inner })
+        }
+    }
+}
+
 impl OctetString {
     /// Returns the inner bytes as a slice
     pub fn as_bytes(&self) -> &[u8] {
@@ -583,6 +711,24 @@ impl OctetString {
     /// Consumes self and returns the inner bytes
     pub fn into_bytes(self) -> Vec<u8> {
         self.inner
+    }
+}
+
+impl TryFrom<&OctetString> for ASN1Object {
+    type Error = Error;
+
+    fn try_from(value: &OctetString) -> Result<Self, Self::Error> {
+        let der: Der = value.as_ref().decode().map_err(Error::FailedToDecodeDer)?;
+        der.decode()
+    }
+}
+
+impl TryFrom<OctetString> for ASN1Object {
+    type Error = Error;
+
+    fn try_from(value: OctetString) -> Result<Self, Self::Error> {
+        let der: Der = value.as_ref().decode().map_err(Error::FailedToDecodeDer)?;
+        der.decode()
     }
 }
 
@@ -783,6 +929,52 @@ mod tests {
     fn test_octetstring_to_string(input: OctetString, expected: &str) {
         let actual = input.to_string();
         assert_eq!(actual, expected);
+    }
+
+    #[rstest(input, expected_json,
+        // Test case: Empty OctetString
+        case(OctetString { inner: vec![] }, r#""""#),
+        // Test case: Single byte
+        case(OctetString { inner: vec![0x01] }, r#""01""#),
+        // Test case: Multiple bytes
+        case(OctetString { inner: vec![0x01, 0x02, 0x03] }, r#""010203""#),
+        // Test case: High value bytes
+        case(OctetString { inner: vec![0xff, 0xab, 0xcd] }, r#""ffabcd""#),
+    )]
+    fn test_octetstring_serialize(input: OctetString, expected_json: &str) {
+        let json = serde_json::to_string(&input).unwrap();
+        assert_eq!(json, expected_json);
+    }
+
+    #[rstest(json_input, expected,
+        // Test case: Empty OctetString
+        case(r#""""#, OctetString { inner: vec![] }),
+        // Test case: Single byte
+        case(r#""01""#, OctetString { inner: vec![0x01] }),
+        // Test case: Multiple bytes
+        case(r#""010203""#, OctetString { inner: vec![0x01, 0x02, 0x03] }),
+        // Test case: High value bytes
+        case(r#""ffabcd""#, OctetString { inner: vec![0xff, 0xab, 0xcd] }),
+        // Test case: Uppercase hex
+        case(r#""FFABCD""#, OctetString { inner: vec![0xff, 0xab, 0xcd] }),
+        // Test case: Mixed case
+        case(r#""FfAbCd""#, OctetString { inner: vec![0xff, 0xab, 0xcd] }),
+    )]
+    fn test_octetstring_deserialize(json_input: &str, expected: OctetString) {
+        let octet_string: OctetString = serde_json::from_str(json_input).unwrap();
+        assert_eq!(octet_string, expected);
+    }
+
+    #[rstest(input,
+        case(OctetString { inner: vec![] }),
+        case(OctetString { inner: vec![0x01] }),
+        case(OctetString { inner: vec![0x01, 0x02, 0x03, 0x04, 0x05] }),
+        case(OctetString { inner: vec![0xff, 0xab, 0xcd, 0xef] }),
+    )]
+    fn test_octetstring_serialize_deserialize_roundtrip(input: OctetString) {
+        let json = serde_json::to_string(&input).unwrap();
+        let deserialized: OctetString = serde_json::from_str(&json).unwrap();
+        assert_eq!(input, deserialized);
     }
 
     const UTC_TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";

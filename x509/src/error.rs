@@ -1,6 +1,6 @@
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq, Eq)]
+#[derive(Debug, Error)]
 pub enum Error {
     #[error("invalid validity: {0}")]
     InvalidValidity(String),
@@ -20,4 +20,36 @@ pub enum Error {
     InvalidCertificateSerialNumber(String),
     #[error("invalid version: {0}")]
     InvalidVersion(String),
+    #[error("invalid subject public key info: {0}")]
+    InvalidSubjectPublicKeyInfo(String),
+    #[error("invalid unique identifier: {0}")]
+    InvalidUniqueIdentifier(String),
+    #[error("invalid extension: {0}")]
+    InvalidExtension(String),
+    #[error("invalid extensions: {0}")]
+    InvalidExtensions(String),
+    #[error("invalid BasicConstraints: {0}")]
+    InvalidBasicConstraints(String),
+    #[error("invalid KeyUsage: {0}")]
+    InvalidKeyUsage(String),
+    #[error("invalid SubjectKeyIdentifier: {0}")]
+    InvalidSubjectKeyIdentifier(String),
+    #[error("invalid AuthorityKeyIdentifier: {0}")]
+    InvalidAuthorityKeyIdentifier(String),
+    #[error("invalid SubjectAltName: {0}")]
+    InvalidSubjectAltName(String),
+    #[error("invalid GeneralName: {0}")]
+    InvalidGeneralName(String),
+    #[error("invalid ExtendedKeyUsage: {0}")]
+    InvalidExtendedKeyUsage(String),
+    #[error("invalid AuthorityInfoAccess: {0}")]
+    InvalidAuthorityInfoAccess(String),
+    #[error("invalid certificate: {0}")]
+    InvalidCertificate(String),
+    #[error("invalid TBS certificate: {0}")]
+    InvalidTBSCertificate(String),
+    #[error("invalid ASN.1: {0}")]
+    InvalidASN1(#[source] asn1::error::Error),
+    #[error("invalid DER: {0}")]
+    InvalidDer(#[source] der::error::Error),
 }
