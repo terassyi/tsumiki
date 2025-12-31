@@ -272,6 +272,26 @@ impl Integer {
     pub fn as_bigint(&self) -> &BigInt {
         &self.inner
     }
+
+    /// Converts the Integer to u32 if it fits in the range
+    pub fn to_u32(&self) -> Option<u32> {
+        self.inner.to_u32()
+    }
+
+    /// Converts the Integer to i32 if it fits in the range
+    pub fn to_i32(&self) -> Option<i32> {
+        self.inner.to_i32()
+    }
+
+    /// Converts the Integer to i64 if it fits in the range
+    pub fn to_i64(&self) -> Option<i64> {
+        self.inner.to_i64()
+    }
+
+    /// Converts the Integer to u64 if it fits in the range
+    pub fn to_u64(&self) -> Option<u64> {
+        self.inner.to_u64()
+    }
 }
 
 impl Serialize for Integer {
@@ -498,6 +518,18 @@ impl FromStr for ObjectIdentifier {
             .map(|s| s.parse::<u64>().map_err(Error::ParseInt))
             .collect::<Result<Vec<u64>, Error>>()?;
         Ok(ObjectIdentifier { inner: values })
+    }
+}
+
+impl PartialEq<&str> for ObjectIdentifier {
+    fn eq(&self, other: &&str) -> bool {
+        self.to_string() == *other
+    }
+}
+
+impl PartialEq<ObjectIdentifier> for &str {
+    fn eq(&self, other: &ObjectIdentifier) -> bool {
+        *self == other.to_string()
     }
 }
 

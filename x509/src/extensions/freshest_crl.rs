@@ -1,0 +1,87 @@
+use asn1::OctetString;
+use serde::{Deserialize, Serialize};
+
+use crate::error::Error;
+use crate::extensions::{CRLDistributionPoints, StandardExtension};
+
+/*
+RFC 5280 Section 4.2.1.15
+
+id-ce-freshestCRL OBJECT IDENTIFIER ::=  { id-ce 46 }
+
+FreshestCRL ::= CRLDistributionPoints
+
+The freshest CRL extension identifies how delta CRL information is obtained.
+The extension MUST be marked as non-critical by conforming CAs.
+
+A delta CRL is a CRL that only contains entries for certificates that have
+been revoked since the issuance of a referenced base CRL. This extension
+identifies the location of the delta CRL. The use of delta CRLs can
+significantly reduce download time and processing time for CRL validation
+in environments where the base CRL is large.
+
+The freshest CRL extension uses the exact same syntax as the CRL distribution
+points extension (4.2.1.13), but the identified CRLs are delta CRLs rather
+than base CRLs.
+
+Delta CRLs contain:
+- A delta CRL indicator extension identifying the version of the base CRL
+- Only certificates revoked since the base CRL was issued
+- Optionally, certificates whose revocation was removed (in practice rare)
+
+Clients process delta CRLs as follows:
+1. Download and process the base CRL (via CRL Distribution Points extension)
+2. Download the delta CRL (via Freshest CRL extension)
+3. Apply the delta CRL updates to the base CRL
+4. Use the combined revocation list for validation
+
+Benefits:
+- Reduced bandwidth: Only delta needs to be downloaded for updates
+- Faster processing: Smaller CRLs are faster to parse
+- More frequent updates: Delta CRLs can be issued more frequently than base CRLs
+
+Example scenario:
+- Base CRL: 10 MB, issued daily, contains 100,000 revoked certificates
+- Delta CRL: 100 KB, issued hourly, contains ~100 newly revoked certificates
+- Bandwidth savings: 99% reduction for hourly updates
+*/
+
+/// FreshestCRL extension identifies the location of delta CRL distribution points
+/// OID: 2.5.29.46
+///
+/// This extension MUST be marked as non-critical.
+/// The syntax is identical to CRLDistributionPoints, but the referenced CRLs
+/// are delta CRLs containing only certificates revoked since the base CRL.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FreshestCRL {
+    /// Distribution points for delta CRLs
+    /// Uses the same structure as CRLDistributionPoints
+    pub distribution_points: CRLDistributionPoints,
+}
+
+impl StandardExtension for FreshestCRL {
+    /// OID for FreshestCRL extension (2.5.29.46)
+    const OID: &'static str = "2.5.29.46";
+
+    fn parse(value: &OctetString) -> Result<Self, Error> {
+        // Parse using the CRLDistributionPoints parser since the syntax is identical
+        let distribution_points = CRLDistributionPoints::parse(value)?;
+        Ok(Self {
+            distribution_points,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test parsing failure with wrong type
+    #[test]
+    fn test_freshest_crl_decode_failure_wrong_type() {
+        let der_bytes = vec![0x02, 0x01, 0x2A]; // INTEGER 42
+        let octet_string = OctetString::from(der_bytes);
+        let result = FreshestCRL::parse(&octet_string);
+        assert!(result.is_err());
+    }
+}

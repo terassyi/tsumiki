@@ -38,12 +38,26 @@ pub enum Error {
     InvalidAuthorityKeyIdentifier(String),
     #[error("invalid SubjectAltName: {0}")]
     InvalidSubjectAltName(String),
+    #[error("invalid IssuerAltName: {0}")]
+    InvalidIssuerAltName(String),
     #[error("invalid GeneralName: {0}")]
     InvalidGeneralName(String),
     #[error("invalid ExtendedKeyUsage: {0}")]
     InvalidExtendedKeyUsage(String),
     #[error("invalid AuthorityInfoAccess: {0}")]
     InvalidAuthorityInfoAccess(String),
+    #[error("invalid NameConstraints: {0}")]
+    InvalidNameConstraints(String),
+    #[error("invalid CRLDistributionPoints: {0}")]
+    InvalidCRLDistributionPoints(String),
+    #[error("invalid CertificatePolicies: {0}")]
+    InvalidCertificatePolicies(String),
+    #[error("invalid InhibitAnyPolicy: {0}")]
+    InvalidInhibitAnyPolicy(String),
+    #[error("invalid PolicyConstraints: {0}")]
+    InvalidPolicyConstraints(String),
+    #[error("invalid PolicyMappings: {0}")]
+    InvalidPolicyMappings(String),
     #[error("invalid certificate: {0}")]
     InvalidCertificate(String),
     #[error("invalid TBS certificate: {0}")]

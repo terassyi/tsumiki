@@ -3,8 +3,7 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
-use crate::error::Error;
-use crate::extensions::Extensions;
+use crate::{error::Error, extensions::Extensions};
 
 pub(crate) mod error;
 pub mod extensions;

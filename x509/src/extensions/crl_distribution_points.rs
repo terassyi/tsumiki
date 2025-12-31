@@ -1,0 +1,616 @@
+use asn1::{ASN1Object, Element, OctetString};
+use serde::{Deserialize, Serialize};
+use tsumiki::decoder::{DecodableFrom, Decoder};
+
+use crate::error::Error;
+use crate::extensions::StandardExtension;
+use crate::extensions::general_name::GeneralName;
+
+/*
+RFC 5280 Section 4.2.1.13
+
+CRLDistributionPoints ::= SEQUENCE SIZE (1..MAX) OF DistributionPoint
+
+DistributionPoint ::= SEQUENCE {
+    distributionPoint       [0]     DistributionPointName OPTIONAL,
+    reasons                 [1]     ReasonFlags OPTIONAL,
+    cRLIssuer               [2]     GeneralNames OPTIONAL }
+
+DistributionPointName ::= CHOICE {
+    fullName                [0]     GeneralNames,
+    nameRelativeToCRLIssuer [1]     RelativeDistinguishedName }
+
+ReasonFlags ::= BIT STRING {
+    unused                  (0),
+    keyCompromise           (1),
+    cACompromise            (2),
+    affiliationChanged      (3),
+    superseded              (4),
+    cessationOfOperation    (5),
+    certificateHold         (6),
+    privilegeWithdrawn      (7),
+    aACompromise            (8) }
+*/
+
+/// CRLDistributionPoints represents the CRL Distribution Points extension
+/// OID: 2.5.29.31
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CRLDistributionPoints {
+    pub distribution_points: Vec<DistributionPoint>,
+}
+
+/// DistributionPoint represents a single distribution point
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DistributionPoint {
+    pub distribution_point: Option<DistributionPointName>,
+    pub reasons: Option<ReasonFlags>,
+    pub crl_issuer: Option<Vec<GeneralName>>,
+}
+
+/// DistributionPointName is a CHOICE between fullName and nameRelativeToCRLIssuer
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DistributionPointName {
+    FullName(Vec<GeneralName>),
+    // NameRelativeToCRLIssuer is RelativeDistinguishedName, which we'll skip for now
+    // since it's rarely used in practice
+}
+
+/// ReasonFlags represents the reasons for certificate revocation
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReasonFlags {
+    pub key_compromise: bool,
+    pub ca_compromise: bool,
+    pub affiliation_changed: bool,
+    pub superseded: bool,
+    pub cessation_of_operation: bool,
+    pub certificate_hold: bool,
+    pub privilege_withdrawn: bool,
+    pub aa_compromise: bool,
+}
+
+impl From<asn1::BitString> for ReasonFlags {
+    fn from(bit_string: asn1::BitString) -> Self {
+        let bytes = bit_string.as_bytes();
+        let unused_bits = bit_string.unused_bits();
+
+        if bytes.is_empty() {
+            return Self {
+                key_compromise: false,
+                ca_compromise: false,
+                affiliation_changed: false,
+                superseded: false,
+                cessation_of_operation: false,
+                certificate_hold: false,
+                privilege_withdrawn: false,
+                aa_compromise: false,
+            };
+        }
+
+        let total_bits = bytes.len() * 8 - unused_bits as usize;
+
+        // Helper function to check if a specific bit is set
+        // RFC 5280: Bit 0 is unused, bit 1 is keyCompromise, etc.
+        // Bits are numbered from most significant bit of first byte (MSB first)
+        let is_bit_set = |bit_num: usize| -> bool {
+            if total_bits <= bit_num {
+                return false;
+            }
+            let byte_index = bit_num / 8;
+            let bit_offset = 7 - (bit_num % 8);
+            byte_index < bytes.len() && (bytes[byte_index] & (1 << bit_offset)) != 0
+        };
+
+        Self {
+            key_compromise: is_bit_set(1),
+            ca_compromise: is_bit_set(2),
+            affiliation_changed: is_bit_set(3),
+            superseded: is_bit_set(4),
+            cessation_of_operation: is_bit_set(5),
+            certificate_hold: is_bit_set(6),
+            privilege_withdrawn: is_bit_set(7),
+            aa_compromise: is_bit_set(8),
+        }
+    }
+}
+
+impl DecodableFrom<OctetString> for CRLDistributionPoints {}
+
+impl Decoder<OctetString, CRLDistributionPoints> for OctetString {
+    type Error = Error;
+
+    fn decode(&self) -> Result<CRLDistributionPoints, Self::Error> {
+        let asn1_obj = ASN1Object::try_from(self).map_err(Error::InvalidASN1)?;
+        let elements = asn1_obj.elements();
+
+        if elements.is_empty() {
+            return Err(Error::InvalidCRLDistributionPoints(
+                "empty sequence".to_string(),
+            ));
+        }
+
+        elements[0].decode()
+    }
+}
+
+impl DecodableFrom<Element> for CRLDistributionPoints {}
+
+impl Decoder<Element, CRLDistributionPoints> for Element {
+    type Error = Error;
+
+    fn decode(&self) -> Result<CRLDistributionPoints, Self::Error> {
+        match self {
+            Element::Sequence(elements) => {
+                if elements.is_empty() {
+                    return Err(Error::InvalidCRLDistributionPoints(
+                        "empty sequence - at least one DistributionPoint required".to_string(),
+                    ));
+                }
+
+                let mut distribution_points = Vec::new();
+                for elem in elements {
+                    let dp: DistributionPoint = elem.decode()?;
+                    distribution_points.push(dp);
+                }
+
+                Ok(CRLDistributionPoints {
+                    distribution_points,
+                })
+            }
+            _ => Err(Error::InvalidCRLDistributionPoints(
+                "expected Sequence".to_string(),
+            )),
+        }
+    }
+}
+
+impl DecodableFrom<Element> for DistributionPoint {}
+
+impl Decoder<Element, DistributionPoint> for Element {
+    type Error = Error;
+
+    fn decode(&self) -> Result<DistributionPoint, Self::Error> {
+        match self {
+            Element::Sequence(elements) => {
+                let mut distribution_point = None;
+                let mut reasons = None;
+                let mut crl_issuer = None;
+
+                for elem in elements {
+                    match elem {
+                        Element::ContextSpecific { slot, element } => match slot {
+                            0 => {
+                                // distributionPoint [0] DistributionPointName
+                                distribution_point = Some(element.as_ref().decode()?);
+                            }
+                            1 => {
+                                // reasons [1] ReasonFlags (BIT STRING)
+                                if let Element::BitString(bit_string) = element.as_ref() {
+                                    reasons = Some(bit_string.clone().into());
+                                } else {
+                                    return Err(Error::InvalidCRLDistributionPoints(
+                                        "reasons must be BIT STRING".to_string(),
+                                    ));
+                                }
+                            }
+                            2 => {
+                                // cRLIssuer [2] GeneralNames
+                                if let Element::Sequence(names) = element.as_ref() {
+                                    let mut general_names = Vec::new();
+                                    for name_elem in names {
+                                        general_names.push(name_elem.decode()?);
+                                    }
+                                    crl_issuer = Some(general_names);
+                                } else {
+                                    return Err(Error::InvalidCRLDistributionPoints(
+                                        "cRLIssuer must be Sequence of GeneralName".to_string(),
+                                    ));
+                                }
+                            }
+                            _ => {
+                                return Err(Error::InvalidCRLDistributionPoints(format!(
+                                    "unexpected context-specific tag: {}",
+                                    slot
+                                )));
+                            }
+                        },
+                        _ => {
+                            return Err(Error::InvalidCRLDistributionPoints(
+                                "expected context-specific element".to_string(),
+                            ));
+                        }
+                    }
+                }
+
+                Ok(DistributionPoint {
+                    distribution_point,
+                    reasons,
+                    crl_issuer,
+                })
+            }
+            _ => Err(Error::InvalidCRLDistributionPoints(
+                "expected Sequence for DistributionPoint".to_string(),
+            )),
+        }
+    }
+}
+
+impl DecodableFrom<Element> for DistributionPointName {}
+
+impl Decoder<Element, DistributionPointName> for Element {
+    type Error = Error;
+
+    fn decode(&self) -> Result<DistributionPointName, Self::Error> {
+        match self {
+            Element::ContextSpecific { slot, element } => match slot {
+                0 => {
+                    // fullName [0] GeneralNames
+                    if let Element::Sequence(names) = element.as_ref() {
+                        let mut general_names = Vec::new();
+                        for name_elem in names {
+                            general_names.push(name_elem.decode()?);
+                        }
+                        Ok(DistributionPointName::FullName(general_names))
+                    } else {
+                        Err(Error::InvalidCRLDistributionPoints(
+                            "fullName must be Sequence of GeneralName".to_string(),
+                        ))
+                    }
+                }
+                1 => {
+                    // nameRelativeToCRLIssuer [1] RelativeDistinguishedName
+                    // Not implemented yet
+                    Err(Error::InvalidCRLDistributionPoints(
+                        "nameRelativeToCRLIssuer not yet implemented".to_string(),
+                    ))
+                }
+                _ => Err(Error::InvalidCRLDistributionPoints(format!(
+                    "unexpected context-specific tag for DistributionPointName: {}",
+                    slot
+                ))),
+            },
+            _ => Err(Error::InvalidCRLDistributionPoints(
+                "expected context-specific element for DistributionPointName".to_string(),
+            )),
+        }
+    }
+}
+
+impl StandardExtension for CRLDistributionPoints {
+    const OID: &'static str = "2.5.29.31";
+
+    fn parse(value: &OctetString) -> Result<Self, Error> {
+        value.decode()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use asn1::{Element, OctetString};
+    use rstest::rstest;
+
+    #[rstest(
+        input,
+        expected,
+        // Test case: Single distribution point with URI
+        case(
+            Element::Sequence(vec![
+                Element::Sequence(vec![
+                    Element::ContextSpecific {
+                        slot: 0,
+                        element: Box::new(Element::ContextSpecific {
+                            slot: 0,
+                            element: Box::new(Element::Sequence(vec![
+                                Element::ContextSpecific {
+                                    slot: 6,
+                                    element: Box::new(Element::OctetString(OctetString::from(b"http://crl.example.com/ca.crl".to_vec()))),
+                                },
+                            ])),
+                        }),
+                    },
+                ]),
+            ]),
+            CRLDistributionPoints {
+                distribution_points: vec![
+                    DistributionPoint {
+                        distribution_point: Some(DistributionPointName::FullName(vec![
+                            GeneralName::Uri("http://crl.example.com/ca.crl".to_string()),
+                        ])),
+                        reasons: None,
+                        crl_issuer: None,
+                    },
+                ],
+            }
+        ),
+        // Test case: Multiple URIs in one distribution point
+        case(
+            Element::Sequence(vec![
+                Element::Sequence(vec![
+                    Element::ContextSpecific {
+                        slot: 0,
+                        element: Box::new(Element::ContextSpecific {
+                            slot: 0,
+                            element: Box::new(Element::Sequence(vec![
+                                Element::ContextSpecific {
+                                    slot: 6,
+                                    element: Box::new(Element::OctetString(OctetString::from(b"http://crl1.example.com/ca.crl".to_vec()))),
+                                },
+                                Element::ContextSpecific {
+                                    slot: 6,
+                                    element: Box::new(Element::OctetString(OctetString::from(b"http://crl2.example.com/ca.crl".to_vec()))),
+                                },
+                            ])),
+                        }),
+                    },
+                ]),
+            ]),
+            CRLDistributionPoints {
+                distribution_points: vec![
+                    DistributionPoint {
+                        distribution_point: Some(DistributionPointName::FullName(vec![
+                            GeneralName::Uri("http://crl1.example.com/ca.crl".to_string()),
+                            GeneralName::Uri("http://crl2.example.com/ca.crl".to_string()),
+                        ])),
+                        reasons: None,
+                        crl_issuer: None,
+                    },
+                ],
+            }
+        ),
+        // Test case: Multiple distribution points
+        case(
+            Element::Sequence(vec![
+                Element::Sequence(vec![
+                    Element::ContextSpecific {
+                        slot: 0,
+                        element: Box::new(Element::ContextSpecific {
+                            slot: 0,
+                            element: Box::new(Element::Sequence(vec![
+                                Element::ContextSpecific {
+                                    slot: 6,
+                                    element: Box::new(Element::OctetString(OctetString::from(b"http://crl1.example.com/ca.crl".to_vec()))),
+                                },
+                            ])),
+                        }),
+                    },
+                ]),
+                Element::Sequence(vec![
+                    Element::ContextSpecific {
+                        slot: 0,
+                        element: Box::new(Element::ContextSpecific {
+                            slot: 0,
+                            element: Box::new(Element::Sequence(vec![
+                                Element::ContextSpecific {
+                                    slot: 6,
+                                    element: Box::new(Element::OctetString(OctetString::from(b"http://crl2.example.com/ca.crl".to_vec()))),
+                                },
+                            ])),
+                        }),
+                    },
+                ]),
+            ]),
+            CRLDistributionPoints {
+                distribution_points: vec![
+                    DistributionPoint {
+                        distribution_point: Some(DistributionPointName::FullName(vec![
+                            GeneralName::Uri("http://crl1.example.com/ca.crl".to_string()),
+                        ])),
+                        reasons: None,
+                        crl_issuer: None,
+                    },
+                    DistributionPoint {
+                        distribution_point: Some(DistributionPointName::FullName(vec![
+                            GeneralName::Uri("http://crl2.example.com/ca.crl".to_string()),
+                        ])),
+                        reasons: None,
+                        crl_issuer: None,
+                    },
+                ],
+            }
+        ),
+        // Test case: Distribution point with reasons
+        case(
+            Element::Sequence(vec![
+                Element::Sequence(vec![
+                    Element::ContextSpecific {
+                        slot: 0,
+                        element: Box::new(Element::ContextSpecific {
+                            slot: 0,
+                            element: Box::new(Element::Sequence(vec![
+                                Element::ContextSpecific {
+                                    slot: 6,
+                                    element: Box::new(Element::OctetString(OctetString::from(b"http://crl.example.com/ca.crl".to_vec()))),
+                                },
+                            ])),
+                        }),
+                    },
+                    Element::ContextSpecific {
+                        slot: 1,
+                        element: Box::new(Element::BitString(
+                            // unused_bits=6 means 2 bits are valid: bit 0 (unused) and bit 1 (keyCompromise)
+                            // 0b01000000 sets bit 1 (keyCompromise)
+                            asn1::BitString::new(6, vec![0b0100_0000])
+                        )),
+                    },
+                ]),
+            ]),
+            CRLDistributionPoints {
+                distribution_points: vec![
+                    DistributionPoint {
+                        distribution_point: Some(DistributionPointName::FullName(vec![
+                            GeneralName::Uri("http://crl.example.com/ca.crl".to_string()),
+                        ])),
+                        reasons: Some(ReasonFlags {
+                            key_compromise: true,
+                            ca_compromise: false,
+                            affiliation_changed: false,
+                            superseded: false,
+                            cessation_of_operation: false,
+                            certificate_hold: false,
+                            privilege_withdrawn: false,
+                            aa_compromise: false,
+                        }),
+                        crl_issuer: None,
+                    },
+                ],
+            }
+        ),
+    )]
+    fn test_crl_distribution_points_decode_success(
+        input: Element,
+        expected: CRLDistributionPoints,
+    ) {
+        let result: Result<CRLDistributionPoints, Error> = input.decode();
+        assert!(result.is_ok(), "Failed to decode: {:?}", result);
+        let actual = result.unwrap();
+        assert_eq!(expected, actual);
+    }
+
+    #[rstest(
+        input,
+        expected_error_msg,
+        // Test case: Empty sequence
+        case(
+            Element::Sequence(vec![]),
+            "empty sequence"
+        ),
+        // Test case: Not a Sequence
+        case(
+            Element::Boolean(true),
+            "expected Sequence"
+        ),
+    )]
+    fn test_crl_distribution_points_decode_failure(input: Element, expected_error_msg: &str) {
+        let result: Result<CRLDistributionPoints, Error> = input.decode();
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        let err_str = format!("{}", err);
+        assert!(
+            err_str.contains(expected_error_msg),
+            "Expected error message containing '{}', but got '{}'",
+            expected_error_msg,
+            err_str
+        );
+    }
+
+    #[rstest(
+        input,
+        expected,
+        // Test case: Empty bit string
+        case(
+            asn1::BitString::new(0, vec![]),
+            ReasonFlags {
+                key_compromise: false,
+                ca_compromise: false,
+                affiliation_changed: false,
+                superseded: false,
+                cessation_of_operation: false,
+                certificate_hold: false,
+                privilege_withdrawn: false,
+                aa_compromise: false,
+            }
+        ),
+        // Test case: Only keyCompromise (bit 1)
+        case(
+            asn1::BitString::new(6, vec![0b0100_0000]),
+            ReasonFlags {
+                key_compromise: true,
+                ca_compromise: false,
+                affiliation_changed: false,
+                superseded: false,
+                cessation_of_operation: false,
+                certificate_hold: false,
+                privilege_withdrawn: false,
+                aa_compromise: false,
+            }
+        ),
+        // Test case: cACompromise (bit 2)
+        case(
+            asn1::BitString::new(5, vec![0b0010_0000]),
+            ReasonFlags {
+                key_compromise: false,
+                ca_compromise: true,
+                affiliation_changed: false,
+                superseded: false,
+                cessation_of_operation: false,
+                certificate_hold: false,
+                privilege_withdrawn: false,
+                aa_compromise: false,
+            }
+        ),
+        // Test case: Multiple flags (bits 1, 2, 4)
+        case(
+            asn1::BitString::new(3, vec![0b0110_1000]),
+            ReasonFlags {
+                key_compromise: true,
+                ca_compromise: true,
+                affiliation_changed: false,
+                superseded: true,
+                cessation_of_operation: false,
+                certificate_hold: false,
+                privilege_withdrawn: false,
+                aa_compromise: false,
+            }
+        ),
+        // Test case: All flags in first byte (bits 1-7)
+        case(
+            asn1::BitString::new(0, vec![0b0111_1111]),
+            ReasonFlags {
+                key_compromise: true,
+                ca_compromise: true,
+                affiliation_changed: true,
+                superseded: true,
+                cessation_of_operation: true,
+                certificate_hold: true,
+                privilege_withdrawn: true,
+                aa_compromise: false,
+            }
+        ),
+        // Test case: aaCompromise (bit 8, second byte)
+        case(
+            asn1::BitString::new(7, vec![0b0000_0000, 0b1000_0000]),
+            ReasonFlags {
+                key_compromise: false,
+                ca_compromise: false,
+                affiliation_changed: false,
+                superseded: false,
+                cessation_of_operation: false,
+                certificate_hold: false,
+                privilege_withdrawn: false,
+                aa_compromise: true,
+            }
+        ),
+        // Test case: All flags including aaCompromise
+        case(
+            asn1::BitString::new(7, vec![0b0111_1111, 0b1000_0000]),
+            ReasonFlags {
+                key_compromise: true,
+                ca_compromise: true,
+                affiliation_changed: true,
+                superseded: true,
+                cessation_of_operation: true,
+                certificate_hold: true,
+                privilege_withdrawn: true,
+                aa_compromise: true,
+            }
+        ),
+        // Test case: cessationOfOperation only (bit 5)
+        case(
+            asn1::BitString::new(2, vec![0b0000_0100]),
+            ReasonFlags {
+                key_compromise: false,
+                ca_compromise: false,
+                affiliation_changed: false,
+                superseded: false,
+                cessation_of_operation: true,
+                certificate_hold: false,
+                privilege_withdrawn: false,
+                aa_compromise: false,
+            }
+        ),
+    )]
+    fn test_reason_flags_from_bit_string(input: asn1::BitString, expected: ReasonFlags) {
+        let result: ReasonFlags = input.into();
+        assert_eq!(expected, result);
+    }
+}
