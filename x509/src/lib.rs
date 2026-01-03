@@ -1,6 +1,7 @@
 use asn1::{ASN1Object, BitString, Element, Integer, ObjectIdentifier};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
 use crate::{
@@ -102,6 +103,231 @@ impl Certificate {
                 .map(|ext| ext.oid().clone())
                 .collect()
         })
+    }
+}
+
+impl fmt::Display for Certificate {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Certificate:")?;
+        writeln!(f, "    Data:")?;
+
+        // Version
+        let version_num = match self.tbs_certificate.version {
+            Version::V1 => 1,
+            Version::V2 => 2,
+            Version::V3 => 3,
+        };
+        writeln!(
+            f,
+            "        Version: {} (0x{})",
+            version_num,
+            version_num - 1
+        )?;
+
+        // Serial Number
+        let serial_bytes = self
+            .tbs_certificate
+            .serial_number
+            .inner
+            .as_bigint()
+            .to_signed_bytes_be();
+        let serial_hex: Vec<String> = serial_bytes.iter().map(|b| format!("{:02x}", b)).collect();
+        writeln!(f, "        Serial Number: {}", serial_hex.join(":"))?;
+
+        // Signature Algorithm
+        let sig_alg = algorithm_oid_to_name(&self.tbs_certificate.signature.algorithm);
+        writeln!(f, "        Signature Algorithm: {}", sig_alg)?;
+
+        // Issuer
+        writeln!(
+            f,
+            "        Issuer: {}",
+            format_name(&self.tbs_certificate.issuer)
+        )?;
+
+        // Validity
+        writeln!(f, "        Validity")?;
+        writeln!(
+            f,
+            "            Not Before: {}",
+            self.tbs_certificate
+                .validity
+                .not_before
+                .format("%b %d %H:%M:%S %Y GMT")
+        )?;
+        writeln!(
+            f,
+            "            Not After : {}",
+            self.tbs_certificate
+                .validity
+                .not_after
+                .format("%b %d %H:%M:%S %Y GMT")
+        )?;
+
+        // Subject
+        writeln!(
+            f,
+            "        Subject: {}",
+            format_name(&self.tbs_certificate.subject)
+        )?;
+
+        // Subject Public Key Info
+        writeln!(f, "        Subject Public Key Info:")?;
+        let pubkey_alg = algorithm_oid_to_name(
+            &self
+                .tbs_certificate
+                .subject_public_key_info
+                .algorithm
+                .algorithm,
+        );
+        writeln!(f, "            Public Key Algorithm: {}", pubkey_alg)?;
+
+        // Public Key (hex dump)
+        let pubkey_bytes = self
+            .tbs_certificate
+            .subject_public_key_info
+            .subject_public_key
+            .as_bytes();
+        writeln!(
+            f,
+            "                Public-Key: ({} bit)",
+            pubkey_bytes.len() * 8
+        )?;
+        for chunk in pubkey_bytes.chunks(15) {
+            let hex_str: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+            writeln!(f, "                {}", hex_str.join(":"))?;
+        }
+
+        // Extensions
+        if let Some(ref _exts) = self.tbs_certificate.extensions {
+            writeln!(f, "        X509v3 extensions:")?;
+
+            // Subject Key Identifier
+            if let Ok(Some(ski)) = self.extension::<extensions::SubjectKeyIdentifier>() {
+                writeln!(f, "            X509v3 Subject Key Identifier:")?;
+                let hex_str: Vec<String> = ski
+                    .key_identifier
+                    .iter()
+                    .map(|b| format!("{:02X}", b))
+                    .collect();
+                writeln!(f, "                {}", hex_str.join(":"))?;
+            }
+
+            // Authority Key Identifier
+            if let Ok(Some(aki)) = self.extension::<extensions::AuthorityKeyIdentifier>() {
+                writeln!(f, "            X509v3 Authority Key Identifier:")?;
+                if let Some(ref key_id) = aki.key_identifier {
+                    let hex_str: Vec<String> =
+                        key_id.iter().map(|b| format!("{:02X}", b)).collect();
+                    writeln!(f, "                keyid:{}", hex_str.join(":"))?;
+                }
+            }
+
+            // Basic Constraints
+            if let Ok(Some(bc)) = self.extension::<extensions::BasicConstraints>() {
+                writeln!(f, "            X509v3 Basic Constraints: critical")?;
+                if bc.ca {
+                    write!(f, "                CA:TRUE")?;
+                    if let Some(pathlen) = bc.path_len_constraint {
+                        writeln!(f, ", pathlen:{}", pathlen)?;
+                    } else {
+                        writeln!(f)?;
+                    }
+                } else {
+                    writeln!(f, "                CA:FALSE")?;
+                }
+            }
+
+            // Key Usage
+            if let Ok(Some(ku)) = self.extension::<extensions::KeyUsage>() {
+                writeln!(f, "            X509v3 Key Usage: critical")?;
+                let mut usages = Vec::new();
+                if ku.digital_signature {
+                    usages.push("Digital Signature");
+                }
+                if ku.content_commitment {
+                    usages.push("Non Repudiation");
+                }
+                if ku.key_encipherment {
+                    usages.push("Key Encipherment");
+                }
+                if ku.data_encipherment {
+                    usages.push("Data Encipherment");
+                }
+                if ku.key_agreement {
+                    usages.push("Key Agreement");
+                }
+                if ku.key_cert_sign {
+                    usages.push("Certificate Sign");
+                }
+                if ku.crl_sign {
+                    usages.push("CRL Sign");
+                }
+                if ku.encipher_only {
+                    usages.push("Encipher Only");
+                }
+                if ku.decipher_only {
+                    usages.push("Decipher Only");
+                }
+                writeln!(f, "                {}", usages.join(", "))?;
+            }
+
+            // Extended Key Usage
+            if let Ok(Some(eku)) = self.extension::<extensions::ExtendedKeyUsage>() {
+                writeln!(f, "            X509v3 Extended Key Usage:")?;
+                let purposes: Vec<String> = eku
+                    .purposes
+                    .iter()
+                    .map(|oid| match oid.to_string().as_str() {
+                        "1.3.6.1.5.5.7.3.1" => "TLS Web Server Authentication".to_string(),
+                        "1.3.6.1.5.5.7.3.2" => "TLS Web Client Authentication".to_string(),
+                        "1.3.6.1.5.5.7.3.3" => "Code Signing".to_string(),
+                        "1.3.6.1.5.5.7.3.4" => "E-mail Protection".to_string(),
+                        "1.3.6.1.5.5.7.3.8" => "Time Stamping".to_string(),
+                        "1.3.6.1.5.5.7.3.9" => "OCSP Signing".to_string(),
+                        _ => oid.to_string(),
+                    })
+                    .collect();
+                writeln!(f, "                {}", purposes.join(", "))?;
+            }
+
+            // Subject Alternative Name
+            if let Ok(Some(san)) = self.extension::<extensions::SubjectAltName>() {
+                writeln!(f, "            X509v3 Subject Alternative Name:")?;
+                for name in &san.names {
+                    match name {
+                        extensions::GeneralName::DnsName(dns) => {
+                            writeln!(f, "                DNS:{}", dns)?;
+                        }
+                        extensions::GeneralName::IpAddress(ip) => {
+                            writeln!(f, "                IP Address:{:?}", ip)?;
+                        }
+                        extensions::GeneralName::Rfc822Name(email) => {
+                            writeln!(f, "                email:{}", email)?;
+                        }
+                        extensions::GeneralName::Uri(uri) => {
+                            writeln!(f, "                URI:{}", uri)?;
+                        }
+                        _ => {
+                            writeln!(f, "                Other")?;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Signature Algorithm (outer)
+        let sig_alg_outer = algorithm_oid_to_name(&self.signature_algorithm.algorithm);
+        writeln!(f, "    Signature Algorithm: {}", sig_alg_outer)?;
+
+        // Signature Value
+        let sig_bytes = self.signature_value.as_bytes();
+        for chunk in sig_bytes.chunks(18) {
+            let hex_str: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+            writeln!(f, "         {}", hex_str.join(":"))?;
+        }
+
+        Ok(())
     }
 }
 
@@ -394,37 +620,6 @@ impl<'de> Deserialize<'de> for AlgorithmParameters {
     }
 }
 
-fn algorithm_oid_to_name(oid: &ObjectIdentifier) -> Option<&'static str> {
-    let oid_str = oid.to_string();
-    match oid_str.as_str() {
-        // RSA encryption
-        "1.2.840.113549.1.1.1" => Some("rsaEncryption"),
-        // RSA with SHA-1
-        "1.2.840.113549.1.1.5" => Some("sha1WithRSAEncryption"),
-        // RSA with SHA-256
-        "1.2.840.113549.1.1.11" => Some("sha256WithRSAEncryption"),
-        // RSA with SHA-384
-        "1.2.840.113549.1.1.12" => Some("sha384WithRSAEncryption"),
-        // RSA with SHA-512
-        "1.2.840.113549.1.1.13" => Some("sha512WithRSAEncryption"),
-        // EC public key
-        "1.2.840.10045.2.1" => Some("ecPublicKey"),
-        // ECDSA with SHA-256
-        "1.2.840.10045.4.3.2" => Some("ecdsa-with-SHA256"),
-        // ECDSA with SHA-384
-        "1.2.840.10045.4.3.3" => Some("ecdsa-with-SHA384"),
-        // ECDSA with SHA-512
-        "1.2.840.10045.4.3.4" => Some("ecdsa-with-SHA512"),
-        // DSA
-        "1.2.840.10040.4.1" => Some("dsaEncryption"),
-        // DSA with SHA-1
-        "1.2.840.10040.4.3" => Some("dsaWithSHA1"),
-        // DSA with SHA-256
-        "2.16.840.1.101.3.4.3.2" => Some("dsa-with-sha256"),
-        _ => None,
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub(crate) struct AlgorithmIdentifier {
     algorithm: ObjectIdentifier, // OBJECT IDENTIFIER
@@ -439,14 +634,9 @@ impl Serialize for AlgorithmIdentifier {
     {
         use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("AlgorithmIdentifier", 2)?;
-        // Use algorithm name if available, otherwise use OID string
-        match algorithm_oid_to_name(&self.algorithm) {
-            Some(name) => state.serialize_field("algorithm", name)?,
-            None => {
-                let oid_str = self.algorithm.to_string();
-                state.serialize_field("algorithm", &oid_str)?;
-            }
-        }
+        // Use algorithm name instead of OID string
+        let alg_name = algorithm_oid_to_name(&self.algorithm);
+        state.serialize_field("algorithm", &alg_name)?;
         if let Some(ref params) = self.parameters {
             state.serialize_field("parameters", params)?;
         }
@@ -704,7 +894,7 @@ impl Serialize for CertificateSerialNumber {
         S: serde::Serializer,
     {
         // Convert to hex string with colon separators (like OpenSSL format)
-        let bytes = self.inner.as_bigint().to_signed_bytes_be();
+        let bytes = (&self.inner).as_bigint().to_signed_bytes_be();
         let hex_string = bytes
             .iter()
             .map(|b| format!("{:02x}", b))
@@ -717,9 +907,7 @@ impl Serialize for CertificateSerialNumber {
 impl CertificateSerialNumber {
     /// Create from raw bytes (IMPLICIT INTEGER encoding)
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
-        Self {
-            inner: Integer::from(bytes),
-        }
+        Integer::from(bytes).into()
     }
 }
 
@@ -834,6 +1022,60 @@ impl TryFrom<&TBSCertificate> for SerializableTBSCertificate {
             extensions,
         })
     }
+}
+
+// Helper functions for Display implementation
+
+fn algorithm_oid_to_name(oid: &ObjectIdentifier) -> String {
+    match oid.to_string().as_str() {
+        "1.2.840.113549.1.1.1" => "rsaEncryption".to_string(),
+        "1.2.840.113549.1.1.5" => "sha1WithRSAEncryption".to_string(),
+        "1.2.840.113549.1.1.11" => "sha256WithRSAEncryption".to_string(),
+        "1.2.840.113549.1.1.12" => "sha384WithRSAEncryption".to_string(),
+        "1.2.840.113549.1.1.13" => "sha512WithRSAEncryption".to_string(),
+        "1.2.840.10045.2.1" => "id-ecPublicKey".to_string(),
+        "1.2.840.10045.4.3.2" => "ecdsa-with-SHA256".to_string(),
+        "1.2.840.10045.4.3.3" => "ecdsa-with-SHA384".to_string(),
+        "1.2.840.10045.4.3.4" => "ecdsa-with-SHA512".to_string(),
+        _ => oid.to_string(),
+    }
+}
+
+fn extension_oid_to_name(oid: &ObjectIdentifier) -> String {
+    match oid.to_string().as_str() {
+        "2.5.29.14" => "X509v3 Subject Key Identifier".to_string(),
+        "2.5.29.15" => "X509v3 Key Usage".to_string(),
+        "2.5.29.17" => "X509v3 Subject Alternative Name".to_string(),
+        "2.5.29.19" => "X509v3 Basic Constraints".to_string(),
+        "2.5.29.35" => "X509v3 Authority Key Identifier".to_string(),
+        "2.5.29.37" => "X509v3 Extended Key Usage".to_string(),
+        _ => format!("Unknown Extension ({})", oid),
+    }
+}
+
+fn format_name(name: &Name) -> String {
+    name.rdn_sequence
+        .iter()
+        .map(|rdn| {
+            rdn.attribute
+                .iter()
+                .map(|attr| {
+                    let key = match attr.attribute_type.to_string().as_str() {
+                        "2.5.4.3" => "CN",
+                        "2.5.4.6" => "C",
+                        "2.5.4.7" => "L",
+                        "2.5.4.8" => "ST",
+                        "2.5.4.10" => "O",
+                        "2.5.4.11" => "OU",
+                        _ => &attr.attribute_type.to_string(),
+                    };
+                    format!("{}={}", key, attr.attribute_value)
+                })
+                .collect::<Vec<_>>()
+                .join("+")
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 #[cfg(test)]
@@ -1545,8 +1787,14 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         let asn1_obj: ASN1Object = der.decode().unwrap();
 
         let cert: Certificate = asn1_obj.decode().unwrap();
+
+        // Print Display output (OpenSSL-like format)
+        println!("\n=== V3 End Entity Certificate (Display) ===");
+        println!("{}", cert);
+
+        // Print JSON output
         let json_output = serde_json::to_string_pretty(&cert).unwrap();
-        println!("=== V3 End Entity Certificate ===");
+        println!("\n=== V3 End Entity Certificate (JSON) ===");
         println!("{}", json_output);
 
         // V3 End Entity certificate assertions

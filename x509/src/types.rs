@@ -152,7 +152,7 @@ impl Decoder<Element, RelativeDistinguishedName> for Element {
 }
 
 /// Map common X.509 attribute OIDs to human-readable names
-fn oid_to_name(oid: &ObjectIdentifier) -> Option<&'static str> {
+pub(crate) fn oid_to_name(oid: &ObjectIdentifier) -> Option<&'static str> {
     match oid.to_string().as_str() {
         "2.5.4.3" => Some("CN"),  // commonName
         "2.5.4.6" => Some("C"),   // countryName
