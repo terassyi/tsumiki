@@ -25,6 +25,7 @@ mod subject_alt_name;
 mod subject_key_identifier;
 
 // Re-export public types
+use asn1::AsOid;
 pub use authority_info_access::{AccessDescription, AuthorityInfoAccess};
 pub use authority_key_identifier::AuthorityKeyIdentifier;
 pub use basic_constraints::BasicConstraints;
@@ -76,6 +77,22 @@ pub struct Extensions {
 impl Extensions {
     pub fn extensions(&self) -> &Vec<Extension> {
         &self.extensions
+    }
+
+    /// Get a specific extension by OID
+    pub fn get_by_oid<O: AsOid>(&self, oid: O) -> Result<Option<&Extension>, Error> {
+        let oid_obj = oid.as_oid().map_err(Error::InvalidASN1)?;
+        Ok(self.extensions.iter().find(|ext| &ext.id == &oid_obj))
+    }
+
+    /// Get and parse a specific extension by type
+    pub fn extension<T: StandardExtension>(&self) -> Result<Option<T>, Error> {
+        let oid = T::oid()?;
+        if let Some(ext) = self.get_by_oid(&oid)? {
+            Ok(Some(ext.parse::<T>()?))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -145,7 +162,7 @@ pub struct Extension {
 
 impl Extension {
     /// Get the extension ID (OID)
-    pub fn id(&self) -> &ObjectIdentifier {
+    pub fn oid(&self) -> &ObjectIdentifier {
         &self.id
     }
 
@@ -247,6 +264,118 @@ pub trait StandardExtension: Sized {
     }
     /// Parse the extension value (DER-encoded ASN.1 in OctetString)
     fn parse(value: &OctetString) -> Result<Self, Error>;
+}
+
+/// RawExtensions holds all parsed extension types for JSON serialization
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct RawExtensions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) basic_constraints: Option<BasicConstraints>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) key_usage: Option<KeyUsage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) extended_key_usage: Option<ExtendedKeyUsage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) subject_key_identifier: Option<SubjectKeyIdentifier>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) authority_key_identifier: Option<AuthorityKeyIdentifier>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) subject_alt_name: Option<SubjectAltName>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) issuer_alt_name: Option<IssuerAltName>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) crl_distribution_points: Option<CRLDistributionPoints>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) certificate_policies: Option<CertificatePolicies>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) policy_mappings: Option<PolicyMappings>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) authority_info_access: Option<AuthorityInfoAccess>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) name_constraints: Option<NameConstraints>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) policy_constraints: Option<PolicyConstraints>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) inhibit_any_policy: Option<InhibitAnyPolicy>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) freshest_crl: Option<FreshestCRL>,
+}
+
+impl RawExtensions {
+    pub(crate) fn from_extensions(extensions: &Extensions) -> Result<Self, Error> {
+        let mut raw = RawExtensions {
+            basic_constraints: None,
+            key_usage: None,
+            extended_key_usage: None,
+            subject_key_identifier: None,
+            authority_key_identifier: None,
+            subject_alt_name: None,
+            issuer_alt_name: None,
+            crl_distribution_points: None,
+            certificate_policies: None,
+            policy_mappings: None,
+            authority_info_access: None,
+            name_constraints: None,
+            policy_constraints: None,
+            inhibit_any_policy: None,
+            freshest_crl: None,
+        };
+
+        for ext in extensions.extensions() {
+            match ext.oid().to_string().as_str() {
+                BasicConstraints::OID => {
+                    raw.basic_constraints = Some(ext.parse::<BasicConstraints>()?);
+                }
+                KeyUsage::OID => {
+                    raw.key_usage = Some(ext.parse::<KeyUsage>()?);
+                }
+                ExtendedKeyUsage::OID => {
+                    raw.extended_key_usage = Some(ext.parse::<ExtendedKeyUsage>()?);
+                }
+                SubjectKeyIdentifier::OID => {
+                    raw.subject_key_identifier = Some(ext.parse::<SubjectKeyIdentifier>()?);
+                }
+                AuthorityKeyIdentifier::OID => {
+                    raw.authority_key_identifier = Some(ext.parse::<AuthorityKeyIdentifier>()?);
+                }
+                SubjectAltName::OID => {
+                    raw.subject_alt_name = Some(ext.parse::<SubjectAltName>()?);
+                }
+                IssuerAltName::OID => {
+                    raw.issuer_alt_name = Some(ext.parse::<IssuerAltName>()?);
+                }
+                CRLDistributionPoints::OID => {
+                    raw.crl_distribution_points = Some(ext.parse::<CRLDistributionPoints>()?);
+                }
+                CertificatePolicies::OID => {
+                    raw.certificate_policies = Some(ext.parse::<CertificatePolicies>()?);
+                }
+                PolicyMappings::OID => {
+                    raw.policy_mappings = Some(ext.parse::<PolicyMappings>()?);
+                }
+                AuthorityInfoAccess::OID => {
+                    raw.authority_info_access = Some(ext.parse::<AuthorityInfoAccess>()?);
+                }
+                NameConstraints::OID => {
+                    raw.name_constraints = Some(ext.parse::<NameConstraints>()?);
+                }
+                PolicyConstraints::OID => {
+                    raw.policy_constraints = Some(ext.parse::<PolicyConstraints>()?);
+                }
+                InhibitAnyPolicy::OID => {
+                    raw.inhibit_any_policy = Some(ext.parse::<InhibitAnyPolicy>()?);
+                }
+                FreshestCRL::OID => {
+                    raw.freshest_crl = Some(ext.parse::<FreshestCRL>()?);
+                }
+                _ => {
+                    // Unknown extension, skip
+                }
+            }
+        }
+
+        Ok(raw)
+    }
 }
 
 #[cfg(test)]

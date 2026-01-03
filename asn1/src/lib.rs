@@ -533,6 +533,37 @@ impl PartialEq<ObjectIdentifier> for &str {
     }
 }
 
+/// Trait for types that can be converted to an ObjectIdentifier
+pub trait AsOid {
+    fn as_oid(&self) -> Result<ObjectIdentifier, Error>;
+}
+
+impl AsOid for ObjectIdentifier {
+    fn as_oid(&self) -> Result<ObjectIdentifier, Error> {
+        Ok(self.clone())
+    }
+}
+
+impl AsOid for &ObjectIdentifier {
+    fn as_oid(&self) -> Result<ObjectIdentifier, Error> {
+        Ok((*self).clone())
+    }
+}
+
+impl AsOid for &str {
+    fn as_oid(&self) -> Result<ObjectIdentifier, Error> {
+        ObjectIdentifier::from_str(self).map_err(|e| {
+            Error::InvalidObjectIdentifier(format!("invalid OID string '{}': {}", self, e))
+        })
+    }
+}
+
+impl AsOid for String {
+    fn as_oid(&self) -> Result<ObjectIdentifier, Error> {
+        self.as_str().as_oid()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BitString {
     unused: u8,

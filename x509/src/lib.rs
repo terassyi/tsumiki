@@ -3,106 +3,17 @@ use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
-use crate::{error::Error, extensions::Extensions};
+use crate::{
+    error::Error,
+    extensions::{Extensions, RawExtensions},
+};
 
 pub(crate) mod error;
 pub mod extensions;
+mod types;
 
-/*
-RFC 5280 Section 4.1.2.4
-DirectoryString ::= CHOICE {
-  teletexString     TeletexString (SIZE (1..MAX)),
-  printableString   PrintableString (SIZE (1..MAX)),
-  universalString   UniversalString (SIZE (1..MAX)),
-  utf8String        UTF8String (SIZE (1..MAX)),
-  bmpString         BMPString (SIZE (1..MAX))
-}
-*/
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DirectoryString {
-    inner: String,
-}
-
-impl Serialize for DirectoryString {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.inner.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for DirectoryString {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let inner = String::deserialize(deserializer)?;
-        Ok(DirectoryString { inner })
-    }
-}
-
-impl DirectoryString {
-    pub fn new(value: String) -> Self {
-        Self { inner: value }
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.inner
-    }
-
-    pub fn into_string(self) -> String {
-        self.inner
-    }
-}
-
-impl From<String> for DirectoryString {
-    fn from(value: String) -> Self {
-        Self { inner: value }
-    }
-}
-
-impl From<&str> for DirectoryString {
-    fn from(value: &str) -> Self {
-        Self {
-            inner: value.to_string(),
-        }
-    }
-}
-
-impl std::fmt::Display for DirectoryString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.inner)
-    }
-}
-
-impl DecodableFrom<Element> for DirectoryString {}
-
-impl Decoder<Element, DirectoryString> for Element {
-    type Error = Error;
-
-    fn decode(&self) -> Result<DirectoryString, Self::Error> {
-        let value = match self {
-            Element::UTF8String(s) => s.clone(),
-            Element::PrintableString(s) => s.clone(),
-            Element::IA5String(s) => s.clone(),
-            Element::OctetString(os) => {
-                // May come as OctetString due to IMPLICIT tagging
-                String::from_utf8(os.as_bytes().to_vec()).map_err(|e| {
-                    Error::InvalidAttributeValue(format!("invalid DirectoryString: {}", e))
-                })?
-            }
-            Element::Integer(int) => int.to_string(),
-            _ => {
-                return Err(Error::InvalidAttributeValue(format!(
-                    "DirectoryString must be a string type, got {:?}",
-                    self
-                )));
-            }
-        };
-        Ok(DirectoryString { inner: value })
-    }
-}
+// Re-export public types
+pub use types::{DirectoryString, Name};
 
 /*
 https://datatracker.ietf.org/doc/html/rfc5280#section-4.1
@@ -114,11 +25,84 @@ Certificate  ::=  SEQUENCE  {
 }
  */
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub(crate) struct Certificate {
     tbs_certificate: TBSCertificate,
     signature_algorithm: AlgorithmIdentifier,
     signature_value: BitString, // BIT STRING
+}
+
+impl Serialize for Certificate {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        let mut state = serializer.serialize_struct("Certificate", 3)?;
+
+        // Serialize TBSCertificate with RawExtensions
+        let tbs = SerializableTBSCertificate::try_from(&self.tbs_certificate)
+            .map_err(serde::ser::Error::custom)?;
+        state.serialize_field("tbs_certificate", &tbs)?;
+
+        state.serialize_field("signature_algorithm", &self.signature_algorithm)?;
+        state.serialize_field("signature_value", &self.signature_value)?;
+        state.end()
+    }
+}
+
+impl Certificate {
+    /// Get a specific extension by type
+    ///
+    /// # Example
+    /// ```ignore
+    /// let basic_constraints = cert.extension::<BasicConstraints>()?;
+    /// ```
+    pub fn extension<T: extensions::StandardExtension>(&self) -> Result<Option<T>, Error> {
+        if let Some(ref exts) = self.tbs_certificate.extensions {
+            exts.extension::<T>()
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Get the TBS (To Be Signed) certificate
+    pub fn tbs_certificate(&self) -> &TBSCertificate {
+        &self.tbs_certificate
+    }
+
+    /// Get the signature algorithm
+    pub fn signature_algorithm(&self) -> &AlgorithmIdentifier {
+        &self.signature_algorithm
+    }
+
+    /// Get the signature value
+    pub fn signature_value(&self) -> &BitString {
+        &self.signature_value
+    }
+
+    /// Get a list of OIDs for all extensions present in the certificate
+    ///
+    /// Returns None if the certificate has no extensions (e.g., V1 certificates).
+    /// This is useful to check which extensions are present without parsing them.
+    ///
+    /// # Example
+    /// ```ignore
+    /// if let Some(oids) = cert.extension_oids() {
+    ///     for oid in oids {
+    ///         println!("Extension present: {}", oid);
+    ///     }
+    /// }
+    /// ```
+    pub fn extension_oids(&self) -> Option<Vec<ObjectIdentifier>> {
+        self.tbs_certificate.extensions.as_ref().map(|exts| {
+            exts.extensions()
+                .iter()
+                .map(|ext| ext.oid().clone())
+                .collect()
+        })
+    }
 }
 
 impl DecodableFrom<ASN1Object> for Certificate {}
@@ -212,6 +196,13 @@ pub(crate) struct TBSCertificate {
     issuer_unique_id: Option<UniqueIdentifier>,
     subject_unique_id: Option<UniqueIdentifier>,
     extensions: Option<Extensions>,
+}
+
+impl TBSCertificate {
+    /// Get the extensions
+    pub fn extensions(&self) -> Option<&Extensions> {
+        self.extensions.as_ref()
+    }
 }
 
 impl DecodableFrom<Element> for TBSCertificate {}
@@ -684,100 +675,6 @@ impl Decoder<Element, CertificateSerialNumber> for Element {
     }
 }
 
-// https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.4
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Name {
-    rdn_sequence: Vec<RelativeDistinguishedName>,
-}
-
-impl DecodableFrom<Element> for Name {}
-
-impl Decoder<Element, Name> for Element {
-    type Error = Error;
-
-    fn decode(&self) -> Result<Name, Self::Error> {
-        match self {
-            Element::Sequence(elements) => {
-                let rdn_sequence = elements
-                    .iter()
-                    .map(|elem| elem.decode())
-                    .collect::<Result<Vec<RelativeDistinguishedName>, _>>()?;
-                Ok(Name { rdn_sequence })
-            }
-            _ => Err(Error::InvalidName("expected Sequence for Name".to_string())),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct RelativeDistinguishedName {
-    attribute: Vec<AttributeTypeAndValue>,
-}
-
-impl DecodableFrom<Element> for RelativeDistinguishedName {}
-
-impl Decoder<Element, RelativeDistinguishedName> for Element {
-    type Error = Error;
-
-    fn decode(&self) -> Result<RelativeDistinguishedName, Self::Error> {
-        match self {
-            Element::Set(elements) => {
-                let attribute = elements
-                    .iter()
-                    .map(|elem| elem.decode())
-                    .collect::<Result<Vec<AttributeTypeAndValue>, _>>()?;
-                Ok(RelativeDistinguishedName { attribute })
-            }
-            _ => Err(Error::InvalidRelativeDistinguishedName(
-                "expected Set for RelativeDistinguishedName".to_string(),
-            )),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct AttributeTypeAndValue {
-    attribute_type: ObjectIdentifier, // OBJECT IDENTIFIER
-    attribute_value: String,          // ANY DEFINED BY type_
-}
-
-impl DecodableFrom<Element> for AttributeTypeAndValue {}
-
-impl Decoder<Element, AttributeTypeAndValue> for Element {
-    type Error = Error;
-
-    fn decode(&self) -> Result<AttributeTypeAndValue, Self::Error> {
-        if let Element::Sequence(seq) = self {
-            if seq.len() != 2 {
-                return Err(Error::InvalidAttributeTypeAndValue(
-                    "expected 2 elements in sequence".to_string(),
-                ));
-            }
-            let attribute_type = if let Element::ObjectIdentifier(oid) = &seq[0] {
-                oid.clone()
-            } else {
-                return Err(Error::InvalidAttributeType(
-                    "expected ObjectIdentifier".to_string(),
-                ));
-            };
-
-            // attribute_value can be various types depending on the attribute_type
-            // Most X.509 attributes are strings (DirectoryString)
-            let dir_string: DirectoryString = seq[1].decode()?;
-            let attribute_value = dir_string.into_string();
-
-            Ok(AttributeTypeAndValue {
-                attribute_type,
-                attribute_value,
-            })
-        } else {
-            Err(Error::InvalidAttributeTypeAndValue(
-                "expected sequence".to_string(),
-            ))
-        }
-    }
-}
-
 // https://datatracker.ietf.org/doc/html/rfc5280#sectioで-4.1.2.5
 /*
 Validity ::= SEQUENCE {
@@ -826,6 +723,50 @@ impl Decoder<Element, Validity> for Element {
     }
 }
 
+// Serialization helper for TBSCertificate with parsed extensions
+
+#[derive(Debug, Clone, Serialize)]
+struct SerializableTBSCertificate {
+    version: Version,
+    serial_number: CertificateSerialNumber,
+    signature: AlgorithmIdentifier,
+    issuer: Name,
+    validity: Validity,
+    subject: Name,
+    subject_public_key_info: SubjectPublicKeyInfo,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    issuer_unique_id: Option<UniqueIdentifier>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    subject_unique_id: Option<UniqueIdentifier>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    extensions: Option<RawExtensions>,
+}
+
+impl TryFrom<&TBSCertificate> for SerializableTBSCertificate {
+    type Error = Error;
+
+    fn try_from(tbs: &TBSCertificate) -> Result<Self, Self::Error> {
+        let extensions = if let Some(ref exts) = tbs.extensions {
+            Some(RawExtensions::from_extensions(exts)?)
+        } else {
+            None
+        };
+
+        Ok(SerializableTBSCertificate {
+            version: tbs.version,
+            serial_number: tbs.serial_number.clone(),
+            signature: tbs.signature.clone(),
+            issuer: tbs.issuer.clone(),
+            validity: tbs.validity.clone(),
+            subject: tbs.subject.clone(),
+            subject_public_key_info: tbs.subject_public_key_info.clone(),
+            issuer_unique_id: tbs.issuer_unique_id.clone(),
+            subject_unique_id: tbs.subject_unique_id.clone(),
+            extensions,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -833,52 +774,6 @@ mod tests {
     use chrono::NaiveDateTime;
     use rstest::rstest;
     use std::str::FromStr;
-
-    // DirectoryString tests
-    #[rstest(
-        input,
-        expected_str,
-        case(
-            Element::UTF8String("example.com".to_string()),
-            "example.com"
-        ),
-        case(
-            Element::PrintableString("CN=Test User".to_string()),
-            "CN=Test User"
-        ),
-        case(
-            Element::IA5String("test@example.com".to_string()),
-            "test@example.com"
-        ),
-        case(
-            Element::OctetString(asn1::OctetString::from("UTF8 bytes".as_bytes())),
-            "UTF8 bytes"
-        ),
-        case(
-            Element::Integer(Integer::from(vec![0x7B])), // 123
-            "123"
-        )
-    )]
-    fn test_directory_string_decode_success(input: Element, expected_str: &str) {
-        let result: DirectoryString = input.decode().unwrap();
-        assert_eq!(result.as_str(), expected_str);
-        assert_eq!(result.to_string(), expected_str);
-    }
-
-    #[rstest(
-        input,
-        case(Element::Null),
-        case(Element::Boolean(true)),
-        case(Element::BitString(asn1::BitString::new(0, vec![0xFF]))),
-    )]
-    fn test_directory_string_decode_failure(input: Element) {
-        let result: Result<DirectoryString, Error> = input.decode();
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::InvalidAttributeValue(_)
-        ));
-    }
 
     // AlgorithmIdentifier tests
     #[rstest(
@@ -1217,309 +1112,6 @@ mod tests {
         let deserialized: Validity = serde_json::from_str(&json).unwrap();
 
         assert_eq!(validity, deserialized);
-    }
-
-    // AttributeTypeAndValue tests
-    #[rstest(
-        attribute_type_oid,
-        attribute_value_element,
-        expected_value_str,
-        // Test case: UTF8String value
-        case(
-            ObjectIdentifier::from_str("2.5.4.3").unwrap(), // CN (Common Name)
-            Element::UTF8String("example.com".to_string()),
-            "example.com"
-        ),
-        // Test case: PrintableString value
-        case(
-            ObjectIdentifier::from_str("2.5.4.6").unwrap(), // C (Country)
-            Element::PrintableString("US".to_string()),
-            "US"
-        ),
-        // Test case: IA5String value
-        case(
-            ObjectIdentifier::from_str("1.2.840.113549.1.9.1").unwrap(), // emailAddress
-            Element::IA5String("user@example.com".to_string()),
-            "user@example.com"
-        )
-    )]
-    fn test_attribute_type_and_value_decode_success(
-        attribute_type_oid: ObjectIdentifier,
-        attribute_value_element: Element,
-        expected_value_str: &str,
-    ) {
-        let sequence = Element::Sequence(vec![
-            Element::ObjectIdentifier(attribute_type_oid.clone()),
-            attribute_value_element,
-        ]);
-
-        let attr: AttributeTypeAndValue = sequence.decode().unwrap();
-
-        assert_eq!(attr.attribute_type, attribute_type_oid);
-        assert_eq!(attr.attribute_value, expected_value_str);
-    }
-
-    #[rstest(
-        input,
-        expected_error_type,
-        // Test case: Not a sequence
-        case(
-            Element::Integer(Integer::from(vec![0x01])),
-            "InvalidAttributeTypeAndValue"
-        ),
-        // Test case: Empty sequence
-        case(
-            Element::Sequence(vec![]),
-            "InvalidAttributeTypeAndValue"
-        ),
-        // Test case: Only one element
-        case(
-            Element::Sequence(vec![
-                Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.4.3").unwrap())
-            ]),
-            "InvalidAttributeTypeAndValue"
-        ),
-        // Test case: Invalid attribute type (not an OID)
-        case(
-            Element::Sequence(vec![
-                Element::Integer(Integer::from(vec![0x01])),
-                Element::UTF8String("value".to_string())
-            ]),
-            "InvalidAttributeType"
-        )
-    )]
-    fn test_attribute_type_and_value_decode_failure(input: Element, expected_error_type: &str) {
-        let result: Result<AttributeTypeAndValue, Error> = input.decode();
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        let err_str = format!("{:?}", err);
-        assert!(
-            err_str.contains(expected_error_type),
-            "Expected error type '{}', but got '{}'",
-            expected_error_type,
-            err_str
-        );
-    }
-
-    // RelativeDistinguishedName tests
-    #[rstest(
-        input,
-        expected,
-        // Test case: Single attribute
-        case(
-            Element::Set(vec![
-                Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.4.3").unwrap()),
-                    Element::UTF8String("example.com".to_string()),
-                ])
-            ]),
-            RelativeDistinguishedName {
-                attribute: vec![
-                    AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
-                        attribute_value: "example.com".to_string(),
-                    }
-                ]
-            }
-        ),
-        // Test case: Multiple attributes
-        case(
-            Element::Set(vec![
-                Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.4.3").unwrap()),
-                    Element::UTF8String("example.com".to_string()),
-                ]),
-                Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.4.6").unwrap()),
-                    Element::PrintableString("US".to_string()),
-                ])
-            ]),
-            RelativeDistinguishedName {
-                attribute: vec![
-                    AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
-                        attribute_value: "example.com".to_string(),
-                    },
-                    AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
-                        attribute_value: "US".to_string(),
-                    }
-                ]
-            }
-        ),
-        // Test case: Empty set
-        case(
-            Element::Set(vec![]),
-            RelativeDistinguishedName {
-                attribute: vec![]
-            }
-        )
-    )]
-    fn test_rdn_decode_success(input: Element, expected: RelativeDistinguishedName) {
-        let rdn: RelativeDistinguishedName = input.decode().unwrap();
-        assert_eq!(rdn, expected);
-    }
-
-    #[rstest(
-        input,
-        expected_error_variant,
-        // Test case: Not a Set (should return RDN error)
-        case(
-            Element::Sequence(vec![]),
-            "InvalidRelativeDistinguishedName"
-        ),
-        // Test case: Invalid attribute (should propagate AttributeTypeAndValue error)
-        case(
-            Element::Set(vec![Element::Integer(Integer::from(vec![0x01]))]),
-            "InvalidAttributeTypeAndValue"
-        ),
-        // Test case: Set with partially invalid attributes
-        case(
-            Element::Set(vec![
-                Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.4.3").unwrap()),
-                    Element::UTF8String("example.com".to_string()),
-                ]),
-                Element::Integer(Integer::from(vec![0x01])) // Invalid
-            ]),
-            "InvalidAttributeTypeAndValue"
-        )
-    )]
-    fn test_rdn_decode_failure(input: Element, expected_error_variant: &str) {
-        let result: Result<RelativeDistinguishedName, Error> = input.decode();
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        let err_str = format!("{:?}", err);
-        assert!(
-            err_str.contains(expected_error_variant),
-            "Expected error '{}', but got '{}'",
-            expected_error_variant,
-            err_str
-        );
-    }
-
-    // Name tests
-    #[rstest(
-        input,
-        expected,
-        // Test case: Single RDN
-        case(
-            Element::Sequence(vec![
-                Element::Set(vec![
-                    Element::Sequence(vec![
-                        Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.4.3").unwrap()),
-                        Element::UTF8String("example.com".to_string()),
-                    ])
-                ])
-            ]),
-            Name {
-                rdn_sequence: vec![
-                    RelativeDistinguishedName {
-                        attribute: vec![
-                            AttributeTypeAndValue {
-                                attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
-                                attribute_value: "example.com".to_string(),
-                            }
-                        ]
-                    }
-                ]
-            }
-        ),
-        // Test case: Multiple RDNs
-        case(
-            Element::Sequence(vec![
-                Element::Set(vec![
-                    Element::Sequence(vec![
-                        Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.4.3").unwrap()),
-                        Element::UTF8String("example.com".to_string()),
-                    ])
-                ]),
-                Element::Set(vec![
-                    Element::Sequence(vec![
-                        Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.4.6").unwrap()),
-                        Element::PrintableString("US".to_string()),
-                    ])
-                ])
-            ]),
-            Name {
-                rdn_sequence: vec![
-                    RelativeDistinguishedName {
-                        attribute: vec![
-                            AttributeTypeAndValue {
-                                attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
-                                attribute_value: "example.com".to_string(),
-                            }
-                        ]
-                    },
-                    RelativeDistinguishedName {
-                        attribute: vec![
-                            AttributeTypeAndValue {
-                                attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
-                                attribute_value: "US".to_string(),
-                            }
-                        ]
-                    }
-                ]
-            }
-        ),
-        // Test case: Empty sequence
-        case(
-            Element::Sequence(vec![]),
-            Name {
-                rdn_sequence: vec![]
-            }
-        )
-    )]
-    fn test_name_decode_success(input: Element, expected: Name) {
-        let name: Name = input.decode().unwrap();
-        assert_eq!(name, expected);
-    }
-
-    #[rstest(
-        input,
-        expected_error_variant,
-        // Test case: Not a Sequence (should return Name error)
-        case(
-            Element::Integer(Integer::from(vec![0x01])),
-            "InvalidName"
-        ),
-        // Test case: Invalid RDN (should propagate RDN error)
-        case(
-            Element::Sequence(vec![Element::Integer(Integer::from(vec![0x01]))]),
-            "InvalidRelativeDistinguishedName"
-        ),
-        // Test case: Invalid AttributeTypeAndValue (should propagate through the chain)
-        case(
-            Element::Sequence(vec![
-                Element::Set(vec![Element::Integer(Integer::from(vec![0x01]))])
-            ]),
-            "InvalidAttributeTypeAndValue"
-        ),
-        // Test case: Multiple RDNs with one invalid (should fail on first error)
-        case(
-            Element::Sequence(vec![
-                Element::Set(vec![
-                    Element::Sequence(vec![
-                        Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.4.3").unwrap()),
-                        Element::UTF8String("example.com".to_string()),
-                    ])
-                ]),
-                Element::Integer(Integer::from(vec![0x01])) // Invalid RDN
-            ]),
-            "InvalidRelativeDistinguishedName"
-        )
-    )]
-    fn test_name_decode_failure(input: Element, expected_error_variant: &str) {
-        let result: Result<Name, Error> = input.decode();
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        let err_str = format!("{:?}", err);
-        assert!(
-            err_str.contains(expected_error_variant),
-            "Expected error '{}', but got '{}'",
-            expected_error_variant,
-            err_str
-        );
     }
 
     // SubjectPublicKeyInfo tests
