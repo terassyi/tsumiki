@@ -1,5 +1,5 @@
 use asn1::{ASN1Object, Element, OctetString};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
 use crate::CertificateSerialNumber;
@@ -23,7 +23,7 @@ CertificateSerialNumber ::= INTEGER
 /// Typically a SHA-1 hash of the SubjectPublicKeyInfo (20 bytes)
 pub type KeyIdentifier = Vec<u8>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct AuthorityKeyIdentifier {
     /// KeyIdentifier: typically a SHA-1 hash of the CA's public key
     pub key_identifier: Option<KeyIdentifier>,
@@ -31,6 +31,33 @@ pub struct AuthorityKeyIdentifier {
     pub authority_cert_issuer: Option<Vec<GeneralName>>,
     /// CertificateSerialNumber: serial number of the CA certificate
     pub authority_cert_serial_number: Option<CertificateSerialNumber>,
+}
+
+impl Serialize for AuthorityKeyIdentifier {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("AuthorityKeyIdentifier", 3)?;
+        // Serialize key_identifier as hex string
+        if let Some(ref key_id) = self.key_identifier {
+            let hex_string = key_id
+                .iter()
+                .map(|b| format!("{:02x}", b))
+                .collect::<Vec<_>>()
+                .join(":");
+            state.serialize_field("key_identifier", &hex_string)?;
+        } else {
+            state.serialize_field("key_identifier", &self.key_identifier)?;
+        }
+        state.serialize_field("authority_cert_issuer", &self.authority_cert_issuer)?;
+        state.serialize_field(
+            "authority_cert_serial_number",
+            &self.authority_cert_serial_number,
+        )?;
+        state.end()
+    }
 }
 
 impl StandardExtension for AuthorityKeyIdentifier {

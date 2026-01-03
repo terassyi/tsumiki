@@ -357,7 +357,7 @@ impl Serialize for AlgorithmParameters {
         S: serde::Serializer,
     {
         match self {
-            AlgorithmParameters::Null => serializer.serialize_str("NULL"),
+            AlgorithmParameters::Null => serializer.serialize_none(),
             AlgorithmParameters::Elm(elm) => {
                 // TODO: Serialize based on the actual element type
                 let type_name = match elm {
@@ -394,11 +394,64 @@ impl<'de> Deserialize<'de> for AlgorithmParameters {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+fn algorithm_oid_to_name(oid: &ObjectIdentifier) -> Option<&'static str> {
+    let oid_str = oid.to_string();
+    match oid_str.as_str() {
+        // RSA encryption
+        "1.2.840.113549.1.1.1" => Some("rsaEncryption"),
+        // RSA with SHA-1
+        "1.2.840.113549.1.1.5" => Some("sha1WithRSAEncryption"),
+        // RSA with SHA-256
+        "1.2.840.113549.1.1.11" => Some("sha256WithRSAEncryption"),
+        // RSA with SHA-384
+        "1.2.840.113549.1.1.12" => Some("sha384WithRSAEncryption"),
+        // RSA with SHA-512
+        "1.2.840.113549.1.1.13" => Some("sha512WithRSAEncryption"),
+        // EC public key
+        "1.2.840.10045.2.1" => Some("ecPublicKey"),
+        // ECDSA with SHA-256
+        "1.2.840.10045.4.3.2" => Some("ecdsa-with-SHA256"),
+        // ECDSA with SHA-384
+        "1.2.840.10045.4.3.3" => Some("ecdsa-with-SHA384"),
+        // ECDSA with SHA-512
+        "1.2.840.10045.4.3.4" => Some("ecdsa-with-SHA512"),
+        // DSA
+        "1.2.840.10040.4.1" => Some("dsaEncryption"),
+        // DSA with SHA-1
+        "1.2.840.10040.4.3" => Some("dsaWithSHA1"),
+        // DSA with SHA-256
+        "2.16.840.1.101.3.4.3.2" => Some("dsa-with-sha256"),
+        _ => None,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub(crate) struct AlgorithmIdentifier {
     algorithm: ObjectIdentifier, // OBJECT IDENTIFIER
     #[serde(skip_serializing_if = "Option::is_none")]
     parameters: Option<AlgorithmParameters>,
+}
+
+impl Serialize for AlgorithmIdentifier {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("AlgorithmIdentifier", 2)?;
+        // Use algorithm name if available, otherwise use OID string
+        match algorithm_oid_to_name(&self.algorithm) {
+            Some(name) => state.serialize_field("algorithm", name)?,
+            None => {
+                let oid_str = self.algorithm.to_string();
+                state.serialize_field("algorithm", &oid_str)?;
+            }
+        }
+        if let Some(ref params) = self.parameters {
+            state.serialize_field("parameters", params)?;
+        }
+        state.end()
+    }
 }
 
 impl DecodableFrom<Element> for AlgorithmIdentifier {}
@@ -640,9 +693,25 @@ impl Decoder<Element, Version> for Element {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
 pub struct CertificateSerialNumber {
     inner: Integer,
+}
+
+impl Serialize for CertificateSerialNumber {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        // Convert to hex string with colon separators (like OpenSSL format)
+        let bytes = self.inner.as_bigint().to_signed_bytes_be();
+        let hex_string = bytes
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(":");
+        serializer.serialize_str(&hex_string)
+    }
 }
 
 impl CertificateSerialNumber {

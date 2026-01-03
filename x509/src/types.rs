@@ -151,10 +151,52 @@ impl Decoder<Element, RelativeDistinguishedName> for Element {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// Map common X.509 attribute OIDs to human-readable names
+fn oid_to_name(oid: &ObjectIdentifier) -> Option<&'static str> {
+    match oid.to_string().as_str() {
+        "2.5.4.3" => Some("CN"),  // commonName
+        "2.5.4.6" => Some("C"),   // countryName
+        "2.5.4.7" => Some("L"),   // localityName
+        "2.5.4.8" => Some("ST"),  // stateOrProvinceName
+        "2.5.4.10" => Some("O"),  // organizationName
+        "2.5.4.11" => Some("OU"), // organizationalUnitName
+        "2.5.4.5" => Some("serialNumber"),
+        "2.5.4.4" => Some("SN"),  // surname
+        "2.5.4.42" => Some("GN"), // givenName
+        "2.5.4.43" => Some("initials"),
+        "2.5.4.44" => Some("generationQualifier"),
+        "2.5.4.12" => Some("title"),
+        "2.5.4.46" => Some("dnQualifier"),
+        "2.5.4.65" => Some("pseudonym"),
+        "0.9.2342.19200300.100.1.25" => Some("DC"), // domainComponent
+        "1.2.840.113549.1.9.1" => Some("emailAddress"),
+        _ => None,
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub(crate) struct AttributeTypeAndValue {
     pub(crate) attribute_type: ObjectIdentifier, // OBJECT IDENTIFIER
     pub(crate) attribute_value: String,          // ANY DEFINED BY type_
+}
+
+impl Serialize for AttributeTypeAndValue {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("AttributeTypeAndValue", 2)?;
+        
+        // Try to use human-readable name, fall back to OID string
+        let type_name = oid_to_name(&self.attribute_type)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| self.attribute_type.to_string());
+        
+        state.serialize_field("attribute_type", &type_name)?;
+        state.serialize_field("attribute_value", &self.attribute_value)?;
+        state.end()
+    }
 }
 
 impl DecodableFrom<Element> for AttributeTypeAndValue {}

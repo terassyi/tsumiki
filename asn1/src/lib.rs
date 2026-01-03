@@ -579,7 +579,15 @@ impl serde::Serialize for BitString {
             use serde::ser::SerializeStruct;
             let mut state = serializer.serialize_struct("BitString", 2)?;
             state.serialize_field("bit_length", &self.bit_len())?;
-            state.serialize_field("bits", &self.to_string())?;
+            
+            // Convert to hex string with colon separators
+            let hex_string = self.data
+                .iter()
+                .map(|b| format!("{:02x}", b))
+                .collect::<Vec<_>>()
+                .join(":");
+            state.serialize_field("bits", &hex_string)?;
+            
             state.end()
         } else {
             (self.unused, &self.data).serialize(serializer)

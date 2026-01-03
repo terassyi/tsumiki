@@ -1,5 +1,5 @@
 use asn1::{ASN1Object, Element, OctetString};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, Serializer};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
 use crate::{error::Error, extensions::StandardExtension};
@@ -18,10 +18,28 @@ subjectPublicKey (excluding the tag, length, and number of unused bits).
 /// Typically a SHA-1 hash of the SubjectPublicKeyInfo (20 bytes)
 pub type KeyIdentifier = Vec<u8>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct SubjectKeyIdentifier {
     /// KeyIdentifier: typically a SHA-1 hash of the subject's public key (20 bytes)
     pub key_identifier: KeyIdentifier,
+}
+
+impl Serialize for SubjectKeyIdentifier {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+        let mut state = serializer.serialize_struct("SubjectKeyIdentifier", 1)?;
+        let hex_string = self
+            .key_identifier
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(":");
+        state.serialize_field("key_identifier", &hex_string)?;
+        state.end()
+    }
 }
 
 impl DecodableFrom<OctetString> for SubjectKeyIdentifier {}
