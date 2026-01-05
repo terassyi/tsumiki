@@ -1,10 +1,15 @@
-use std::fs;
-use std::io::{self, Read};
+use std::str::FromStr;
 
+use asn1::ASN1Object;
 use clap::Args;
+use der::Der;
+use pem::Pem;
+use tsumiki::decoder::Decoder;
+use x509::Certificate;
 
 use crate::error::Result;
 use crate::format::OutputFormat;
+use crate::utils::read_input;
 
 #[derive(Args)]
 pub struct Config {
@@ -38,47 +43,27 @@ impl Config {
     }
 }
 
-fn read_input(file: Option<&str>) -> Result<Vec<u8>> {
-    match file {
-        Some(path) => {
-            // Read from file
-            Ok(fs::read(path)?)
-        }
-        None => {
-            // Read from stdin
-            let mut buffer = Vec::new();
-            io::stdin().read_to_end(&mut buffer)?;
-            Ok(buffer)
-        }
-    }
-}
-
 pub fn execute(config: Config) -> Result<()> {
-    use asn1::ASN1Object;
-    use der::Der;
-    use pem::Pem;
-    use std::str::FromStr;
-    use tsumiki::decoder::Decoder;
-    use x509::Certificate;
-
     // Read input
     let input_bytes = read_input(config.file.as_deref())?;
 
     // Try to parse as PEM first, fallback to DER
     let cert: Certificate = if let Ok(contents) = String::from_utf8(input_bytes.clone()) {
+        // Text data - try PEM first
         if let Ok(pem) = Pem::from_str(&contents) {
             // PEM format
             let der: Der = pem.decode()?;
             let asn1_obj: ASN1Object = der.decode()?;
             asn1_obj.decode()?
         } else {
-            // Try DER format
+            // Not PEM, maybe UTF-8 encoded DER (unlikely but possible)
+            // Try to parse as DER
             let der: Der = input_bytes.decode()?;
             let asn1_obj: ASN1Object = der.decode()?;
             asn1_obj.decode()?
         }
     } else {
-        // Binary data, treat as DER
+        // Binary data - treat as DER
         let der: Der = input_bytes.decode()?;
         let asn1_obj: ASN1Object = der.decode()?;
         asn1_obj.decode()?

@@ -1,12 +1,15 @@
 use clap::{Parser, Subcommand};
 
 mod cert;
+mod der;
 mod error;
 mod format;
+mod utils;
 
 use error::Result;
 
 use cert::CertCommands;
+use der::DerCommands;
 
 #[derive(Parser)]
 #[command(name = "tsumiki")]
@@ -23,6 +26,11 @@ enum Commands {
         #[command(subcommand)]
         command: CertCommands,
     },
+    /// DER encoding operations
+    Der {
+        #[command(subcommand)]
+        command: DerCommands,
+    },
 }
 
 fn main() -> Result<()> {
@@ -32,6 +40,11 @@ fn main() -> Result<()> {
         Commands::Cert { command } => match command {
             CertCommands::Decode { config } => {
                 cert::decode::execute(config)?;
+            }
+        },
+        Commands::Der { command } => match command {
+            DerCommands::Decode { config } => {
+                der::decode::execute(config)?;
             }
         },
     }
