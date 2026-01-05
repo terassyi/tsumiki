@@ -1,3 +1,5 @@
+use std::fmt;
+
 use asn1::{Element, ObjectIdentifier};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
@@ -106,6 +108,31 @@ pub struct Name {
     pub(crate) rdn_sequence: Vec<RelativeDistinguishedName>,
 }
 
+impl fmt::Display for Name {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let formatted = self
+            .rdn_sequence
+            .iter()
+            .map(|rdn| {
+                rdn.attribute
+                    .iter()
+                    .map(|attr| {
+                        let key = if let Some(name) = oid_to_name(&attr.attribute_type) {
+                            name.to_string()
+                        } else {
+                            attr.attribute_type.to_string()
+                        };
+                        format!("{}={}", key, attr.attribute_value)
+                    })
+                    .collect::<Vec<_>>()
+                    .join("+")
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        write!(f, "{}", formatted)
+    }
+}
+
 impl DecodableFrom<Element> for Name {}
 
 impl Decoder<Element, Name> for Element {
@@ -187,12 +214,10 @@ impl Serialize for AttributeTypeAndValue {
     {
         use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("AttributeTypeAndValue", 2)?;
-        
         // Try to use human-readable name, fall back to OID string
         let type_name = oid_to_name(&self.attribute_type)
             .map(|s| s.to_string())
             .unwrap_or_else(|| self.attribute_type.to_string());
-        
         state.serialize_field("attribute_type", &type_name)?;
         state.serialize_field("attribute_value", &self.attribute_value)?;
         state.end()

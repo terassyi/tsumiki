@@ -9,7 +9,7 @@ use crate::{
     extensions::{Extensions, RawExtensions},
 };
 
-pub(crate) mod error;
+pub mod error;
 pub mod extensions;
 mod types;
 
@@ -27,7 +27,7 @@ Certificate  ::=  SEQUENCE  {
  */
 
 #[derive(Debug, Deserialize)]
-pub(crate) struct Certificate {
+pub struct Certificate {
     tbs_certificate: TBSCertificate,
     signature_algorithm: AlgorithmIdentifier,
     signature_value: BitString, // BIT STRING
@@ -139,11 +139,7 @@ impl fmt::Display for Certificate {
         writeln!(f, "        Signature Algorithm: {}", sig_alg)?;
 
         // Issuer
-        writeln!(
-            f,
-            "        Issuer: {}",
-            format_name(&self.tbs_certificate.issuer)
-        )?;
+        writeln!(f, "        Issuer: {}", self.tbs_certificate.issuer)?;
 
         // Validity
         writeln!(f, "        Validity")?;
@@ -165,11 +161,7 @@ impl fmt::Display for Certificate {
         )?;
 
         // Subject
-        writeln!(
-            f,
-            "        Subject: {}",
-            format_name(&self.tbs_certificate.subject)
-        )?;
+        writeln!(f, "        Subject: {}", self.tbs_certificate.subject)?;
 
         // Subject Public Key Info
         writeln!(f, "        Subject Public Key Info:")?;
@@ -411,7 +403,7 @@ TBSCertificate  ::=  SEQUENCE  {
  */
 
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct TBSCertificate {
+pub struct TBSCertificate {
     version: Version,
     serial_number: CertificateSerialNumber,
     signature: AlgorithmIdentifier,
@@ -428,6 +420,41 @@ impl TBSCertificate {
     /// Get the extensions
     pub fn extensions(&self) -> Option<&Extensions> {
         self.extensions.as_ref()
+    }
+
+    /// Get the certificate version
+    pub fn version(&self) -> &Version {
+        &self.version
+    }
+
+    /// Get the serial number
+    pub fn serial_number(&self) -> &CertificateSerialNumber {
+        &self.serial_number
+    }
+
+    /// Get the signature algorithm
+    pub fn signature(&self) -> &AlgorithmIdentifier {
+        &self.signature
+    }
+
+    /// Get the issuer name
+    pub fn issuer(&self) -> &Name {
+        &self.issuer
+    }
+
+    /// Get the validity period
+    pub fn validity(&self) -> &Validity {
+        &self.validity
+    }
+
+    /// Get the subject name
+    pub fn subject(&self) -> &Name {
+        &self.subject
+    }
+
+    /// Get the subject public key info
+    pub fn subject_public_key_info(&self) -> &SubjectPublicKeyInfo {
+        &self.subject_public_key_info
     }
 }
 
@@ -621,7 +648,7 @@ impl<'de> Deserialize<'de> for AlgorithmParameters {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub(crate) struct AlgorithmIdentifier {
+pub struct AlgorithmIdentifier {
     algorithm: ObjectIdentifier, // OBJECT IDENTIFIER
     #[serde(skip_serializing_if = "Option::is_none")]
     parameters: Option<AlgorithmParameters>,
@@ -832,7 +859,7 @@ Extension  ::=  SEQUENCE  {
 // - If slot 0 is absent, defaults to V1
 // - EXPLICIT tagging means the element is wrapped: [0] contains a full INTEGER
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-pub(crate) enum Version {
+pub enum Version {
     V1 = 0,
     V2 = 1,
     V3 = 2,
@@ -909,6 +936,16 @@ impl CertificateSerialNumber {
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
         Integer::from(bytes).into()
     }
+
+    /// Format as hex string with colon separators (e.g., "00:f7:e9:eb")
+    pub fn format_hex(&self) -> String {
+        let bytes = (&self.inner).as_bigint().to_signed_bytes_be();
+        bytes
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<Vec<_>>()
+            .join(":")
+    }
 }
 
 impl From<Integer> for CertificateSerialNumber {
@@ -941,9 +978,21 @@ Validity ::= SEQUENCE {
 */
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct Validity {
+pub struct Validity {
     not_before: NaiveDateTime,
     not_after: NaiveDateTime,
+}
+
+impl Validity {
+    /// Get the not before date
+    pub fn not_before(&self) -> &NaiveDateTime {
+        &self.not_before
+    }
+
+    /// Get the not after date
+    pub fn not_after(&self) -> &NaiveDateTime {
+        &self.not_after
+    }
 }
 
 impl DecodableFrom<Element> for Validity {}
@@ -1039,43 +1088,6 @@ fn algorithm_oid_to_name(oid: &ObjectIdentifier) -> String {
         "1.2.840.10045.4.3.4" => "ecdsa-with-SHA512".to_string(),
         _ => oid.to_string(),
     }
-}
-
-fn extension_oid_to_name(oid: &ObjectIdentifier) -> String {
-    match oid.to_string().as_str() {
-        "2.5.29.14" => "X509v3 Subject Key Identifier".to_string(),
-        "2.5.29.15" => "X509v3 Key Usage".to_string(),
-        "2.5.29.17" => "X509v3 Subject Alternative Name".to_string(),
-        "2.5.29.19" => "X509v3 Basic Constraints".to_string(),
-        "2.5.29.35" => "X509v3 Authority Key Identifier".to_string(),
-        "2.5.29.37" => "X509v3 Extended Key Usage".to_string(),
-        _ => format!("Unknown Extension ({})", oid),
-    }
-}
-
-fn format_name(name: &Name) -> String {
-    name.rdn_sequence
-        .iter()
-        .map(|rdn| {
-            rdn.attribute
-                .iter()
-                .map(|attr| {
-                    let key = match attr.attribute_type.to_string().as_str() {
-                        "2.5.4.3" => "CN",
-                        "2.5.4.6" => "C",
-                        "2.5.4.7" => "L",
-                        "2.5.4.8" => "ST",
-                        "2.5.4.10" => "O",
-                        "2.5.4.11" => "OU",
-                        _ => &attr.attribute_type.to_string(),
-                    };
-                    format!("{}={}", key, attr.attribute_value)
-                })
-                .collect::<Vec<_>>()
-                .join("+")
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 #[cfg(test)]
