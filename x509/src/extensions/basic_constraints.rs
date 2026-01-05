@@ -36,9 +36,9 @@ impl StandardExtension for BasicConstraints {
             // Decode the Sequence into BasicConstraints
             elements[0].decode()
         } else {
-            return Err(Error::InvalidBasicConstraints(
+            Err(Error::InvalidBasicConstraints(
                 "expected Sequence".to_string(),
-            ));
+            ))
         }
     }
 }

@@ -82,7 +82,7 @@ impl Extensions {
     /// Get a specific extension by OID
     pub fn get_by_oid<O: AsOid>(&self, oid: O) -> Result<Option<&Extension>, Error> {
         let oid_obj = oid.as_oid().map_err(Error::InvalidASN1)?;
-        Ok(self.extensions.iter().find(|ext| &ext.id == &oid_obj))
+        Ok(self.extensions.iter().find(|ext| ext.id == oid_obj))
     }
 
     /// Get and parse a specific extension by type
@@ -179,11 +179,11 @@ impl Extension {
     /// Parse the extension value as a specific standard extension type
     pub fn parse<T: StandardExtension>(&self) -> Result<T, Error> {
         // Verify OID matches
-        if self.id.to_string() != T::OID {
+        if self.id != T::OID {
             return Err(Error::InvalidExtension(format!(
                 "OID mismatch: expected {}, got {}",
                 T::OID,
-                self.id.to_string()
+                self.id
             )));
         }
         T::parse(&self.value)

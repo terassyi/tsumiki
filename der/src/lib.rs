@@ -85,6 +85,7 @@ impl Tag {
         }
     }
 
+    #[allow(dead_code)]
     fn is_context_specific(&self) -> bool {
         match self {
             Tag::Primitive(_, _) => false,
@@ -92,6 +93,7 @@ impl Tag {
         }
     }
 
+    #[allow(dead_code)]
     fn primitive_tag(&self) -> Option<PrimitiveTag> {
         match self {
             Tag::Primitive(primitive, _) => Some(*primitive),
@@ -99,6 +101,7 @@ impl Tag {
         }
     }
 
+    #[allow(dead_code)]
     fn slot_number(&self) -> Option<u8> {
         match self {
             Tag::Primitive(_, _) => None,
@@ -116,7 +119,10 @@ impl From<u8> for Tag {
             // Bit 6 (0x20) indicates constructed (1) or primitive (0)
             let constructed = value & 0b0010_0000 != 0;
             let slot_number = value & 0b0001_1111; // Bits 0-4 are the slot number
-            Tag::ContextSpecific { slot: slot_number, constructed }
+            Tag::ContextSpecific {
+                slot: slot_number,
+                constructed,
+            }
         } else {
             let primitive = PrimitiveTag::from(value & 0b0001_1111);
             Tag::Primitive(primitive, value)

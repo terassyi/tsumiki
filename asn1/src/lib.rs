@@ -523,13 +523,24 @@ impl FromStr for ObjectIdentifier {
 
 impl PartialEq<&str> for ObjectIdentifier {
     fn eq(&self, other: &&str) -> bool {
-        self.to_string() == *other
+        self.inner
+            .iter()
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join(".")
+            == *other
     }
 }
 
 impl PartialEq<ObjectIdentifier> for &str {
     fn eq(&self, other: &ObjectIdentifier) -> bool {
-        *self == other.to_string()
+        *self
+            == other
+                .inner
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>()
+                .join(".")
     }
 }
 
@@ -579,15 +590,16 @@ impl serde::Serialize for BitString {
             use serde::ser::SerializeStruct;
             let mut state = serializer.serialize_struct("BitString", 2)?;
             state.serialize_field("bit_length", &self.bit_len())?;
-            
+
             // Convert to hex string with colon separators
-            let hex_string = self.data
+            let hex_string = self
+                .data
                 .iter()
                 .map(|b| format!("{:02x}", b))
                 .collect::<Vec<_>>()
                 .join(":");
             state.serialize_field("bits", &hex_string)?;
-            
+
             state.end()
         } else {
             (self.unused, &self.data).serialize(serializer)

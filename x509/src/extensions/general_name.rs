@@ -102,12 +102,12 @@ impl GeneralName {
     /// Parse a GeneralName based on its context-specific tag slot
     pub(crate) fn parse_from_context_specific(
         slot: u8,
-        element: &Box<Element>,
+        element: &Element,
     ) -> Result<GeneralName, Error> {
         match slot {
             0 => {
                 // otherName [0] IMPLICIT OtherName (SEQUENCE)
-                match element.as_ref() {
+                match element {
                     Element::Sequence(seq) => {
                         if seq.len() < 2 {
                             return Err(Error::InvalidGeneralName(
@@ -166,7 +166,7 @@ impl GeneralName {
             3 => {
                 // x400Address [3] IMPLICIT ORAddress
                 // ORAddress is complex and rarely used, store as raw bytes
-                match element.as_ref() {
+                match element {
                     Element::OctetString(os) => {
                         Ok(GeneralName::X400Address(os.as_bytes().to_vec()))
                     }
@@ -183,10 +183,10 @@ impl GeneralName {
             }
             4 => {
                 // directoryName [4] IMPLICIT Name (SEQUENCE)
-                match element.as_ref() {
+                match element {
                     Element::Sequence(_) => {
                         // Decode as Name
-                        let name: Name = element.as_ref().decode()?;
+                        let name: Name = element.decode()?;
                         Ok(GeneralName::DirectoryName(name))
                     }
                     _ => Err(Error::InvalidGeneralName(
@@ -196,7 +196,7 @@ impl GeneralName {
             }
             5 => {
                 // ediPartyName [5] IMPLICIT EDIPartyName (SEQUENCE)
-                match element.as_ref() {
+                match element {
                     Element::Sequence(seq) => {
                         let mut name_assigner = None;
                         let mut party_name = None;
@@ -254,7 +254,7 @@ impl GeneralName {
                 // iPAddress [7] IMPLICIT OCTET STRING
                 // RFC 5280: For SubjectAltName, this is 4 or 16 bytes
                 // For NameConstraints, this is 8 or 32 bytes (address + mask)
-                match element.as_ref() {
+                match element {
                     Element::OctetString(os) => {
                         let bytes = os.as_bytes();
                         let ip = match bytes.len() {
@@ -267,19 +267,21 @@ impl GeneralName {
                                 // IPv4 network: 8 bytes (address + mask)
                                 let addr_octets: [u8; 4] = bytes[0..4].try_into().unwrap();
                                 let mask_octets: [u8; 4] = bytes[4..8].try_into().unwrap();
-                                
+
                                 let addr = std::net::Ipv4Addr::from(addr_octets);
                                 let mask = std::net::Ipv4Addr::from(mask_octets);
-                                
+
                                 // Convert netmask to prefix length
-                                let prefix_len = mask.octets().iter()
-                                    .map(|&b| b.count_ones())
-                                    .sum::<u32>() as u8;
-                                
-                                let net = Ipv4Net::new(addr, prefix_len)
-                                    .map_err(|e| Error::InvalidGeneralName(
-                                        format!("invalid IPv4 network: {}", e)
-                                    ))?;
+                                let prefix_len =
+                                    mask.octets().iter().map(|&b| b.count_ones()).sum::<u32>()
+                                        as u8;
+
+                                let net = Ipv4Net::new(addr, prefix_len).map_err(|e| {
+                                    Error::InvalidGeneralName(format!(
+                                        "invalid IPv4 network: {}",
+                                        e
+                                    ))
+                                })?;
                                 IpAddressOrRange::Network(IpNet::V4(net))
                             }
                             16 => {
@@ -291,19 +293,21 @@ impl GeneralName {
                                 // IPv6 network: 32 bytes (address + mask)
                                 let addr_octets: [u8; 16] = bytes[0..16].try_into().unwrap();
                                 let mask_octets: [u8; 16] = bytes[16..32].try_into().unwrap();
-                                
+
                                 let addr = std::net::Ipv6Addr::from(addr_octets);
                                 let mask = std::net::Ipv6Addr::from(mask_octets);
-                                
+
                                 // Convert netmask to prefix length
-                                let prefix_len = mask.octets().iter()
-                                    .map(|&b| b.count_ones())
-                                    .sum::<u32>() as u8;
-                                
-                                let net = Ipv6Net::new(addr, prefix_len)
-                                    .map_err(|e| Error::InvalidGeneralName(
-                                        format!("invalid IPv6 network: {}", e)
-                                    ))?;
+                                let prefix_len =
+                                    mask.octets().iter().map(|&b| b.count_ones()).sum::<u32>()
+                                        as u8;
+
+                                let net = Ipv6Net::new(addr, prefix_len).map_err(|e| {
+                                    Error::InvalidGeneralName(format!(
+                                        "invalid IPv6 network: {}",
+                                        e
+                                    ))
+                                })?;
                                 IpAddressOrRange::Network(IpNet::V6(net))
                             }
                             _ => {
@@ -322,7 +326,7 @@ impl GeneralName {
             }
             8 => {
                 // registeredID [8] IMPLICIT OBJECT IDENTIFIER
-                match element.as_ref() {
+                match element {
                     Element::OctetString(os) => {
                         // IMPLICIT OID comes as OctetString, need to parse
                         let oid = ObjectIdentifier::try_from(os.as_bytes())
@@ -346,8 +350,8 @@ impl GeneralName {
     }
 
     /// Parse IA5String from IMPLICIT context-specific element
-    fn parse_ia5_string(element: &Box<Element>) -> Result<String, Error> {
-        match element.as_ref() {
+    fn parse_ia5_string(element: &Element) -> Result<String, Error> {
+        match element {
             Element::OctetString(os) => {
                 // IMPLICIT IA5String comes as OctetString
                 String::from_utf8(os.as_bytes().to_vec()).map_err(|_| {

@@ -5,7 +5,7 @@ use tsumiki::decoder::{DecodableFrom, Decoder};
 
 use crate::error::Error;
 
-use super::{policy_constraints::SkipCerts, StandardExtension};
+use super::{StandardExtension, policy_constraints::SkipCerts};
 
 /*
 RFC 5280 Section 4.2.1.14

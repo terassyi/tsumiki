@@ -589,17 +589,11 @@ mod tests {
 
         let cert_policies = result.unwrap();
         assert_eq!(cert_policies.policies.len(), 3);
-        assert_eq!(
-            cert_policies.policies[0].policy_identifier,
-            "1.2.3.4.5"
-        );
+        assert_eq!(cert_policies.policies[0].policy_identifier, "1.2.3.4.5");
         assert_eq!(
             cert_policies.policies[1].policy_identifier,
             CertificatePolicies::ANY_POLICY
         );
-        assert_eq!(
-            cert_policies.policies[2].policy_identifier,
-            "1.2.3.4.6"
-        );
+        assert_eq!(cert_policies.policies[2].policy_identifier, "1.2.3.4.6");
     }
 }

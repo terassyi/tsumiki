@@ -546,7 +546,7 @@ impl Decoder<Element, TBSCertificate> for Element {
         let mut subject_unique_id = None;
         let mut extensions = None;
 
-        while let Some(elem) = iter.next() {
+        for elem in iter {
             match elem {
                 Element::ContextSpecific { slot: 1, .. } if issuer_unique_id.is_none() => {
                     issuer_unique_id = Some(elem.decode()?);
@@ -921,7 +921,7 @@ impl Serialize for CertificateSerialNumber {
         S: serde::Serializer,
     {
         // Convert to hex string with colon separators (like OpenSSL format)
-        let bytes = (&self.inner).as_bigint().to_signed_bytes_be();
+        let bytes = self.inner.as_bigint().to_signed_bytes_be();
         let hex_string = bytes
             .iter()
             .map(|b| format!("{:02x}", b))
@@ -939,7 +939,7 @@ impl CertificateSerialNumber {
 
     /// Format as hex string with colon separators (e.g., "00:f7:e9:eb")
     pub fn format_hex(&self) -> String {
-        let bytes = (&self.inner).as_bigint().to_signed_bytes_be();
+        let bytes = self.inner.as_bigint().to_signed_bytes_be();
         bytes
             .iter()
             .map(|b| format!("{:02x}", b))

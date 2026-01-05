@@ -76,7 +76,7 @@ impl StandardExtension for AuthorityKeyIdentifier {
         }
 
         // The first element should be a Sequence
-        (&elements[0]).decode()
+        elements[0].decode()
     }
 }
 
