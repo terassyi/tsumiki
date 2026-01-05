@@ -4,4 +4,6 @@ pub enum OutputFormat {
     Text,
     /// JSON format
     Json,
+    /// YAML format
+    Yaml,
 }

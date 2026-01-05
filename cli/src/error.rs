@@ -19,6 +19,9 @@ pub enum Error {
 
     #[error("JSON serialization error: {0}")]
     Json(#[from] serde_json::Error),
+
+    #[error("YAML serialization error: {0}")]
+    Yaml(#[from] serde_yml::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

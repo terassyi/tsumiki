@@ -120,6 +120,12 @@ pub fn execute(config: Config) -> Result<()> {
             let json = serde_json::to_string_pretty(&cert)?;
             println!("{}", json);
         }
+        OutputFormat::Yaml => {
+            // Convert to JSON value first, then to YAML
+            let json_value = serde_json::to_value(&cert)?;
+            let yaml = serde_yml::to_string(&json_value)?;
+            print!("{}", yaml);
+        }
     }
 
     Ok(())

@@ -12,7 +12,7 @@ A pure Rust implementation of X.509 certificate parsing and handling.
 - ASN.1 DER/PEM encoding support
 - X.509 v3 extensions support
 - CLI tool for certificate inspection
-- Text and JSON output formats
+- Multiple output formats: Text, JSON, and YAML
 
 ## Quick Start
 
@@ -25,6 +25,9 @@ cargo build --release
 
 # JSON output
 ./target/release/tsumiki cert decode certificate.pem -o json
+
+# YAML output
+./target/release/tsumiki cert decode certificate.pem -o yaml
 ```
 
 ## Requirements
