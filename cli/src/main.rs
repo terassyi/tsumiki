@@ -1,13 +1,15 @@
 use clap::{Parser, Subcommand};
 
+mod asn1;
 mod cert;
 mod der;
 mod error;
-mod format;
+mod output;
 mod utils;
 
 use error::Result;
 
+use asn1::Asn1Commands;
 use cert::CertCommands;
 use der::DerCommands;
 
@@ -31,6 +33,11 @@ enum Commands {
         #[command(subcommand)]
         command: DerCommands,
     },
+    /// ASN.1 operations
+    Asn1 {
+        #[command(subcommand)]
+        command: Asn1Commands,
+    },
 }
 
 fn main() -> Result<()> {
@@ -45,6 +52,11 @@ fn main() -> Result<()> {
         Commands::Der { command } => match command {
             DerCommands::Decode { config } => {
                 der::decode::execute(config)?;
+            }
+        },
+        Commands::Asn1 { command } => match command {
+            Asn1Commands::Decode { config } => {
+                asn1::decode::execute(config)?;
             }
         },
     }

@@ -14,6 +14,7 @@ A pure Rust implementation of X.509 certificate parsing and handling.
 - CLI tool for certificate inspection and format conversion
 - Multiple output formats: Text, JSON, and YAML
 - PEM to DER conversion
+- ASN.1 structure inspection
 
 ## Quick Start
 
@@ -33,6 +34,10 @@ cargo build --release
 
 # Convert PEM to DER
 ./target/release/tsumiki der decode certificate.pem > certificate.der
+
+# Inspect ASN.1 structure
+./target/release/tsumiki asn1 decode certificate.pem
+./target/release/tsumiki asn1 decode certificate.der
 ```
 
 ## Requirements

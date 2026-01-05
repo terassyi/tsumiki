@@ -271,10 +271,31 @@ fn parse_length(input: &[u8]) -> IResult<&[u8], u64> {
         // First 1 bit is a marker for long form.
         // Other bits represent bytes length of the length field.
         let length = n & 0x7f;
+
+        // Sanity check: length field should not exceed 8 bytes for u64
+        if length > 8 {
+            return Err(nom::Err::Failure(nom::error::Error::new(
+                input,
+                nom::error::ErrorKind::TooLarge,
+            )));
+        }
+
         let (input, bs) = nom::bytes::complete::take(length).parse(input)?;
-        let n = bs.iter().enumerate().fold(0u64, |n, (i, &b)| {
-            n + 256_u64.pow((bs.len() - i - 1) as u32) * b as u64
-        });
+        let n = bs
+            .iter()
+            .enumerate()
+            .try_fold(0u64, |n, (i, &b)| {
+                let exp = (bs.len() - i - 1) as u32;
+                let base = 256_u64.checked_pow(exp)?;
+                let term = base.checked_mul(b as u64)?;
+                n.checked_add(term)
+            })
+            .ok_or_else(|| {
+                nom::Err::Failure(nom::error::Error::new(
+                    input,
+                    nom::error::ErrorKind::TooLarge,
+                ))
+            })?;
         return Ok((input, n));
     }
     // short form: 0-127
