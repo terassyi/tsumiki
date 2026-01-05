@@ -15,7 +15,7 @@ build-package package:
 
 # Run clippy lints
 lint:
-	cargo clippy -- -D warnings
+	cargo clippy --all-targets --all-features -- -D warnings
 
 # Run clippy with automatic fixes
 fix:
