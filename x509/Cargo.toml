@@ -1,20 +1,21 @@
 [package]
-name = "asn1"
+name = "x509"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+asn1 = { path = "../asn1" }
 chrono = { workspace = true }
 der = { path = "../der" }
-num-bigint = "0.4.6"
-num-traits = "0.2"
+ipnet = { version = "2.10.1", features = ["serde"] }
 serde = { version = "1.0.228", features = ["derive"] }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
-tsumiki ={ path = "../tsumiki" }
+tsumiki = { path = "../tsumiki" }
 
 [dev-dependencies]
+der = { path = "../der" }
 pem = { path = "../pem" }
-rstest = { workspace = true }
-serde_json = "1.0.147"
+rstest.workspace = true

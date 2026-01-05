@@ -70,11 +70,13 @@ ref: https://www.rfc-editor.org/rfc/rfc7468.html#section-3
 
 #[derive(Debug, Clone)]
 pub struct Pem {
+    #[allow(dead_code)]
     label: Label,
     base64_data: String, // base64 encoded data
 }
 
 impl Pem {
+    #[allow(dead_code)]
     fn label(&self) -> Label {
         self.label
     }

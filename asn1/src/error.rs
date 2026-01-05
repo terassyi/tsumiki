@@ -26,4 +26,6 @@ pub enum Error {
     InvalidGeneralizedTime(String),
     #[error("invalid context-specific value: {slot}, {msg}")]
     InvalidContextSpecific { slot: u8, msg: String },
+    #[error("invalid DER encoding: {0}")]
+    FailedToDecodeDer(#[source] der::error::Error),
 }

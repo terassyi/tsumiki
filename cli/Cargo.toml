@@ -10,3 +10,12 @@ name = "tsumiki"
 path = "src/main.rs"
 
 [dependencies]
+x509 = { path = "../x509" }
+pem = { path = "../pem" }
+der = { path = "../der" }
+asn1 = { path = "../asn1" }
+tsumiki = { path = "../tsumiki" }
+clap = { version = "4.5", features = ["derive"] }
+thiserror.workspace = true
+serde_json.workspace = true
+serde_yml = "0.0.12"
