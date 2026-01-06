@@ -19,6 +19,10 @@ impl ASN1Object {
     pub fn elements(&self) -> &[Element] {
         &self.elements
     }
+
+    pub fn new(elements: Vec<Element>) -> Self {
+        ASN1Object { elements }
+    }
 }
 
 impl DecodableFrom<Der> for ASN1Object {}
@@ -50,7 +54,11 @@ pub enum Element {
     IA5String(String),
     UTCTime(NaiveDateTime),
     GeneralizedTime(NaiveDateTime),
-    ContextSpecific { slot: u8, element: Box<Element> },
+    ContextSpecific {
+        slot: u8,
+        constructed: bool,
+        element: Box<Element>,
+    },
     Unimplemented(Tlv),
 }
 
@@ -199,6 +207,7 @@ impl TryFrom<&Tlv> for Element {
                             let element = Element::try_from(tlv)?;
                             Ok(Element::ContextSpecific {
                                 slot: *slot,
+                                constructed: true,
                                 element: Box::new(element),
                             })
                         } else {
@@ -219,6 +228,7 @@ impl TryFrom<&Tlv> for Element {
                     if let Some(data) = tlv.data() {
                         Ok(Element::ContextSpecific {
                             slot: *slot,
+                            constructed: false,
                             element: Box::new(Element::OctetString(OctetString::from(
                                 data.to_vec(),
                             ))),
@@ -251,8 +261,8 @@ impl Display for Element {
             Element::IA5String(s) => write!(f, "IA5String({})", s),
             Element::UTCTime(dt) => write!(f, "UTCTime({})", dt),
             Element::GeneralizedTime(dt) => write!(f, "GeneralizedTime({})", dt),
-            Element::ContextSpecific { slot, element } => {
-                write!(f, "ContextSpecific(slot: {}, element: {})", slot, element)
+            Element::ContextSpecific { slot, constructed, element } => {
+                write!(f, "ContextSpecific(slot: {}, constructed: {}, element: {})", slot, constructed, element)
             }
             Element::Unimplemented(tlv) => write!(f, "Unimplemented({:?})", tlv),
         }
