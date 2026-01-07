@@ -40,7 +40,7 @@ pub fn execute(config: Config) -> Result<()> {
     let pem = Pem::from_bytes(label, &der_bytes);
 
     // Output the PEM to stdout
-    print!("{}", pem.to_string());
+    print!("{pem}");
 
     Ok(())
 }
