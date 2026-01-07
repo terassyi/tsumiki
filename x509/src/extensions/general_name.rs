@@ -126,8 +126,10 @@ impl GeneralName {
                         // Second: [0] EXPLICIT value
                         let value = match &seq[1] {
                             Element::ContextSpecific {
+                                constructed: true,
                                 slot: 0,
                                 element: val,
+                                ..
                             } => {
                                 // EXPLICIT tag: The value is encoded within the context-specific tag
                                 // TODO: Properly encode the Element back to DER bytes
@@ -203,7 +205,9 @@ impl GeneralName {
 
                         for elem in seq {
                             match elem {
-                                Element::ContextSpecific { slot: 0, element } => {
+                                Element::ContextSpecific {
+                                    slot: 0, element, ..
+                                } => {
                                     // nameAssigner [0]
                                     let dir_string: DirectoryString =
                                         element.as_ref().decode().map_err(|_| {
@@ -211,9 +215,11 @@ impl GeneralName {
                                                 "invalid nameAssigner".to_string(),
                                             )
                                         })?;
-                                    name_assigner = Some(dir_string.into_string());
+                                    name_assigner = Some(dir_string.into());
                                 }
-                                Element::ContextSpecific { slot: 1, element } => {
+                                Element::ContextSpecific {
+                                    slot: 1, element, ..
+                                } => {
                                     // partyName [1]
                                     let dir_string: DirectoryString =
                                         element.as_ref().decode().map_err(|_| {
@@ -221,7 +227,7 @@ impl GeneralName {
                                                 "invalid partyName".to_string(),
                                             )
                                         })?;
-                                    party_name = Some(dir_string.into_string());
+                                    party_name = Some(dir_string.into());
                                 }
                                 _ => {
                                     return Err(Error::InvalidGeneralName(
@@ -371,7 +377,7 @@ impl Decoder<Element, GeneralName> for Element {
 
     fn decode(&self) -> Result<GeneralName, Self::Error> {
         match self {
-            Element::ContextSpecific { slot, element } => {
+            Element::ContextSpecific { slot, element, .. } => {
                 GeneralName::parse_from_context_specific(*slot, element)
             }
             _ => Err(Error::InvalidGeneralName(

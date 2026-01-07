@@ -119,7 +119,7 @@ fn format_element(element: &Element, depth: usize, parse_implicit: bool, output:
                 format_element(elem, depth + 1, parse_implicit, output);
             }
         }
-        Element::ContextSpecific { slot, element } => {
+        Element::ContextSpecific { slot, element, .. } => {
             // Check if this is implicit or explicit tagging
             // Explicit: contains a full ASN.1 element (not OctetString)
             // Implicit: contains raw data as OctetString

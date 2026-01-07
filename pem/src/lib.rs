@@ -15,7 +15,7 @@ const PUBLIC_KEY_LABEL: &str = "PUBLIC KEY";
 const CERTIFICATE_LABEL: &str = "CERTIFICATE";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Label {
+pub enum Label {
     PrivateKey,
     PublicKey,
     Certificate,
@@ -70,19 +70,37 @@ ref: https://www.rfc-editor.org/rfc/rfc7468.html#section-3
 
 #[derive(Debug, Clone)]
 pub struct Pem {
-    #[allow(dead_code)]
     label: Label,
     base64_data: String, // base64 encoded data
 }
 
 impl Pem {
-    #[allow(dead_code)]
-    fn label(&self) -> Label {
+    pub fn new(label: Label, base64_data: String) -> Self {
+        Pem { label, base64_data }
+    }
+
+    pub fn from_bytes(label: Label, data: &[u8]) -> Self {
+        let base64_data = STANDARD.encode(data);
+        Pem { label, base64_data }
+    }
+
+    pub fn label(&self) -> Label {
         self.label
     }
 
     pub fn data(&self) -> &str {
         &self.base64_data
+    }
+}
+
+impl Display for Pem {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "-----BEGIN {}-----", self.label)?;
+        // RFC 7468: base64 text should be wrapped at 64 characters
+        for chunk in self.base64_data.as_bytes().chunks(64) {
+            writeln!(f, "{}", std::str::from_utf8(chunk).unwrap())?;
+        }
+        write!(f, "-----END {}-----", self.label)
     }
 }
 
@@ -258,6 +276,7 @@ mod tests {
     use crate::Label;
     use crate::Pem;
     use std::str::FromStr;
+    use tsumiki::decoder::Decoder;
 
     #[rstest(
         input,
@@ -293,7 +312,7 @@ Issuer: CN=Atlantis
 AAA=
 -----END PRIVATE KEY-----
 ";
-    const TEST_PEM5: &str = r"-----BEGIN CERTIFICATE-----
+    const TEST_PEM_CERT1: &str = r"-----BEGIN CERTIFICATE-----
 MIICLDCCAdKgAwIBAgIBADAKBggqhkjOPQQDAjB9MQswCQYDVQQGEwJCRTEPMA0G
 A1UEChMGR251VExTMSUwIwYDVQQLExxHbnVUTFMgY2VydGlmaWNhdGUgYXV0aG9y
 aXR5MQ8wDQYDVQQIEwZMZXV2ZW4xJTAjBgNVBAMTHEdudVRMUyBjZXJ0aWZpY2F0
@@ -308,6 +327,28 @@ SM49BAMCA0gAMEUCIDGuwD1KPyG+hRf88MeyMQcqOFZD0TbVleF+UsAGQ4enAiEA
 l4wOuDwKQa+upc8GftXE2C//4mKANBC6It01gUaTIpo=
 -----END CERTIFICATE-----";
 
+    const TEST_PEM_CERT2: &str = r"-----BEGIN CERTIFICATE-----
+MIIDXTCCAkWgAwIBAgIJAKL0UG+mRkmSMA0GCSqGSIb3DQEBCwUAMEUxCzAJBgNV
+BAYTAkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBX
+aWRnaXRzIFB0eSBMdGQwHhcNMTYxMjIxMTYzMDA1WhcNMjYxMjE5MTYzMDA1WjBF
+MQswCQYDVQQGEwJBVTETMBEGA1UECAwKU29tZS1TdGF0ZTEhMB8GA1UECgwYSW50
+ZXJuZXQgV2lkZ2l0cyBQdHkgTHRkMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIB
+CgKCAQEAw3khLOKBaKp0I+rkfpJH6i1KBmfEpuCrzK5LMZaFZiVgW/SxXU31N1ee
+4WMrNkfxbI4UlGhPmvlTjP7bvC5V0U28kCZ5s9PQb1FvkPvEJhw9aJVf3zr5wZRb
+8PyBwP3qUfYYWdJmHAHSKb3wDTl4m9wW0i3BNJxW2FLCQU0hRGiCBnW3hEMCH8m2
+P+kQhUITjy9VfNJmKi5dL3RDXZHN+9gYvwHAabMh8qdWKaJCxAiLN4AO9dVXqOJd
+e1TuZ/Vl6qJ3hYT3T3DdVCJ7vHXLqXBnGMxbFhD8rJ4f5V7QRQVbKl1fWZRGtqzB
+YaKyMMoHCMLa3qJvGDEJGTCKB1LEawIDAQABo1AwTjAdBgNVHQ4EFgQUo2hUXWzw
+BI1kxA1WFCLKjWHHwdQwHwYDVR0jBBgwFoAUo2hUXWzwBI1kxA1WFCLKjWHHwdQw
+DAYDVR0TBAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAQEAaDQl2e0vqOCqGNzYqZyY
+S7RJVYW6WIoq7KdQ0m2Bz2NKRvh2KCqCLZvOuDWoOqMHIQM3FnOFv2FIzTT6sqLv
+njRKYAx9Vd4NeMkPq3QHJU7RMkr3EGqFPB8/Zr/p8lZL5DsHKAQv0P9fxbLPxEqw
+Db4tBf4sFjflSF5g3yD4UwmQvSvYGDW8LqhpSL0FZ8thCR4Ii9L9vGBr5fqB3pFM
+uS6eN4Ck5fC4VaZuPKpCj6c7L5i8BDvPbZV4h6FJZFGpd7qPrCJUvYJH0u5MiLJh
+H6Z2F5qzxFr3dVOYlTUQPYJGBZBpXgXL5fBnPWnPPuLFBNLNNqCpM5cY+c5dS9YE
+pg==
+-----END CERTIFICATE-----";
+
     #[rstest(
         input,
         expected_label,
@@ -317,7 +358,7 @@ l4wOuDwKQa+upc8GftXE2C//4mKANBC6It01gUaTIpo=
         case(TEST_PEM3, Label::PrivateKey, "AAABBB=="),
         case(TEST_PEM4, Label::PrivateKey, "AAA="),
         case(
-            TEST_PEM5,
+            TEST_PEM_CERT1,
             Label::Certificate,
             "MIICLDCCAdKgAwIBAgIBADAKBggqhkjOPQQDAjB9MQswCQYDVQQGEwJCRTEPMA0GA1UEChMGR251VExTMSUwIwYDVQQLExxHbnVUTFMgY2VydGlmaWNhdGUgYXV0aG9yaXR5MQ8wDQYDVQQIEwZMZXV2ZW4xJTAjBgNVBAMTHEdudVRMUyBjZXJ0aWZpY2F0ZSBhdXRob3JpdHkwHhcNMTEwNTIzMjAzODIxWhcNMTIxMjIyMDc0MTUxWjB9MQswCQYDVQQGEwJCRTEPMA0GA1UEChMGR251VExTMSUwIwYDVQQLExxHbnVUTFMgY2VydGlmaWNhdGUgYXV0aG9yaXR5MQ8wDQYDVQQIEwZMZXV2ZW4xJTAjBgNVBAMTHEdudVRMUyBjZXJ0aWZpY2F0ZSBhdXRob3JpdHkwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARS2I0jiuNn14Y2sSALCX3IybqiIJUvxUpj+oNfzngvj/Niyv2394BWnW4XuQ4RTEiywK87WRcWMGgJB5kX/t2no0MwQTAPBgNVHRMBAf8EBTADAQH/MA8GA1UdDwEB/wQFAwMHBgAwHQYDVR0OBBYEFPC0gf6YEr+1KLlkQAPLzB9mTigDMAoGCCqGSM49BAMCA0gAMEUCIDGuwD1KPyG+hRf88MeyMQcqOFZD0TbVleF+UsAGQ4enAiEAl4wOuDwKQa+upc8GftXE2C//4mKANBC6It01gUaTIpo="
         )
@@ -360,5 +401,21 @@ AAA==
         } else {
             panic!("this test should return an error");
         }
+    }
+
+    #[rstest(
+        pem_str,
+        label,
+        case(TEST_PEM_CERT1, Label::Certificate),
+        case(TEST_PEM_CERT2, Label::Certificate)
+    )]
+    fn test_pem_roundtrip(pem_str: &str, label: Label) {
+        let original_pem: Pem = pem_str.parse().unwrap();
+        let decoded: Vec<u8> = original_pem.decode().unwrap();
+        let re_encoded_pem = Pem::from_bytes(label, &decoded);
+
+        // Verify the content is the same
+        let re_decoded: Vec<u8> = re_encoded_pem.decode().unwrap();
+        assert_eq!(decoded, re_decoded);
     }
 }

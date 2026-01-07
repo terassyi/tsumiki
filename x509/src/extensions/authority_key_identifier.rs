@@ -95,7 +95,9 @@ impl Decoder<Element, AuthorityKeyIdentifier> for Element {
                 for elem in elements {
                     match elem {
                         // [0] IMPLICIT KeyIdentifier (OCTET STRING)
-                        Element::ContextSpecific { slot: 0, element } => {
+                        Element::ContextSpecific {
+                            slot: 0, element, ..
+                        } => {
                             if let Element::OctetString(os) = element.as_ref() {
                                 key_identifier = Some(os.as_bytes().to_vec());
                             } else {
@@ -105,7 +107,9 @@ impl Decoder<Element, AuthorityKeyIdentifier> for Element {
                             }
                         }
                         // [1] IMPLICIT GeneralNames (SEQUENCE OF GeneralName)
-                        Element::ContextSpecific { slot: 1, element } => {
+                        Element::ContextSpecific {
+                            slot: 1, element, ..
+                        } => {
                             // GeneralNames is a SEQUENCE OF GeneralName
                             match element.as_ref() {
                                 Element::Sequence(names) => {
@@ -126,7 +130,9 @@ impl Decoder<Element, AuthorityKeyIdentifier> for Element {
                             }
                         }
                         // [2] IMPLICIT CertificateSerialNumber (INTEGER)
-                        Element::ContextSpecific { slot: 2, element } => {
+                        Element::ContextSpecific {
+                            slot: 2, element, ..
+                        } => {
                             // IMPLICIT tagging: OctetString wrapper around raw INTEGER bytes
                             if let Element::OctetString(os) = element.as_ref() {
                                 authority_cert_serial_number = Some(
@@ -181,7 +187,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 0,
+                    constructed: false,
+            slot: 0,
                     element: Box::new(Element::OctetString(OctetString::from(vec![0x01, 0x02, 0x03, 0x04]))),
                 },
             ]),
@@ -195,7 +202,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 2,
+                    constructed: false,
+            slot: 2,
                     element: Box::new(Element::Integer(asn1::Integer::from(vec![0x01, 0x23, 0x45]))),
                 },
             ]),
@@ -209,11 +217,13 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 0,
+                    constructed: false,
+            slot: 0,
                     element: Box::new(Element::OctetString(OctetString::from(vec![0xAA, 0xBB, 0xCC]))),
                 },
                 Element::ContextSpecific {
-                    slot: 2,
+                    constructed: false,
+            slot: 2,
                     element: Box::new(Element::Integer(asn1::Integer::from(vec![0xFF]))),
                 },
             ]),
@@ -255,7 +265,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 0,
+                    constructed: false,
+            slot: 0,
                     element: Box::new(Element::Integer(asn1::Integer::from(vec![0x01]))),
                 },
             ]),
@@ -265,7 +276,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 2,
+                    constructed: false,
+            slot: 2,
                     element: Box::new(Element::BitString(asn1::BitString::try_from(vec![0x00, 0x01]).unwrap())),
                 },
             ]),
@@ -296,6 +308,7 @@ mod tests {
 
         // Create Element structure directly (simulating parsed DER)
         let element = Element::Sequence(vec![Element::ContextSpecific {
+            constructed: false,
             slot: 0,
             element: Box::new(Element::OctetString(OctetString::from(key_id.clone()))),
         }]);

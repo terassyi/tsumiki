@@ -3,6 +3,7 @@ use std::str::FromStr;
 use asn1::{Element, ObjectIdentifier, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 
@@ -71,7 +72,7 @@ Extension  ::=  SEQUENCE  {
 /// - Element::ContextSpecific { slot: 3, element: Box<Element::Sequence> }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Extensions {
-    extensions: Vec<Extension>,
+    pub(crate) extensions: Vec<Extension>,
 }
 
 impl Extensions {
@@ -103,7 +104,7 @@ impl Decoder<Element, Extensions> for Element {
 
     fn decode(&self) -> Result<Extensions, Self::Error> {
         match self {
-            Element::ContextSpecific { slot, element } => {
+            Element::ContextSpecific { slot, element, .. } => {
                 if *slot != 3 {
                     return Err(Error::InvalidExtensions(format!(
                         "expected context-specific tag [3], got [{}]",
@@ -151,13 +152,37 @@ impl Decoder<Element, Extensions> for Element {
     }
 }
 
+impl EncodableTo<Extensions> for Element {}
+
+impl Encoder<Extensions, Element> for Extensions {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.extensions.is_empty() {
+            return Err(Error::InvalidExtensions(
+                "Extensions must contain at least one Extension".to_string(),
+            ));
+        }
+
+        let extension_elements: Result<Vec<Element>, Error> =
+            self.extensions.iter().map(|ext| ext.encode()).collect();
+
+        // Wrap in [3] EXPLICIT tag for TBSCertificate
+        Ok(Element::ContextSpecific {
+            constructed: true,
+            slot: 3,
+            element: Box::new(Element::Sequence(extension_elements?)),
+        })
+    }
+}
+
 /// Extension represents a single X.509 extension
 /// RFC 5280: Extension ::= SEQUENCE { extnID, critical, extnValue }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Extension {
-    id: ObjectIdentifier,
-    critical: bool,
-    value: OctetString,
+    pub(crate) id: ObjectIdentifier,
+    pub(crate) critical: bool,
+    pub(crate) value: OctetString,
 }
 
 impl Extension {
@@ -250,6 +275,25 @@ impl Decoder<Element, Extension> for Element {
                 "expected Sequence for Extension".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<Extension> for Element {}
+
+impl Encoder<Extension, Element> for Extension {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let mut elements = vec![Element::ObjectIdentifier(self.id.clone())];
+
+        // Only include critical field if it's true (since DEFAULT FALSE)
+        if self.critical {
+            elements.push(Element::Boolean(true));
+        }
+
+        elements.push(Element::OctetString(self.value.clone()));
+
+        Ok(Element::Sequence(elements))
     }
 }
 
@@ -390,7 +434,8 @@ mod tests {
         // Test case: Extensions with context-specific [3] tag
         case(
             Element::ContextSpecific {
-                slot: 3,
+                constructed: true,
+            slot: 3,
                 element: Box::new(Element::Sequence(vec![
                     Element::Sequence(vec![
                         Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.29.19").unwrap()),
@@ -442,7 +487,8 @@ mod tests {
         // Test case: Wrong context-specific tag
         case(
             Element::ContextSpecific {
-                slot: 2,
+                constructed: true,
+            slot: 2,
                 element: Box::new(Element::Sequence(vec![
                     Element::Sequence(vec![
                         Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.29.19").unwrap()),
@@ -455,7 +501,8 @@ mod tests {
         // Test case: Context-specific tag without Sequence
         case(
             Element::ContextSpecific {
-                slot: 3,
+                constructed: true,
+            slot: 3,
                 element: Box::new(Element::Integer(asn1::Integer::from(vec![0x01]))),
             },
             "expected Sequence inside context-specific tag [3]"

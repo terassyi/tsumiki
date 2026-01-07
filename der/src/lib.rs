@@ -2,10 +2,11 @@ use error::Error;
 use nom::{IResult, Parser};
 use pem::Pem;
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 pub mod error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Der {
     elements: Vec<Tlv>,
 }
@@ -13,6 +14,24 @@ pub struct Der {
 impl Der {
     pub fn elements(&self) -> &[Tlv] {
         &self.elements
+    }
+
+    pub fn new(elements: Vec<Tlv>) -> Self {
+        Der { elements }
+    }
+}
+
+impl EncodableTo<Der> for Vec<u8> {}
+
+impl Encoder<Der, Vec<u8>> for Der {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Vec<u8>, Self::Error> {
+        self.elements
+            .iter()
+            .map(|tlv| tlv.encode())
+            .collect::<Result<Vec<_>, _>>()
+            .map(|vecs| vecs.into_iter().flatten().collect())
     }
 }
 
@@ -71,6 +90,9 @@ impl Decoder<Pem, Der> for Pem {
     }
 }
 
+/// Tag byte constructed flag (bit 5)
+pub const TAG_CONSTRUCTED: u8 = 0b0010_0000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tag {
     Primitive(PrimitiveTag, u8), // This variant has a primitive tag number and an actual value.
@@ -80,7 +102,7 @@ pub enum Tag {
 impl Tag {
     fn is_constructed(&self) -> bool {
         match self {
-            Tag::Primitive(_, inner) => (*inner) & 0b0010_0000 != 0,
+            Tag::Primitive(_, inner) => (*inner) & TAG_CONSTRUCTED != 0,
             Tag::ContextSpecific { constructed, .. } => *constructed,
         }
     }
@@ -110,14 +132,33 @@ impl Tag {
     }
 }
 
+impl EncodableTo<Tag> for u8 {}
+
+impl Encoder<Tag, u8> for Tag {
+    type Error = Error;
+
+    fn encode(&self) -> Result<u8, Self::Error> {
+        Ok(match self {
+            Tag::Primitive(_, value) => *value,
+            Tag::ContextSpecific { slot, constructed } => {
+                let mut tag = 0x80; // Context-specific class
+                if *constructed {
+                    tag |= TAG_CONSTRUCTED;
+                }
+                tag | slot
+            }
+        })
+    }
+}
+
 impl From<u8> for Tag {
     fn from(value: u8) -> Self {
         let is_context_specific = value & 0b1000_0000 != 0;
 
         if is_context_specific {
             // Context-specific tag
-            // Bit 6 (0x20) indicates constructed (1) or primitive (0)
-            let constructed = value & 0b0010_0000 != 0;
+            // Bit 5 indicates constructed (1) or primitive (0)
+            let constructed = value & TAG_CONSTRUCTED != 0;
             let slot_number = value & 0b0001_1111; // Bits 0-4 are the slot number
             Tag::ContextSpecific {
                 slot: slot_number,
@@ -211,6 +252,20 @@ impl Tlv {
         &self.tag
     }
 
+    pub fn new_primitive(tag: Tag, data: Vec<u8>) -> Self {
+        Tlv {
+            tag,
+            value: Value::Data(data),
+        }
+    }
+
+    pub fn new_constructed(tag: Tag, tlvs: Vec<Tlv>) -> Self {
+        Tlv {
+            tag,
+            value: Value::Tlv(tlvs),
+        }
+    }
+
     pub fn data(&self) -> Option<&[u8]> {
         match &self.value {
             Value::Data(data) => Some(data),
@@ -256,6 +311,51 @@ impl Tlv {
                 value: Value::Data(data.to_vec()),
             },
         ))
+    }
+}
+
+impl EncodableTo<Tlv> for Vec<u8> {}
+
+impl Encoder<Tlv, Vec<u8>> for Tlv {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Vec<u8>, Self::Error> {
+        // Get content bytes
+        let content = match &self.value {
+            Value::Data(data) => data.clone(),
+            Value::Tlv(tlvs) => tlvs
+                .iter()
+                .map(|tlv| tlv.encode())
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .flatten()
+                .collect(),
+        };
+
+        // Build result: tag + length + content
+        let tag = self.tag.encode()?;
+        let length = encode_length(content.len());
+
+        Ok([tag].into_iter().chain(length).chain(content).collect())
+    }
+}
+
+fn encode_length(length: usize) -> Vec<u8> {
+    if length < 0x80 {
+        // Short form: length fits in 7 bits (0-127)
+        vec![length as u8]
+    } else {
+        // Long form: first byte = 0x80 | number_of_length_bytes, followed by length bytes
+        let length_bytes: Vec<u8> = length
+            .to_be_bytes()
+            .into_iter()
+            .skip_while(|&b| b == 0) // Skip leading zero bytes
+            .collect();
+
+        [0x80 | length_bytes.len() as u8]
+            .into_iter()
+            .chain(length_bytes)
+            .collect()
     }
 }
 
@@ -307,7 +407,9 @@ mod tests {
     use rstest::rstest;
 
     use crate::{Der, PrimitiveTag, Tag, Tlv, Value, parse_length};
+    use pem::Pem;
     use tsumiki::decoder::Decoder;
+    use tsumiki::encoder::Encoder;
 
     #[rstest(
         input,
@@ -577,5 +679,21 @@ e8ZYGIc4gvs5McdrVUyYGUs=
         // Assuming not to panic here.
         let der: Der = pem.decode().unwrap();
         println!("{:?}", der);
+    }
+
+    #[rstest(cert_pem, case(TEST_PEM_CERT1), case(TEST_PEM_CERT2))]
+    fn test_roundtrip_der_encode(cert_pem: &str) {
+        // PEM -> Der -> Vec<u8> -> Der
+        let pem: Pem = cert_pem.parse().expect("Failed to parse PEM");
+        let original_der: Der = pem.decode().expect("Failed to decode PEM to Der");
+
+        let encoded_bytes = original_der
+            .encode()
+            .expect("Failed to encode Der to Vec<u8>");
+        let decoded_der: Der = encoded_bytes
+            .decode()
+            .expect("Failed to decode Vec<u8> to Der");
+
+        assert_eq!(original_der, decoded_der);
     }
 }

@@ -68,7 +68,9 @@ impl Decoder<Element, GeneralSubtree> for Element {
                 // Process optional minimum [0] and maximum [1] fields
                 for elem in iter {
                     match elem {
-                        Element::ContextSpecific { slot: 0, element } => {
+                        Element::ContextSpecific {
+                            slot: 0, element, ..
+                        } => {
                             // minimum [0] IMPLICIT INTEGER DEFAULT 0
                             // IMPLICIT tagging: content is raw INTEGER bytes as OctetString
                             match element.as_ref() {
@@ -94,7 +96,9 @@ impl Decoder<Element, GeneralSubtree> for Element {
                                 }
                             }
                         }
-                        Element::ContextSpecific { slot: 1, element } => {
+                        Element::ContextSpecific {
+                            slot: 1, element, ..
+                        } => {
                             // maximum [1] IMPLICIT INTEGER OPTIONAL
                             // IMPLICIT tagging: content is raw INTEGER bytes as OctetString
                             match element.as_ref() {
@@ -183,7 +187,9 @@ impl Decoder<Element, NameConstraints> for Element {
 
                 for elem in elements {
                     match elem {
-                        Element::ContextSpecific { slot: 0, element } => {
+                        Element::ContextSpecific {
+                            slot: 0, element, ..
+                        } => {
                             // permittedSubtrees [0] IMPLICIT GeneralSubtrees
                             match element.as_ref() {
                                 Element::Sequence(subtrees) => {
@@ -206,7 +212,9 @@ impl Decoder<Element, NameConstraints> for Element {
                                 }
                             }
                         }
-                        Element::ContextSpecific { slot: 1, element } => {
+                        Element::ContextSpecific {
+                            slot: 1, element, ..
+                        } => {
                             // excludedSubtrees [1] IMPLICIT GeneralSubtrees
                             match element.as_ref() {
                                 Element::Sequence(subtrees) => {
@@ -281,11 +289,13 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 0,
+                    constructed: true,
+            slot: 0,
                     element: Box::new(Element::Sequence(vec![
                         Element::Sequence(vec![
                             Element::ContextSpecific {
-                                slot: 2,
+                                constructed: false,
+            slot: 2,
                                 element: Box::new(Element::OctetString(OctetString::from(b".example.com".to_vec()))),
                             },
                         ]),
@@ -307,11 +317,13 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 1,
+                    constructed: false,
+            slot: 1,
                     element: Box::new(Element::Sequence(vec![
                         Element::Sequence(vec![
                             Element::ContextSpecific {
-                                slot: 2,
+                                constructed: false,
+            slot: 2,
                                 element: Box::new(Element::OctetString(OctetString::from(b".forbidden.com".to_vec()))),
                             },
                         ]),
@@ -333,22 +345,26 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 0,
+                    constructed: true,
+            slot: 0,
                     element: Box::new(Element::Sequence(vec![
                         Element::Sequence(vec![
                             Element::ContextSpecific {
-                                slot: 2,
+                                constructed: false,
+            slot: 2,
                                 element: Box::new(Element::OctetString(OctetString::from(b".example.com".to_vec()))),
                             },
                         ]),
                     ])),
                 },
                 Element::ContextSpecific {
-                    slot: 1,
+                    constructed: false,
+            slot: 1,
                     element: Box::new(Element::Sequence(vec![
                         Element::Sequence(vec![
                             Element::ContextSpecific {
-                                slot: 2,
+                                constructed: false,
+            slot: 2,
                                 element: Box::new(Element::OctetString(OctetString::from(b".bad.example.com".to_vec()))),
                             },
                         ]),
@@ -376,17 +392,20 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 0,
+                    constructed: true,
+            slot: 0,
                     element: Box::new(Element::Sequence(vec![
                         Element::Sequence(vec![
                             Element::ContextSpecific {
-                                slot: 2,
+                                constructed: false,
+            slot: 2,
                                 element: Box::new(Element::OctetString(OctetString::from(b".example.com".to_vec()))),
                             },
                         ]),
                         Element::Sequence(vec![
                             Element::ContextSpecific {
-                                slot: 7,
+                                constructed: false,
+            slot: 7,
                                 element: Box::new(Element::OctetString(OctetString::from(vec![192, 0, 2, 0]))),
                             },
                         ]),
@@ -436,7 +455,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 0,
+                    constructed: true,
+            slot: 0,
                     element: Box::new(Element::Sequence(vec![])),
                 },
             ]),
@@ -446,7 +466,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 1,
+                    constructed: false,
+            slot: 1,
                     element: Box::new(Element::Sequence(vec![])),
                 },
             ]),
@@ -472,16 +493,19 @@ mod tests {
         // Note: RFC 5280 says CAs MUST NOT include these fields, but we should parse them
         let input = Element::Sequence(vec![
             Element::ContextSpecific {
+                constructed: false,
                 slot: 2,
                 element: Box::new(Element::OctetString(OctetString::from(
                     b".example.com".to_vec(),
                 ))),
             },
             Element::ContextSpecific {
+                constructed: false,
                 slot: 0,
                 element: Box::new(Element::OctetString(OctetString::from(vec![0x01]))),
             },
             Element::ContextSpecific {
+                constructed: false,
                 slot: 1,
                 element: Box::new(Element::OctetString(OctetString::from(vec![0x05]))),
             },
@@ -505,9 +529,11 @@ mod tests {
         // This is typically used as: IP address (4 bytes) || Netmask (4 bytes)
         // Example: 192.0.2.0/24 = [192, 0, 2, 0] || [255, 255, 255, 0]
         let input = Element::Sequence(vec![Element::ContextSpecific {
+            constructed: true,
             slot: 0,
             element: Box::new(Element::Sequence(vec![Element::Sequence(vec![
                 Element::ContextSpecific {
+                    constructed: false,
                     slot: 7,
                     element: Box::new(Element::OctetString(OctetString::from(vec![
                         192, 0, 2, 0, 255, 255, 255, 0,
@@ -541,9 +567,11 @@ mod tests {
     fn test_name_constraints_decode_with_dns() {
         // NameConstraints with permitted dNSName ".example.com"
         let input = Element::Sequence(vec![Element::ContextSpecific {
+            constructed: true,
             slot: 0,
             element: Box::new(Element::Sequence(vec![Element::Sequence(vec![
                 Element::ContextSpecific {
+                    constructed: false,
                     slot: 2,
                     element: Box::new(Element::IA5String(".example.com".to_string())),
                 },

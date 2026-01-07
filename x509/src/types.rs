@@ -1,8 +1,11 @@
 use std::fmt;
+use std::ops::Deref;
+use std::str::FromStr;
 
 use asn1::{Element, ObjectIdentifier};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 
@@ -44,13 +47,25 @@ impl DirectoryString {
     pub fn new(value: String) -> Self {
         Self { inner: value }
     }
+}
 
-    pub fn as_str(&self) -> &str {
+impl AsRef<str> for DirectoryString {
+    fn as_ref(&self) -> &str {
         &self.inner
     }
+}
 
-    pub fn into_string(self) -> String {
-        self.inner
+impl Deref for DirectoryString {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl From<DirectoryString> for String {
+    fn from(ds: DirectoryString) -> Self {
+        ds.inner
     }
 }
 
@@ -65,6 +80,16 @@ impl From<&str> for DirectoryString {
         Self {
             inner: value.to_string(),
         }
+    }
+}
+
+impl FromStr for DirectoryString {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self {
+            inner: s.to_string(),
+        })
     }
 }
 
@@ -100,6 +125,29 @@ impl Decoder<Element, DirectoryString> for Element {
         };
         Ok(DirectoryString { inner: value })
     }
+}
+
+impl EncodableTo<DirectoryString> for Element {}
+
+impl Encoder<DirectoryString, Element> for DirectoryString {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        // RFC 5280: Use PrintableString if possible, otherwise UTF8String
+        if is_printable_string(&self.inner) {
+            Ok(Element::PrintableString(self.inner.clone()))
+        } else {
+            Ok(Element::UTF8String(self.inner.clone()))
+        }
+    }
+}
+
+/// Check if a string contains only PrintableString characters
+/// PrintableString allows: A-Z, a-z, 0-9, space, and ' ( ) + , - . / : = ?
+fn is_printable_string(s: &str) -> bool {
+    const PRINTABLE_CHARS: &str =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 '()+,-./:=?";
+    s.chars().all(|c| PRINTABLE_CHARS.contains(c))
 }
 
 // https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.4
@@ -152,6 +200,18 @@ impl Decoder<Element, Name> for Element {
     }
 }
 
+impl EncodableTo<Name> for Element {}
+
+impl Encoder<Name, Element> for Name {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let rdn_elements: Result<Vec<Element>, Error> =
+            self.rdn_sequence.iter().map(|rdn| rdn.encode()).collect();
+        Ok(Element::Sequence(rdn_elements?))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct RelativeDistinguishedName {
     pub(crate) attribute: Vec<AttributeTypeAndValue>,
@@ -175,6 +235,18 @@ impl Decoder<Element, RelativeDistinguishedName> for Element {
                 "expected Set for RelativeDistinguishedName".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<RelativeDistinguishedName> for Element {}
+
+impl Encoder<RelativeDistinguishedName, Element> for RelativeDistinguishedName {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let attr_elements: Result<Vec<Element>, Error> =
+            self.attribute.iter().map(|attr| attr.encode()).collect();
+        Ok(Element::Set(attr_elements?))
     }
 }
 
@@ -247,7 +319,7 @@ impl Decoder<Element, AttributeTypeAndValue> for Element {
             // attribute_value can be various types depending on the attribute_type
             // Most X.509 attributes are strings (DirectoryString)
             let dir_string: DirectoryString = seq[1].decode()?;
-            let attribute_value = dir_string.into_string();
+            let attribute_value = dir_string.into();
 
             Ok(AttributeTypeAndValue {
                 attribute_type,
@@ -255,9 +327,23 @@ impl Decoder<Element, AttributeTypeAndValue> for Element {
             })
         } else {
             Err(Error::InvalidAttributeTypeAndValue(
-                "expected sequence".to_string(),
+                "expected Sequence".to_string(),
             ))
         }
+    }
+}
+
+impl EncodableTo<AttributeTypeAndValue> for Element {}
+
+impl Encoder<AttributeTypeAndValue, Element> for AttributeTypeAndValue {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let oid_elm = Element::ObjectIdentifier(self.attribute_type.clone());
+        let dir_string = DirectoryString::from_str(&self.attribute_value)
+            .expect("DirectoryString::from_str is infallible");
+        let value_elm = dir_string.encode()?;
+        Ok(Element::Sequence(vec![oid_elm, value_elm]))
     }
 }
 
@@ -295,7 +381,7 @@ mod tests {
     )]
     fn test_directory_string_decode_success(input: Element, expected_str: &str) {
         let result: DirectoryString = input.decode().unwrap();
-        assert_eq!(result.as_str(), expected_str);
+        assert_eq!(result.as_ref(), expected_str);
         assert_eq!(result.to_string(), expected_str);
     }
 

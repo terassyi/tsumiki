@@ -177,7 +177,7 @@ impl Decoder<Element, DistributionPoint> for Element {
 
                 for elem in elements {
                     match elem {
-                        Element::ContextSpecific { slot, element } => match slot {
+                        Element::ContextSpecific { slot, element, .. } => match slot {
                             0 => {
                                 // distributionPoint [0] DistributionPointName
                                 distribution_point = Some(element.as_ref().decode()?);
@@ -241,7 +241,7 @@ impl Decoder<Element, DistributionPointName> for Element {
 
     fn decode(&self) -> Result<DistributionPointName, Self::Error> {
         match self {
-            Element::ContextSpecific { slot, element } => match slot {
+            Element::ContextSpecific { slot, element, .. } => match slot {
                 0 => {
                     // fullName [0] GeneralNames
                     if let Element::Sequence(names) = element.as_ref() {
@@ -297,12 +297,15 @@ mod tests {
             Element::Sequence(vec![
                 Element::Sequence(vec![
                     Element::ContextSpecific {
-                        slot: 0,
+                        constructed: true,
+            slot: 0,
                         element: Box::new(Element::ContextSpecific {
-                            slot: 0,
+                            constructed: true,
+            slot: 0,
                             element: Box::new(Element::Sequence(vec![
                                 Element::ContextSpecific {
-                                    slot: 6,
+                                    constructed: false,
+            slot: 6,
                                     element: Box::new(Element::OctetString(OctetString::from(b"http://crl.example.com/ca.crl".to_vec()))),
                                 },
                             ])),
@@ -327,16 +330,20 @@ mod tests {
             Element::Sequence(vec![
                 Element::Sequence(vec![
                     Element::ContextSpecific {
-                        slot: 0,
+                        constructed: true,
+            slot: 0,
                         element: Box::new(Element::ContextSpecific {
-                            slot: 0,
+                            constructed: true,
+            slot: 0,
                             element: Box::new(Element::Sequence(vec![
                                 Element::ContextSpecific {
-                                    slot: 6,
+                                    constructed: false,
+            slot: 6,
                                     element: Box::new(Element::OctetString(OctetString::from(b"http://crl1.example.com/ca.crl".to_vec()))),
                                 },
                                 Element::ContextSpecific {
-                                    slot: 6,
+                                    constructed: false,
+            slot: 6,
                                     element: Box::new(Element::OctetString(OctetString::from(b"http://crl2.example.com/ca.crl".to_vec()))),
                                 },
                             ])),
@@ -362,12 +369,15 @@ mod tests {
             Element::Sequence(vec![
                 Element::Sequence(vec![
                     Element::ContextSpecific {
-                        slot: 0,
+                        constructed: true,
+            slot: 0,
                         element: Box::new(Element::ContextSpecific {
-                            slot: 0,
+                            constructed: true,
+            slot: 0,
                             element: Box::new(Element::Sequence(vec![
                                 Element::ContextSpecific {
-                                    slot: 6,
+                                    constructed: false,
+            slot: 6,
                                     element: Box::new(Element::OctetString(OctetString::from(b"http://crl1.example.com/ca.crl".to_vec()))),
                                 },
                             ])),
@@ -376,12 +386,15 @@ mod tests {
                 ]),
                 Element::Sequence(vec![
                     Element::ContextSpecific {
-                        slot: 0,
+                        constructed: true,
+            slot: 0,
                         element: Box::new(Element::ContextSpecific {
-                            slot: 0,
+                            constructed: true,
+            slot: 0,
                             element: Box::new(Element::Sequence(vec![
                                 Element::ContextSpecific {
-                                    slot: 6,
+                                    constructed: false,
+            slot: 6,
                                     element: Box::new(Element::OctetString(OctetString::from(b"http://crl2.example.com/ca.crl".to_vec()))),
                                 },
                             ])),
@@ -413,19 +426,23 @@ mod tests {
             Element::Sequence(vec![
                 Element::Sequence(vec![
                     Element::ContextSpecific {
-                        slot: 0,
+                        constructed: true,
+            slot: 0,
                         element: Box::new(Element::ContextSpecific {
-                            slot: 0,
+                            constructed: true,
+            slot: 0,
                             element: Box::new(Element::Sequence(vec![
                                 Element::ContextSpecific {
-                                    slot: 6,
+                                    constructed: false,
+            slot: 6,
                                     element: Box::new(Element::OctetString(OctetString::from(b"http://crl.example.com/ca.crl".to_vec()))),
                                 },
                             ])),
                         }),
                     },
                     Element::ContextSpecific {
-                        slot: 1,
+                        constructed: false,
+            slot: 1,
                         element: Box::new(Element::BitString(
                             // unused_bits=6 means 2 bits are valid: bit 0 (unused) and bit 1 (keyCompromise)
                             // 0b01000000 sets bit 1 (keyCompromise)

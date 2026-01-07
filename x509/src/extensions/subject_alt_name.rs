@@ -97,7 +97,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 2,
+                    constructed: false,
+            slot: 2,
                     element: Box::new(Element::OctetString(OctetString::from(b"example.com".to_vec()))),
                 },
             ]),
@@ -109,11 +110,13 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 2,
+                    constructed: false,
+            slot: 2,
                     element: Box::new(Element::OctetString(OctetString::from(b"example.com".to_vec()))),
                 },
                 Element::ContextSpecific {
-                    slot: 2,
+                    constructed: false,
+            slot: 2,
                     element: Box::new(Element::OctetString(OctetString::from(b"www.example.com".to_vec()))),
                 },
             ]),
@@ -128,7 +131,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 7,
+                    constructed: false,
+            slot: 7,
                     element: Box::new(Element::OctetString(OctetString::from(vec![192, 0, 2, 1]))),
                 },
             ]),
@@ -142,7 +146,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 7,
+                    constructed: false,
+            slot: 7,
                     element: Box::new(Element::OctetString(OctetString::from(vec![
                         0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
@@ -162,7 +167,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 6,
+                    constructed: false,
+            slot: 6,
                     element: Box::new(Element::OctetString(OctetString::from(b"https://example.com".to_vec()))),
                 },
             ]),
@@ -174,7 +180,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 1,
+                    constructed: false,
+            slot: 1,
                     element: Box::new(Element::OctetString(OctetString::from(b"user@example.com".to_vec()))),
                 },
             ]),
@@ -186,15 +193,18 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 2,
+                    constructed: false,
+            slot: 2,
                     element: Box::new(Element::OctetString(OctetString::from(b"example.com".to_vec()))),
                 },
                 Element::ContextSpecific {
-                    slot: 7,
+                    constructed: false,
+            slot: 7,
                     element: Box::new(Element::OctetString(OctetString::from(vec![192, 0, 2, 1]))),
                 },
                 Element::ContextSpecific {
-                    slot: 6,
+                    constructed: false,
+            slot: 6,
                     element: Box::new(Element::OctetString(OctetString::from(b"https://example.com".to_vec()))),
                 },
             ]),
@@ -233,7 +243,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 7,
+                    constructed: false,
+            slot: 7,
                     element: Box::new(Element::OctetString(OctetString::from(vec![192, 0, 2]))),
                 },
             ]),
@@ -300,6 +311,7 @@ mod tests {
         let other_name_elem = Element::Sequence(vec![
             Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.3.4").unwrap()),
             Element::ContextSpecific {
+                constructed: true,
                 slot: 0,
                 element: Box::new(Element::UTF8String("test".to_string())),
             },
@@ -327,10 +339,12 @@ mod tests {
         // }
         let edi_elem = Element::Sequence(vec![
             Element::ContextSpecific {
+                constructed: true,
                 slot: 0,
                 element: Box::new(Element::UTF8String("Assigner".to_string())),
             },
             Element::ContextSpecific {
+                constructed: false,
                 slot: 1,
                 element: Box::new(Element::UTF8String("Party".to_string())),
             },
@@ -352,6 +366,7 @@ mod tests {
     fn test_general_name_edi_party_name_no_assigner() {
         // Test EDIPartyName with only partyName (nameAssigner is OPTIONAL)
         let edi_elem = Element::Sequence(vec![Element::ContextSpecific {
+            constructed: false,
             slot: 1,
             element: Box::new(Element::PrintableString("Party Only".to_string())),
         }]);

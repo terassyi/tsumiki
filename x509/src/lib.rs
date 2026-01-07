@@ -1,8 +1,9 @@
 use asn1::{ASN1Object, BitString, Element, Integer, ObjectIdentifier};
-use chrono::NaiveDateTime;
+use chrono::{Datelike, NaiveDateTime};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::{
     error::Error,
@@ -384,6 +385,30 @@ impl Decoder<Element, Certificate> for Element {
     }
 }
 
+impl EncodableTo<Certificate> for Element {}
+
+impl Encoder<Certificate, Element> for Certificate {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        Ok(Element::Sequence(vec![
+            self.tbs_certificate.encode()?,
+            self.signature_algorithm.encode()?,
+            Element::BitString(self.signature_value.clone()),
+        ]))
+    }
+}
+
+impl EncodableTo<Certificate> for ASN1Object {}
+
+impl Encoder<Certificate, ASN1Object> for Certificate {
+    type Error = Error;
+
+    fn encode(&self) -> Result<ASN1Object, Self::Error> {
+        Ok(ASN1Object::new(vec![self.encode()?]))
+    }
+}
+
 /*
 TBSCertificate  ::=  SEQUENCE  {
      version         [0]  EXPLICIT Version DEFAULT v1,
@@ -402,7 +427,7 @@ TBSCertificate  ::=  SEQUENCE  {
 }
  */
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TBSCertificate {
     version: Version,
     serial_number: CertificateSerialNumber,
@@ -455,6 +480,67 @@ impl TBSCertificate {
     /// Get the subject public key info
     pub fn subject_public_key_info(&self) -> &SubjectPublicKeyInfo {
         &self.subject_public_key_info
+    }
+}
+
+impl EncodableTo<TBSCertificate> for Element {}
+
+impl Encoder<TBSCertificate, Element> for TBSCertificate {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let mut elements = Vec::new();
+
+        // version [0] EXPLICIT Version DEFAULT v1
+        // Only include version if not V1
+        if self.version != Version::V1 {
+            elements.push(self.version.encode()?);
+        }
+
+        // serialNumber
+        elements.push(self.serial_number.encode()?);
+
+        // signature
+        elements.push(self.signature.encode()?);
+
+        // issuer
+        elements.push(self.issuer.encode()?);
+
+        // validity
+        elements.push(self.validity.encode()?);
+
+        // subject
+        elements.push(self.subject.encode()?);
+
+        // subjectPublicKeyInfo
+        elements.push(self.subject_public_key_info.encode()?);
+
+        // issuerUniqueID [1] IMPLICIT UniqueIdentifier OPTIONAL
+        if let Some(ref issuer_uid) = self.issuer_unique_id {
+            let bit_string = issuer_uid.encode()?;
+            elements.push(Element::ContextSpecific {
+                slot: 1,
+                constructed: false,
+                element: Box::new(bit_string),
+            });
+        }
+
+        // subjectUniqueID [2] IMPLICIT UniqueIdentifier OPTIONAL
+        if let Some(ref subject_uid) = self.subject_unique_id {
+            let bit_string = subject_uid.encode()?;
+            elements.push(Element::ContextSpecific {
+                slot: 2,
+                constructed: false,
+                element: Box::new(bit_string),
+            });
+        }
+
+        // extensions [3] EXPLICIT Extensions OPTIONAL
+        if let Some(ref exts) = self.extensions {
+            elements.push(exts.encode()?);
+        }
+
+        Ok(Element::Sequence(elements))
     }
 }
 
@@ -714,6 +800,29 @@ impl Decoder<Element, AlgorithmIdentifier> for Element {
     }
 }
 
+impl EncodableTo<AlgorithmIdentifier> for Element {}
+
+impl Encoder<AlgorithmIdentifier, Element> for AlgorithmIdentifier {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let mut elements = vec![Element::ObjectIdentifier(self.algorithm.clone())];
+
+        if let Some(ref params) = self.parameters {
+            match params {
+                AlgorithmParameters::Null => {
+                    elements.push(Element::Null);
+                }
+                AlgorithmParameters::Elm(elm) => {
+                    elements.push(elm.clone());
+                }
+            }
+        }
+
+        Ok(Element::Sequence(elements))
+    }
+}
+
 /*
 Version  ::=  INTEGER  {  v1(0), v2(1), v3(2)  }
 
@@ -780,6 +889,18 @@ impl Decoder<Element, SubjectPublicKeyInfo> for Element {
     }
 }
 
+impl EncodableTo<SubjectPublicKeyInfo> for Element {}
+
+impl Encoder<SubjectPublicKeyInfo, Element> for SubjectPublicKeyInfo {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let algorithm_elm = self.algorithm.encode()?;
+        let public_key_elm = Element::BitString(self.subject_public_key.clone());
+        Ok(Element::Sequence(vec![algorithm_elm, public_key_elm]))
+    }
+}
+
 // UniqueIdentifier is a BIT STRING used in X.509 v2 certificates
 // RFC 5280 Section 4.1.2.8: CAs conforming to this profile MUST NOT generate
 // certificates with unique identifiers. This field is deprecated.
@@ -795,13 +916,30 @@ impl UniqueIdentifier {
     pub fn new(bit_string: BitString) -> Self {
         UniqueIdentifier(bit_string)
     }
+}
 
-    pub fn as_bit_string(&self) -> &BitString {
+impl AsRef<BitString> for UniqueIdentifier {
+    fn as_ref(&self) -> &BitString {
         &self.0
     }
+}
 
-    pub fn into_bit_string(self) -> BitString {
-        self.0
+impl From<UniqueIdentifier> for BitString {
+    fn from(uid: UniqueIdentifier) -> Self {
+        uid.0
+    }
+}
+
+impl EncodableTo<UniqueIdentifier> for Element {}
+
+impl Encoder<UniqueIdentifier, Element> for UniqueIdentifier {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        // UniqueIdentifier needs context-specific tagging [1] or [2] IMPLICIT
+        // This is handled by the caller (TBSCertificate encoder)
+        // Here we just return the BitString element
+        Ok(Element::BitString(self.0.clone()))
     }
 }
 
@@ -814,7 +952,7 @@ impl Decoder<Element, UniqueIdentifier> for Element {
         // UniqueIdentifier appears as [1] IMPLICIT or [2] IMPLICIT UniqueIdentifier
         // IMPLICIT tagging means the element directly contains the BitString data
         match self {
-            Element::ContextSpecific { slot, element } => {
+            Element::ContextSpecific { slot, element, .. } => {
                 if *slot != 1 && *slot != 2 {
                     return Err(Error::InvalidUniqueIdentifier(format!(
                         "expected context-specific tag [1] or [2], got [{}]",
@@ -874,7 +1012,7 @@ impl Decoder<Element, Version> for Element {
         // Version appears as [0] EXPLICIT Version in TBSCertificate
         // This means Element::ContextSpecific { slot: 0, element: Box<Element::Integer> }
         let integer = match self {
-            Element::ContextSpecific { slot, element } => {
+            Element::ContextSpecific { slot, element, .. } => {
                 if *slot != 0 {
                     return Err(Error::InvalidVersion(format!(
                         "expected context-specific tag [0], got [{}]",
@@ -907,6 +1045,22 @@ impl Decoder<Element, Version> for Element {
                 v
             ))),
         }
+    }
+}
+
+impl EncodableTo<Version> for Element {}
+
+impl Encoder<Version, Element> for Version {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let version_value = *self as i64;
+        let version_int = Integer::from(version_value.to_be_bytes().to_vec());
+        Ok(Element::ContextSpecific {
+            slot: 0,
+            constructed: true,
+            element: Box::new(Element::Integer(version_int)),
+        })
     }
 }
 
@@ -969,7 +1123,17 @@ impl Decoder<Element, CertificateSerialNumber> for Element {
     }
 }
 
-// https://datatracker.ietf.org/doc/html/rfc5280#sectioで-4.1.2.5
+impl EncodableTo<CertificateSerialNumber> for Element {}
+
+impl Encoder<CertificateSerialNumber, Element> for CertificateSerialNumber {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        Ok(Element::Integer(self.inner.clone()))
+    }
+}
+
+// https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.5
 /*
 Validity ::= SEQUENCE {
     notBefore      Time,
@@ -1026,6 +1190,29 @@ impl Decoder<Element, Validity> for Element {
                 "expected sequence for Validity".to_string(),
             ))
         }
+    }
+}
+
+impl EncodableTo<Validity> for Element {}
+
+impl Encoder<Validity, Element> for Validity {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        // RFC 5280: Use UTCTime for years 1950-2049, GeneralizedTime otherwise
+        let not_before_elm = if self.not_before.year() >= 1950 && self.not_before.year() < 2050 {
+            Element::UTCTime(self.not_before)
+        } else {
+            Element::GeneralizedTime(self.not_before)
+        };
+
+        let not_after_elm = if self.not_after.year() >= 1950 && self.not_after.year() < 2050 {
+            Element::UTCTime(self.not_after)
+        } else {
+            Element::GeneralizedTime(self.not_after)
+        };
+
+        Ok(Element::Sequence(vec![not_before_elm, not_after_elm]))
     }
 }
 
@@ -1093,8 +1280,12 @@ fn algorithm_oid_to_name(oid: &ObjectIdentifier) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::OctetString;
-    use chrono::NaiveDateTime;
+    use crate::extensions::{Extension, Extensions};
+    use crate::types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
+    use asn1::{BitString, OctetString};
+    use chrono::NaiveDate;
+    use der::Der;
+    use pem::Pem;
     use rstest::rstest;
     use std::str::FromStr;
 
@@ -1202,6 +1393,7 @@ mod tests {
     #[rstest]
     #[case::v1(
         Element::ContextSpecific {
+            constructed: true,
             slot: 0,
             element: Box::new(Element::Integer(Integer::from(vec![0x00])))
         },
@@ -1209,6 +1401,7 @@ mod tests {
     )]
     #[case::v2(
         Element::ContextSpecific {
+            constructed: true,
             slot: 0,
             element: Box::new(Element::Integer(Integer::from(vec![0x01])))
         },
@@ -1216,6 +1409,7 @@ mod tests {
     )]
     #[case::v3(
         Element::ContextSpecific {
+            constructed: true,
             slot: 0,
             element: Box::new(Element::Integer(Integer::from(vec![0x02])))
         },
@@ -1232,6 +1426,7 @@ mod tests {
     #[case::direct_integer(Element::Integer(Integer::from(vec![0x00])), "InvalidVersion")]
     #[case::invalid_version_value(
         Element::ContextSpecific {
+            constructed: true,
             slot: 0,
             element: Box::new(Element::Integer(Integer::from(vec![0x03])))
         },
@@ -1239,6 +1434,7 @@ mod tests {
     )]
     #[case::wrong_slot(
         Element::ContextSpecific {
+            constructed: true,
             slot: 1,
             element: Box::new(Element::Integer(Integer::from(vec![0x00])))
         },
@@ -1246,6 +1442,7 @@ mod tests {
     )]
     #[case::not_integer_inside(
         Element::ContextSpecific {
+            constructed: true,
             slot: 0,
             element: Box::new(Element::Null)
         },
@@ -1748,9 +1945,6 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
 
     #[test]
     fn test_decode_v1_certificate() {
-        use der::Der;
-        use pem::Pem;
-
         let pem = Pem::from_str(TEST_CERT_V1).unwrap();
         let der: Der = pem.decode().unwrap();
         let asn1_obj: ASN1Object = der.decode().unwrap();
@@ -1769,9 +1963,6 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
 
     #[test]
     fn test_decode_v3_ca_certificate() {
-        use der::Der;
-        use pem::Pem;
-
         let pem = Pem::from_str(TEST_CERT_V3_CA).unwrap();
         let der: Der = pem.decode().unwrap();
         let asn1_obj: ASN1Object = der.decode().unwrap();
@@ -1791,9 +1982,6 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
 
     #[test]
     fn test_decode_v3_ee_certificate() {
-        use der::Der;
-        use pem::Pem;
-
         let pem = Pem::from_str(TEST_CERT_V3_EE).unwrap();
         let der: Der = pem.decode().unwrap();
         let asn1_obj: ASN1Object = der.decode().unwrap();
@@ -1819,9 +2007,6 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
 
     #[test]
     fn test_decode_v3_ecdsa_p256_certificate() {
-        use der::Der;
-        use pem::Pem;
-
         let pem = Pem::from_str(TEST_CERT_V3_ECDSA_P256).unwrap();
         let der: Der = pem.decode().unwrap();
         let asn1_obj: ASN1Object = der.decode().unwrap();
@@ -1855,9 +2040,6 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
 
     #[test]
     fn test_decode_v3_ecdsa_p384_certificate() {
-        use der::Der;
-        use pem::Pem;
-
         let pem = Pem::from_str(TEST_CERT_V3_ECDSA_P384).unwrap();
         let der: Der = pem.decode().unwrap();
         let asn1_obj: ASN1Object = der.decode().unwrap();
@@ -1891,9 +2073,6 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
 
     #[test]
     fn test_decode_full_certificate() {
-        use der::Der;
-        use pem::Pem;
-
         // Parse PEM -> DER -> ASN1Object -> Certificate
         let pem = Pem::from_str(TEST_CERT_V1).unwrap();
         let der: Der = pem.decode().unwrap();
@@ -1927,5 +2106,783 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             cert.tbs_certificate.subject.rdn_sequence.len(),
             3 // C, O, CN
         );
+    }
+
+    // Encoder tests
+    #[rstest(
+        alg_id,
+        expected_len,
+        case(
+            AlgorithmIdentifier {
+                algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.11").unwrap(),
+                parameters: None,
+            },
+            1
+        ),
+        case(
+            AlgorithmIdentifier {
+                algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.11").unwrap(),
+                parameters: Some(AlgorithmParameters::Null),
+            },
+            2
+        ),
+        case(
+            AlgorithmIdentifier {
+                algorithm: ObjectIdentifier::from_str("1.2.840.10045.4.3.2").unwrap(),
+                parameters: Some(AlgorithmParameters::Elm(Element::OctetString(
+                    OctetString::from(vec![0x01, 0x02, 0x03])
+                ))),
+            },
+            2
+        )
+    )]
+    fn test_algorithm_identifier_encode(alg_id: AlgorithmIdentifier, expected_len: usize) {
+        let encoded = alg_id.encode().unwrap();
+
+        match &encoded {
+            Element::Sequence(elems) => {
+                assert_eq!(elems.len(), expected_len);
+                assert!(matches!(elems[0], Element::ObjectIdentifier(_)));
+                if expected_len == 2 {
+                    // Parameters exist
+                    assert!(alg_id.parameters.is_some());
+                }
+            }
+            _ => panic!("Expected Sequence"),
+        }
+
+        // Round-trip test
+        let decoded: AlgorithmIdentifier = encoded.decode().unwrap();
+        assert_eq!(decoded, alg_id);
+    }
+
+    #[rstest(
+        version,
+        expected_value,
+        case(Version::V1, 0),
+        case(Version::V2, 1),
+        case(Version::V3, 2)
+    )]
+    fn test_version_encode(version: Version, expected_value: u64) {
+        let encoded = version.encode().unwrap();
+        match encoded {
+            Element::ContextSpecific {
+                slot, ref element, ..
+            } => {
+                assert_eq!(slot, 0);
+                match element.as_ref() {
+                    Element::Integer(i) => {
+                        let value = u64::try_from(i).unwrap();
+                        assert_eq!(value, expected_value);
+                    }
+                    _ => panic!("Expected Integer inside context-specific tag"),
+                }
+            }
+            _ => panic!("Expected ContextSpecific"),
+        }
+
+        // Round-trip test
+        let decoded: Version = encoded.decode().unwrap();
+        assert_eq!(decoded, version);
+    }
+
+    #[rstest(
+        serial_bytes,
+        case(vec![0x01]),
+        case(vec![0x01, 0x23, 0x45, 0x67, 0x89]),
+        case(vec![0x7f, 0xee, 0xdd, 0xcc, 0xbb, 0xaa]) // Use 0x7f to avoid sign bit issues
+    )]
+    fn test_certificate_serial_number_encode(serial_bytes: Vec<u8>) {
+        let serial = CertificateSerialNumber::from_bytes(serial_bytes.clone());
+
+        let encoded = serial.encode().unwrap();
+
+        match &encoded {
+            Element::Integer(_) => {
+                // Just verify it's an Integer
+            }
+            _ => panic!("Expected Integer"),
+        }
+
+        // Round-trip test is the most important
+        let decoded: CertificateSerialNumber = encoded.decode().unwrap();
+        assert_eq!(decoded, serial);
+    }
+
+    #[rstest(
+        not_before,
+        not_after,
+        case(
+            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap().and_hms_opt(0, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2025, 1, 1).unwrap().and_hms_opt(0, 0, 0).unwrap()
+        ),
+        case(
+            NaiveDate::from_ymd_opt(1950, 1, 1).unwrap().and_hms_opt(0, 0, 0).unwrap(),
+            NaiveDate::from_ymd_opt(2049, 12, 31).unwrap().and_hms_opt(23, 59, 59).unwrap()
+        ),
+        case(
+            NaiveDate::from_ymd_opt(1949, 12, 31).unwrap().and_hms_opt(23, 59, 59).unwrap(),
+            NaiveDate::from_ymd_opt(2050, 1, 1).unwrap().and_hms_opt(0, 0, 0).unwrap()
+        )
+    )]
+    fn test_validity_encode(not_before: NaiveDateTime, not_after: NaiveDateTime) {
+        let validity = Validity {
+            not_before,
+            not_after,
+        };
+
+        let encoded = validity.encode().unwrap();
+
+        match &encoded {
+            Element::Sequence(elements) => {
+                assert_eq!(elements.len(), 2);
+
+                // Check that dates in range 1950-2049 use UTCTime
+                match &elements[0] {
+                    Element::UTCTime(_) => {
+                        assert!(not_before.year() >= 1950 && not_before.year() < 2050);
+                    }
+                    Element::GeneralizedTime(_) => {
+                        assert!(not_before.year() < 1950 || not_before.year() >= 2050);
+                    }
+                    _ => panic!("Expected UTCTime or GeneralizedTime for notBefore"),
+                }
+
+                match &elements[1] {
+                    Element::UTCTime(_) => {
+                        assert!(not_after.year() >= 1950 && not_after.year() < 2050);
+                    }
+                    Element::GeneralizedTime(_) => {
+                        assert!(not_after.year() < 1950 || not_after.year() >= 2050);
+                    }
+                    _ => panic!("Expected UTCTime or GeneralizedTime for notAfter"),
+                }
+            }
+            _ => panic!("Expected Sequence"),
+        }
+
+        // Round-trip test
+        let decoded: Validity = encoded.decode().unwrap();
+        assert_eq!(decoded, validity);
+    }
+
+    #[rstest(
+        algorithm,
+        public_key_bytes,
+        case(
+            AlgorithmIdentifier {
+                algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(), // RSA
+                parameters: None,
+            },
+            vec![0x30, 0x0d, 0x06, 0x09] // Sample RSA public key bytes
+        ),
+        case(
+            AlgorithmIdentifier {
+                algorithm: ObjectIdentifier::from_str("1.2.840.10045.2.1").unwrap(), // EC public key
+                parameters: Some(AlgorithmParameters::Elm(
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.10045.3.1.7").unwrap()) // prime256v1
+                )),
+            },
+            vec![0x04, 0x41] // Sample EC public key bytes
+        ),
+        case(
+            AlgorithmIdentifier {
+                algorithm: ObjectIdentifier::from_str("1.2.840.10045.2.1").unwrap(), // EC public key
+                parameters: Some(AlgorithmParameters::Null),
+            },
+            vec![0xff, 0xee, 0xdd] // Different key bytes
+        )
+    )]
+    fn test_subject_public_key_info_encode(
+        algorithm: AlgorithmIdentifier,
+        public_key_bytes: Vec<u8>,
+    ) {
+        let subject_public_key_info = SubjectPublicKeyInfo {
+            algorithm: algorithm.clone(),
+            subject_public_key: BitString::new(0, public_key_bytes.clone()),
+        };
+
+        let encoded = subject_public_key_info.encode().unwrap();
+
+        match &encoded {
+            Element::Sequence(elements) => {
+                assert_eq!(elements.len(), 2);
+
+                // First element should be the algorithm identifier
+                let decoded_algorithm: AlgorithmIdentifier = elements[0].decode().unwrap();
+                assert_eq!(decoded_algorithm, algorithm);
+
+                // Second element should be a BitString
+                match &elements[1] {
+                    Element::BitString(bs) => {
+                        assert_eq!(bs.as_bytes(), public_key_bytes.as_slice());
+                    }
+                    _ => panic!("Expected BitString for subject public key"),
+                }
+            }
+            _ => panic!("Expected Sequence"),
+        }
+
+        // Round-trip test
+        let decoded: SubjectPublicKeyInfo = encoded.decode().unwrap();
+        assert_eq!(decoded, subject_public_key_info);
+    }
+
+    #[rstest(
+        name,
+        case(Name {
+            rdn_sequence: vec![
+                RelativeDistinguishedName {
+                    attribute: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_value: "Example CA".to_string(),
+                    }],
+                },
+            ],
+        }),
+        case(Name {
+            rdn_sequence: vec![
+                RelativeDistinguishedName {
+                    attribute: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
+                        attribute_value: "US".to_string(),
+                    }],
+                },
+                RelativeDistinguishedName {
+                    attribute: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.8").unwrap(),
+                        attribute_value: "California".to_string(),
+                    }],
+                },
+                RelativeDistinguishedName {
+                    attribute: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.10").unwrap(),
+                        attribute_value: "Example Corp".to_string(),
+                    }],
+                },
+            ],
+        }),
+        case(Name {
+            rdn_sequence: vec![
+                RelativeDistinguishedName {
+                    attribute: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
+                        attribute_value: "JP".to_string(),
+                    }],
+                },
+                RelativeDistinguishedName {
+                    attribute: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.8").unwrap(),
+                        attribute_value: "Tokyo".to_string(),
+                    }],
+                },
+                RelativeDistinguishedName {
+                    attribute: vec![
+                        AttributeTypeAndValue {
+                            attribute_type: ObjectIdentifier::from_str("2.5.4.10").unwrap(),
+                            attribute_value: "ACME Inc".to_string(),
+                        },
+                        AttributeTypeAndValue {
+                            attribute_type: ObjectIdentifier::from_str("2.5.4.11").unwrap(),
+                            attribute_value: "Engineering".to_string(),
+                        },
+                    ],
+                },
+                RelativeDistinguishedName {
+                    attribute: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_value: "www.example.com".to_string(),
+                    }],
+                },
+            ],
+        }),
+        case(Name {
+            rdn_sequence: vec![
+                RelativeDistinguishedName {
+                    attribute: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_value: "日本語ドメイン.jp".to_string(),
+                    }],
+                },
+            ],
+        })
+    )]
+    fn test_name_encode(name: Name) {
+        let encoded = name.encode().unwrap();
+
+        match &encoded {
+            Element::Sequence(rdn_elements) => {
+                assert_eq!(rdn_elements.len(), name.rdn_sequence.len());
+                for (i, rdn_elm) in rdn_elements.iter().enumerate() {
+                    match rdn_elm {
+                        Element::Set(attr_elements) => {
+                            assert_eq!(attr_elements.len(), name.rdn_sequence[i].attribute.len());
+                            for (j, attr_elm) in attr_elements.iter().enumerate() {
+                                match attr_elm {
+                                    Element::Sequence(seq) => {
+                                        assert_eq!(seq.len(), 2);
+                                        match &seq[0] {
+                                            Element::ObjectIdentifier(oid) => {
+                                                assert_eq!(
+                                                    oid,
+                                                    &name.rdn_sequence[i].attribute[j]
+                                                        .attribute_type
+                                                );
+                                            }
+                                            _ => panic!("Expected ObjectIdentifier"),
+                                        }
+                                        // Check that appropriate string type is used
+                                        match &seq[1] {
+                                            Element::PrintableString(s) => {
+                                                assert_eq!(
+                                                    s,
+                                                    &name.rdn_sequence[i].attribute[j]
+                                                        .attribute_value
+                                                );
+                                            }
+                                            Element::UTF8String(s) => {
+                                                assert_eq!(
+                                                    s,
+                                                    &name.rdn_sequence[i].attribute[j]
+                                                        .attribute_value
+                                                );
+                                            }
+                                            _ => panic!("Expected PrintableString or UTF8String"),
+                                        }
+                                    }
+                                    _ => panic!("Expected Sequence for AttributeTypeAndValue"),
+                                }
+                            }
+                        }
+                        _ => panic!("Expected Set for RDN"),
+                    }
+                }
+            }
+            _ => panic!("Expected Sequence"),
+        }
+
+        // Round-trip test
+        let decoded: Name = encoded.decode().unwrap();
+        assert_eq!(decoded, name);
+    }
+
+    #[rstest(
+        exts,
+        case(Extensions {
+            extensions: vec![
+                Extension {
+                    id: ObjectIdentifier::from_str("2.5.29.19").unwrap(),
+                    critical: false,
+                    value: OctetString::from(vec![0x30, 0x00]),
+                },
+            ],
+        }),
+        case(Extensions {
+            extensions: vec![
+                Extension {
+                    id: ObjectIdentifier::from_str("2.5.29.15").unwrap(),
+                    critical: true,
+                    value: OctetString::from(vec![0x03, 0x02, 0x05, 0xa0]),
+                },
+            ],
+        }),
+        case(Extensions {
+            extensions: vec![
+                Extension {
+                    id: ObjectIdentifier::from_str("2.5.29.19").unwrap(),
+                    critical: true,
+                    value: OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xff]),
+                },
+                Extension {
+                    id: ObjectIdentifier::from_str("2.5.29.14").unwrap(),
+                    critical: false,
+                    value: OctetString::from(vec![0x04, 0x14, 0x01, 0x02, 0x03]),
+                },
+            ],
+        })
+    )]
+    fn test_extensions_encode(exts: Extensions) {
+        let encoded = exts.encode().unwrap();
+
+        // Should be wrapped in [3] EXPLICIT
+        match &encoded {
+            Element::ContextSpecific { slot, element, .. } => {
+                assert_eq!(slot, &3);
+                match element.as_ref() {
+                    Element::Sequence(ext_elements) => {
+                        assert_eq!(ext_elements.len(), exts.extensions.len());
+
+                        for (i, ext_elm) in ext_elements.iter().enumerate() {
+                            match ext_elm {
+                                Element::Sequence(fields) => {
+                                    // Check OID
+                                    match &fields[0] {
+                                        Element::ObjectIdentifier(oid) => {
+                                            assert_eq!(oid, &exts.extensions[i].id);
+                                        }
+                                        _ => panic!("Expected ObjectIdentifier"),
+                                    }
+
+                                    // Check critical field (only present if true)
+                                    let value_index = if exts.extensions[i].critical {
+                                        assert_eq!(fields.len(), 3);
+                                        match &fields[1] {
+                                            Element::Boolean(b) => assert!(b),
+                                            _ => panic!("Expected Boolean"),
+                                        }
+                                        2
+                                    } else {
+                                        assert_eq!(fields.len(), 2);
+                                        1
+                                    };
+
+                                    // Check value
+                                    match &fields[value_index] {
+                                        Element::OctetString(octets) => {
+                                            assert_eq!(
+                                                octets.as_bytes(),
+                                                exts.extensions[i].value.as_bytes()
+                                            );
+                                        }
+                                        _ => panic!("Expected OctetString"),
+                                    }
+                                }
+                                _ => panic!("Expected Sequence for Extension"),
+                            }
+                        }
+                    }
+                    _ => panic!("Expected Sequence inside [3]"),
+                }
+            }
+            _ => panic!("Expected ContextSpecific [3]"),
+        }
+
+        // Round-trip test
+        let decoded: Extensions = encoded.decode().unwrap();
+        assert_eq!(decoded, exts);
+    }
+
+    fn create_tbs_v3_with_extensions() -> TBSCertificate {
+        TBSCertificate {
+            version: Version::V3,
+            serial_number: CertificateSerialNumber::from_bytes(vec![0x01, 0x02, 0x03]),
+            signature: AlgorithmIdentifier {
+                algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.11").unwrap(),
+                parameters: Some(AlgorithmParameters::Null),
+            },
+            issuer: Name {
+                rdn_sequence: vec![RelativeDistinguishedName {
+                    attribute: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_value: "Test CA".to_string(),
+                    }],
+                }],
+            },
+            validity: Validity {
+                not_before: NaiveDate::from_ymd_opt(2024, 1, 1)
+                    .unwrap()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap(),
+                not_after: NaiveDate::from_ymd_opt(2025, 1, 1)
+                    .unwrap()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap(),
+            },
+            subject: Name {
+                rdn_sequence: vec![RelativeDistinguishedName {
+                    attribute: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_value: "Test Subject".to_string(),
+                    }],
+                }],
+            },
+            subject_public_key_info: SubjectPublicKeyInfo {
+                algorithm: AlgorithmIdentifier {
+                    algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
+                    parameters: Some(AlgorithmParameters::Null),
+                },
+                subject_public_key: BitString::new(0, vec![0x30, 0x0d]),
+            },
+            issuer_unique_id: None,
+            subject_unique_id: None,
+            extensions: Some(Extensions {
+                extensions: vec![Extension {
+                    id: ObjectIdentifier::from_str("2.5.29.19").unwrap(),
+                    critical: true,
+                    value: OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xff]),
+                }],
+            }),
+        }
+    }
+
+    fn create_tbs_v1_minimal() -> TBSCertificate {
+        TBSCertificate {
+            version: Version::V1,
+            serial_number: CertificateSerialNumber::from_bytes(vec![0x01]),
+            signature: AlgorithmIdentifier {
+                algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.5").unwrap(),
+                parameters: Some(AlgorithmParameters::Null),
+            },
+            issuer: Name {
+                rdn_sequence: vec![RelativeDistinguishedName {
+                    attribute: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_value: "CA".to_string(),
+                    }],
+                }],
+            },
+            validity: Validity {
+                not_before: NaiveDate::from_ymd_opt(2000, 1, 1)
+                    .unwrap()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap(),
+                not_after: NaiveDate::from_ymd_opt(2001, 1, 1)
+                    .unwrap()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap(),
+            },
+            subject: Name {
+                rdn_sequence: vec![RelativeDistinguishedName {
+                    attribute: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_value: "Subject".to_string(),
+                    }],
+                }],
+            },
+            subject_public_key_info: SubjectPublicKeyInfo {
+                algorithm: AlgorithmIdentifier {
+                    algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
+                    parameters: Some(AlgorithmParameters::Null),
+                },
+                subject_public_key: BitString::new(0, vec![0x30, 0x0d]),
+            },
+            issuer_unique_id: None,
+            subject_unique_id: None,
+            extensions: None,
+        }
+    }
+
+    #[rstest(
+        tbs,
+        case(create_tbs_v3_with_extensions()),
+        case(create_tbs_v1_minimal())
+    )]
+    fn test_tbs_certificate_encode(tbs: TBSCertificate) {
+        let encoded = tbs.encode().unwrap();
+
+        // Should be a Sequence
+        match &encoded {
+            Element::Sequence(elements) => {
+                // V1 certificates have 6 fields (no version field)
+                // V3 certificates with extensions have 8 fields (version + 6 required + extensions)
+                if tbs.version == Version::V1 {
+                    assert_eq!(elements.len(), 6);
+                } else {
+                    assert!(elements.len() >= 7);
+                }
+            }
+            _ => panic!("Expected Sequence for TBSCertificate"),
+        }
+
+        // Round-trip test
+        let decoded: TBSCertificate = encoded.decode().unwrap();
+        assert_eq!(decoded.version, tbs.version);
+        assert_eq!(decoded.serial_number, tbs.serial_number);
+        assert_eq!(decoded.signature, tbs.signature);
+        assert_eq!(decoded.issuer, tbs.issuer);
+        assert_eq!(decoded.validity, tbs.validity);
+        assert_eq!(decoded.subject, tbs.subject);
+        assert_eq!(decoded.subject_public_key_info, tbs.subject_public_key_info);
+        assert_eq!(decoded.issuer_unique_id, tbs.issuer_unique_id);
+        assert_eq!(decoded.subject_unique_id, tbs.subject_unique_id);
+        assert_eq!(decoded.extensions, tbs.extensions);
+    }
+
+    #[test]
+    fn test_certificate_encode_decode_roundtrip() {
+        // Test with a real V3 certificate
+        let pem = Pem::from_str(TEST_CERT_V3_EE).unwrap();
+        let der: Der = pem.decode().unwrap();
+        let asn1_obj: ASN1Object = der.decode().unwrap();
+
+        // Decode certificate
+        let cert: Certificate = asn1_obj.decode().unwrap();
+
+        // Encode certificate
+        let encoded_element: Element = cert.encode().unwrap();
+
+        // Decode back
+        let decoded_cert: Certificate = encoded_element.decode().unwrap();
+
+        // Verify all fields match
+        assert_eq!(decoded_cert.tbs_certificate, cert.tbs_certificate);
+        assert_eq!(decoded_cert.signature_algorithm, cert.signature_algorithm);
+        assert_eq!(decoded_cert.signature_value, cert.signature_value);
+    }
+
+    #[test]
+    fn test_certificate_encode_decode_v1() {
+        // Test with V1 certificate (no extensions)
+        let pem = Pem::from_str(TEST_CERT_V1).unwrap();
+        let der: Der = pem.decode().unwrap();
+        let asn1_obj: ASN1Object = der.decode().unwrap();
+
+        let cert: Certificate = asn1_obj.decode().unwrap();
+        let encoded_element: Element = cert.encode().unwrap();
+        let decoded_cert: Certificate = encoded_element.decode().unwrap();
+
+        assert_eq!(decoded_cert.tbs_certificate.version, Version::V1);
+        assert_eq!(decoded_cert.tbs_certificate, cert.tbs_certificate);
+        assert_eq!(decoded_cert.signature_algorithm, cert.signature_algorithm);
+        assert_eq!(decoded_cert.signature_value, cert.signature_value);
+    }
+
+    #[test]
+    fn test_certificate_encode_decode_v3_ca() {
+        // Test with V3 CA certificate
+        let pem = Pem::from_str(TEST_CERT_V3_CA).unwrap();
+        let der: Der = pem.decode().unwrap();
+        let asn1_obj: ASN1Object = der.decode().unwrap();
+
+        let cert: Certificate = asn1_obj.decode().unwrap();
+        let encoded_element: Element = cert.encode().unwrap();
+        let decoded_cert: Certificate = encoded_element.decode().unwrap();
+
+        assert_eq!(decoded_cert.tbs_certificate.version, Version::V3);
+        assert!(decoded_cert.tbs_certificate.extensions.is_some());
+        assert_eq!(decoded_cert.tbs_certificate, cert.tbs_certificate);
+        assert_eq!(decoded_cert.signature_algorithm, cert.signature_algorithm);
+        assert_eq!(decoded_cert.signature_value, cert.signature_value);
+    }
+
+    #[test]
+    fn test_certificate_encode_to_asn1object() {
+        // Test with V3 EE certificate
+        let pem = Pem::from_str(TEST_CERT_V3_EE).unwrap();
+        let der: Der = pem.decode().unwrap();
+        let original_asn1_obj: ASN1Object = der.decode().unwrap();
+
+        // Decode certificate
+        let cert: Certificate = original_asn1_obj.decode().unwrap();
+
+        // Encode to ASN1Object
+        let encoded_asn1_obj: ASN1Object = cert.encode().unwrap();
+
+        // Decode back from ASN1Object
+        let decoded_cert: Certificate = encoded_asn1_obj.decode().unwrap();
+
+        // Verify all fields match
+        assert_eq!(decoded_cert.tbs_certificate, cert.tbs_certificate);
+        assert_eq!(decoded_cert.signature_algorithm, cert.signature_algorithm);
+        assert_eq!(decoded_cert.signature_value, cert.signature_value);
+
+        // Verify ASN1Object structure
+        assert_eq!(encoded_asn1_obj.elements().len(), 1);
+        assert!(matches!(
+            encoded_asn1_obj.elements()[0],
+            Element::Sequence(_)
+        ));
+    }
+
+    #[test]
+    fn test_certificate_encode_to_asn1object_v1() {
+        // Test with V1 certificate
+        let pem = Pem::from_str(TEST_CERT_V1).unwrap();
+        let der: Der = pem.decode().unwrap();
+        let original_asn1_obj: ASN1Object = der.decode().unwrap();
+
+        let cert: Certificate = original_asn1_obj.decode().unwrap();
+        let encoded_asn1_obj: ASN1Object = cert.encode().unwrap();
+        let decoded_cert: Certificate = encoded_asn1_obj.decode().unwrap();
+
+        assert_eq!(decoded_cert.tbs_certificate.version, Version::V1);
+        assert_eq!(decoded_cert.tbs_certificate, cert.tbs_certificate);
+        assert_eq!(decoded_cert.signature_algorithm, cert.signature_algorithm);
+        assert_eq!(decoded_cert.signature_value, cert.signature_value);
+    }
+
+    #[test]
+    fn test_version_constructed_flag() {
+        // Version is [0] EXPLICIT, so constructed should be true
+        let version = Version::V3;
+        let encoded: Element = version.encode().unwrap();
+
+        match encoded {
+            Element::ContextSpecific {
+                slot, constructed, ..
+            } => {
+                assert_eq!(slot, 0);
+                assert!(
+                    constructed,
+                    "Version [0] EXPLICIT should have constructed=true"
+                );
+            }
+            _ => panic!("Version should encode to ContextSpecific"),
+        }
+    }
+
+    #[test]
+    fn test_unique_identifier_constructed_flag() {
+        // UniqueIdentifier is [1]/[2] IMPLICIT BitString, so constructed should be false
+        let unique_id = UniqueIdentifier(BitString::new(0, vec![0x01, 0x02, 0x03]));
+
+        // Create TBSCertificate with issuerUniqueID to test encoding
+        let tbs = TBSCertificate {
+            version: Version::V3,
+            serial_number: CertificateSerialNumber::from_bytes(vec![0x01]),
+            signature: AlgorithmIdentifier {
+                algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.11").unwrap(),
+                parameters: None,
+            },
+            issuer: Name {
+                rdn_sequence: vec![],
+            },
+            validity: Validity {
+                not_before: NaiveDate::from_ymd_opt(1970, 1, 1)
+                    .unwrap()
+                    .and_hms_opt(0, 0, 0)
+                    .unwrap(),
+                not_after: NaiveDate::from_ymd_opt(1970, 1, 1)
+                    .unwrap()
+                    .and_hms_opt(0, 0, 1)
+                    .unwrap(),
+            },
+            subject: Name {
+                rdn_sequence: vec![],
+            },
+            subject_public_key_info: SubjectPublicKeyInfo {
+                algorithm: AlgorithmIdentifier {
+                    algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
+                    parameters: None,
+                },
+                subject_public_key: BitString::new(0, vec![0x00]),
+            },
+            issuer_unique_id: Some(unique_id),
+            subject_unique_id: None,
+            extensions: None,
+        };
+
+        let encoded: Element = tbs.encode().unwrap();
+
+        if let Element::Sequence(elements) = encoded {
+            // Find the issuerUniqueID element (slot 1)
+            let issuer_uid = elements
+                .iter()
+                .find(|e| matches!(e, Element::ContextSpecific { slot: 1, .. }))
+                .expect("issuerUniqueID should be present");
+
+            if let Element::ContextSpecific {
+                slot, constructed, ..
+            } = issuer_uid
+            {
+                assert_eq!(*slot, 1);
+                assert!(
+                    !(*constructed),
+                    "issuerUniqueID [1] IMPLICIT should have constructed=false"
+                );
+            }
+        } else {
+            panic!("TBSCertificate should encode to Sequence");
+        }
     }
 }

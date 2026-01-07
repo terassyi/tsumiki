@@ -156,7 +156,8 @@ mod tests {
         Element::Sequence(vec![
             Element::ObjectIdentifier(ObjectIdentifier::from_str(AuthorityInfoAccess::OCSP).unwrap()),
             Element::ContextSpecific {
-                    slot: 6,
+                    constructed: false,
+            slot: 6,
                     element: Box::new(Element::OctetString(OctetString::from(b"http://ocsp.example.com".to_vec()))),
                 },
             ]),
@@ -173,7 +174,8 @@ mod tests {
         Element::Sequence(vec![
             Element::ObjectIdentifier(ObjectIdentifier::from_str(AuthorityInfoAccess::CA_ISSUERS).unwrap()),
             Element::ContextSpecific {
-                    slot: 6,
+                    constructed: false,
+            slot: 6,
                     element: Box::new(Element::OctetString(OctetString::from(b"http://ca.example.com/cert.crt".to_vec()))),
                 },
             ]),
@@ -190,14 +192,16 @@ mod tests {
             Element::Sequence(vec![
                     Element::ObjectIdentifier(ObjectIdentifier::from_str(AuthorityInfoAccess::OCSP).unwrap()),
                     Element::ContextSpecific {
-                        slot: 6,
+                        constructed: false,
+            slot: 6,
                         element: Box::new(Element::OctetString(OctetString::from(b"http://ocsp.example.com".to_vec()))),
                     },
                 ]),
             Element::Sequence(vec![
                     Element::ObjectIdentifier(ObjectIdentifier::from_str(AuthorityInfoAccess::CA_ISSUERS).unwrap()),
                     Element::ContextSpecific {
-                        slot: 6,
+                        constructed: false,
+            slot: 6,
                         element: Box::new(Element::OctetString(OctetString::from(b"http://ca.example.com/cert.crt".to_vec()))),
                     },
                 ]),
@@ -220,14 +224,16 @@ mod tests {
             Element::Sequence(vec![
                     Element::ObjectIdentifier(ObjectIdentifier::from_str(AuthorityInfoAccess::OCSP).unwrap()),
                     Element::ContextSpecific {
-                        slot: 6,
+                        constructed: false,
+            slot: 6,
                         element: Box::new(Element::OctetString(OctetString::from(b"http://ocsp1.example.com".to_vec()))),
                     },
                 ]),
             Element::Sequence(vec![
                     Element::ObjectIdentifier(ObjectIdentifier::from_str(AuthorityInfoAccess::OCSP).unwrap()),
                     Element::ContextSpecific {
-                        slot: 6,
+                        constructed: false,
+            slot: 6,
                         element: Box::new(Element::OctetString(OctetString::from(b"http://ocsp2.example.com".to_vec()))),
                     },
                 ]),
@@ -250,7 +256,8 @@ mod tests {
             Element::Sequence(vec![
                     Element::ObjectIdentifier(ObjectIdentifier::from_str(AuthorityInfoAccess::OCSP).unwrap()),
                     Element::ContextSpecific {
-                        slot: 2,
+                        constructed: false,
+            slot: 2,
                         element: Box::new(Element::OctetString(OctetString::from(b"ocsp.example.com".to_vec()))),
                     },
                 ]),
@@ -291,7 +298,8 @@ mod tests {
         Element::Sequence(vec![
             Element::OctetString(OctetString::from(vec![0x01])),
             Element::ContextSpecific {
-                    slot: 6,
+                    constructed: false,
+            slot: 6,
                     element: Box::new(Element::OctetString(OctetString::from(b"http://ocsp.example.com".to_vec()))),
                 },
             ]),

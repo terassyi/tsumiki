@@ -83,7 +83,7 @@ impl Decoder<Element, PolicyConstraints> for Element {
 
                 for elem in elements {
                     match elem {
-                        Element::ContextSpecific { slot, element } => match slot {
+                        Element::ContextSpecific { slot, element, .. } => match slot {
                             0 => {
                                 // requireExplicitPolicy [0]
                                 if let Element::Integer(int) = element.as_ref() {
@@ -175,6 +175,7 @@ mod tests {
 
         if let Some(value) = require_explicit {
             elements.push(Element::ContextSpecific {
+                constructed: false,
                 slot: 0,
                 element: Box::new(Element::Integer(Integer::from(vec![value as u8]))),
             });
@@ -182,6 +183,7 @@ mod tests {
 
         if let Some(value) = inhibit_mapping {
             elements.push(Element::ContextSpecific {
+                constructed: false,
                 slot: 1,
                 element: Box::new(Element::Integer(Integer::from(vec![value as u8]))),
             });
@@ -227,6 +229,7 @@ mod tests {
     fn test_policy_constraints_decode_failure_invalid_tag() {
         // Invalid context-specific tag [2]
         let elem = Element::Sequence(vec![Element::ContextSpecific {
+            constructed: true,
             slot: 2,
             element: Box::new(Element::Integer(Integer::from(vec![0x00]))),
         }]);
@@ -252,6 +255,7 @@ mod tests {
     fn test_policy_constraints_decode_failure_wrong_inner_type() {
         // Context-specific but inner is not Integer
         let elem = Element::Sequence(vec![Element::ContextSpecific {
+            constructed: false,
             slot: 0,
             element: Box::new(Element::OctetString(asn1::OctetString::from(vec![0x00]))),
         }]);
@@ -282,10 +286,12 @@ mod tests {
         // Test with larger values
         let elem = Element::Sequence(vec![
             Element::ContextSpecific {
+                constructed: false,
                 slot: 0,
                 element: Box::new(Element::Integer(Integer::from(vec![0x03, 0xE8]))), // 1000
             },
             Element::ContextSpecific {
+                constructed: false,
                 slot: 1,
                 element: Box::new(Element::Integer(Integer::from(vec![0x01, 0xF4]))), // 500
             },
@@ -304,10 +310,12 @@ mod tests {
         // Both fields with value 0 (immediate constraint)
         let elem = Element::Sequence(vec![
             Element::ContextSpecific {
+                constructed: false,
                 slot: 0,
                 element: Box::new(Element::Integer(Integer::from(vec![0x00]))),
             },
             Element::ContextSpecific {
+                constructed: false,
                 slot: 1,
                 element: Box::new(Element::Integer(Integer::from(vec![0x00]))),
             },

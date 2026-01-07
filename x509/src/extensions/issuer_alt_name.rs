@@ -96,7 +96,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 2,
+                    constructed: false,
+            slot: 2,
                     element: Box::new(Element::OctetString(OctetString::from(b"ca.example.com".to_vec()))),
                 },
             ]),
@@ -108,7 +109,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 1,
+                    constructed: false,
+            slot: 1,
                     element: Box::new(Element::OctetString(OctetString::from(b"ca@example.com".to_vec()))),
                 },
             ]),
@@ -120,7 +122,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 7,
+                    constructed: false,
+            slot: 7,
                     element: Box::new(Element::OctetString(OctetString::from(vec![192, 0, 2, 1]))),
                 },
             ]),
@@ -134,7 +137,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 6,
+                    constructed: false,
+            slot: 6,
                     element: Box::new(Element::OctetString(OctetString::from(b"https://ca.example.com".to_vec()))),
                 },
             ]),
@@ -146,15 +150,18 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 2,
+                    constructed: false,
+            slot: 2,
                     element: Box::new(Element::OctetString(OctetString::from(b"ca.example.com".to_vec()))),
                 },
                 Element::ContextSpecific {
-                    slot: 1,
+                    constructed: false,
+            slot: 1,
                     element: Box::new(Element::OctetString(OctetString::from(b"ca@example.com".to_vec()))),
                 },
                 Element::ContextSpecific {
-                    slot: 6,
+                    constructed: false,
+            slot: 6,
                     element: Box::new(Element::OctetString(OctetString::from(b"https://ca.example.com".to_vec()))),
                 },
             ]),
@@ -191,7 +198,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ContextSpecific {
-                    slot: 7,
+                    constructed: false,
+            slot: 7,
                     element: Box::new(Element::OctetString(OctetString::from(vec![192, 0, 2]))),
                 },
             ]),
