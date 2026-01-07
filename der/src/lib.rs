@@ -2,6 +2,7 @@ use error::Error;
 use nom::{IResult, Parser};
 use pem::Pem;
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 pub mod error;
 
@@ -17,6 +18,20 @@ impl Der {
 
     pub fn new(elements: Vec<Tlv>) -> Self {
         Der { elements }
+    }
+}
+
+impl EncodableTo<Der> for Vec<u8> {}
+
+impl Encoder<Der, Vec<u8>> for Der {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Vec<u8>, Self::Error> {
+        self.elements
+            .iter()
+            .map(|tlv| tlv.encode())
+            .collect::<Result<Vec<_>, _>>()
+            .map(|vecs| vecs.into_iter().flatten().collect())
     }
 }
 
@@ -114,6 +129,25 @@ impl Tag {
             Tag::Primitive(_, _) => None,
             Tag::ContextSpecific { slot, .. } => Some(*slot),
         }
+    }
+}
+
+impl EncodableTo<Tag> for u8 {}
+
+impl Encoder<Tag, u8> for Tag {
+    type Error = Error;
+
+    fn encode(&self) -> Result<u8, Self::Error> {
+        Ok(match self {
+            Tag::Primitive(_, value) => *value,
+            Tag::ContextSpecific { slot, constructed } => {
+                let mut tag = 0x80; // Context-specific class
+                if *constructed {
+                    tag |= TAG_CONSTRUCTED;
+                }
+                tag | slot
+            }
+        })
     }
 }
 
@@ -280,6 +314,51 @@ impl Tlv {
     }
 }
 
+impl EncodableTo<Tlv> for Vec<u8> {}
+
+impl Encoder<Tlv, Vec<u8>> for Tlv {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Vec<u8>, Self::Error> {
+        // Get content bytes
+        let content = match &self.value {
+            Value::Data(data) => data.clone(),
+            Value::Tlv(tlvs) => tlvs
+                .iter()
+                .map(|tlv| tlv.encode())
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .flatten()
+                .collect(),
+        };
+
+        // Build result: tag + length + content
+        let tag = self.tag.encode()?;
+        let length = encode_length(content.len());
+
+        Ok([tag].into_iter().chain(length).chain(content).collect())
+    }
+}
+
+fn encode_length(length: usize) -> Vec<u8> {
+    if length < 0x80 {
+        // Short form: length fits in 7 bits (0-127)
+        vec![length as u8]
+    } else {
+        // Long form: first byte = 0x80 | number_of_length_bytes, followed by length bytes
+        let length_bytes: Vec<u8> = length
+            .to_be_bytes()
+            .into_iter()
+            .skip_while(|&b| b == 0) // Skip leading zero bytes
+            .collect();
+
+        [0x80 | length_bytes.len() as u8]
+            .into_iter()
+            .chain(length_bytes)
+            .collect()
+    }
+}
+
 fn parse_tag(input: &[u8]) -> IResult<&[u8], Tag> {
     let (input, n) = nom::number::be_u8().parse(input)?;
     Ok((input, Tag::from(n)))
@@ -328,7 +407,9 @@ mod tests {
     use rstest::rstest;
 
     use crate::{Der, PrimitiveTag, Tag, Tlv, Value, parse_length};
+    use pem::Pem;
     use tsumiki::decoder::Decoder;
+    use tsumiki::encoder::Encoder;
 
     #[rstest(
         input,
@@ -598,5 +679,21 @@ e8ZYGIc4gvs5McdrVUyYGUs=
         // Assuming not to panic here.
         let der: Der = pem.decode().unwrap();
         println!("{:?}", der);
+    }
+
+    #[rstest(cert_pem, case(TEST_PEM_CERT1), case(TEST_PEM_CERT2))]
+    fn test_roundtrip_der_encode(cert_pem: &str) {
+        // PEM -> Der -> Vec<u8> -> Der
+        let pem: Pem = cert_pem.parse().expect("Failed to parse PEM");
+        let original_der: Der = pem.decode().expect("Failed to decode PEM to Der");
+
+        let encoded_bytes = original_der
+            .encode()
+            .expect("Failed to encode Der to Vec<u8>");
+        let decoded_der: Der = encoded_bytes
+            .decode()
+            .expect("Failed to decode Vec<u8> to Der");
+
+        assert_eq!(original_der, decoded_der);
     }
 }
