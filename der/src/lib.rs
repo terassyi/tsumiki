@@ -5,7 +5,7 @@ use tsumiki::decoder::{DecodableFrom, Decoder};
 
 pub mod error;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Der {
     elements: Vec<Tlv>,
 }
@@ -13,6 +13,10 @@ pub struct Der {
 impl Der {
     pub fn elements(&self) -> &[Tlv] {
         &self.elements
+    }
+
+    pub fn new(elements: Vec<Tlv>) -> Self {
+        Der { elements }
     }
 }
 
@@ -71,6 +75,9 @@ impl Decoder<Pem, Der> for Pem {
     }
 }
 
+/// Tag byte constructed flag (bit 5)
+pub const TAG_CONSTRUCTED: u8 = 0b0010_0000;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tag {
     Primitive(PrimitiveTag, u8), // This variant has a primitive tag number and an actual value.
@@ -80,7 +87,7 @@ pub enum Tag {
 impl Tag {
     fn is_constructed(&self) -> bool {
         match self {
-            Tag::Primitive(_, inner) => (*inner) & 0b0010_0000 != 0,
+            Tag::Primitive(_, inner) => (*inner) & TAG_CONSTRUCTED != 0,
             Tag::ContextSpecific { constructed, .. } => *constructed,
         }
     }
@@ -116,8 +123,8 @@ impl From<u8> for Tag {
 
         if is_context_specific {
             // Context-specific tag
-            // Bit 6 (0x20) indicates constructed (1) or primitive (0)
-            let constructed = value & 0b0010_0000 != 0;
+            // Bit 5 indicates constructed (1) or primitive (0)
+            let constructed = value & TAG_CONSTRUCTED != 0;
             let slot_number = value & 0b0001_1111; // Bits 0-4 are the slot number
             Tag::ContextSpecific {
                 slot: slot_number,
@@ -209,6 +216,20 @@ enum Value {
 impl Tlv {
     pub fn tag(&self) -> &Tag {
         &self.tag
+    }
+
+    pub fn new_primitive(tag: Tag, data: Vec<u8>) -> Self {
+        Tlv {
+            tag,
+            value: Value::Data(data),
+        }
+    }
+
+    pub fn new_constructed(tag: Tag, tlvs: Vec<Tlv>) -> Self {
+        Tlv {
+            tag,
+            value: Value::Tlv(tlvs),
+        }
     }
 
     pub fn data(&self) -> Option<&[u8]> {

@@ -28,4 +28,6 @@ pub enum Error {
     InvalidContextSpecific { slot: u8, msg: String },
     #[error("invalid DER encoding: {0}")]
     FailedToDecodeDer(#[source] der::error::Error),
+    #[error("invalid element: {0}")]
+    InvalidElement(String),
 }
