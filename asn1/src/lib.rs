@@ -1063,9 +1063,9 @@ mod tests {
     use rstest::rstest;
     use std::str::FromStr;
 
-    use crate::{BitString, Integer, ObjectIdentifier, OctetString, ASN1Object, Element};
+    use crate::{ASN1Object, BitString, Element, Integer, ObjectIdentifier, OctetString};
+    use der::{PrimitiveTag, TAG_CONSTRUCTED, Tag, Tlv};
     use num_bigint::BigInt;
-    use der::{Tag, Tlv, PrimitiveTag, TAG_CONSTRUCTED};
     use tsumiki::encoder::Encoder;
 
     #[rstest(input, expected, case(vec![0x01], "1"), case(vec![0x03, 0xd4, 0x15, 0x31, 0x8e, 0x2c, 0x57, 0x1d, 0x29, 0x05, 0xfc, 0x3e, 0x05, 0x27, 0x68, 0x9d, 0x0d, 0x09], "333504890676592408951587385614406537514249"))]
@@ -2346,18 +2346,18 @@ e8ZYGIc4gvs5McdrVUyYGUs=
         }
     }
 
-    #[rstest(
-        cert_pem,
-        case(TEST_PEM_CERT1),
-        case(TEST_PEM_CERT2)
-    )]
+    #[rstest(cert_pem, case(TEST_PEM_CERT1), case(TEST_PEM_CERT2))]
     fn test_roundtrip_certificate(cert_pem: &str) {
         // PEM -> Der -> ASN1Object -> Der
         let pem: pem::Pem = cert_pem.parse().expect("Failed to parse PEM");
         let original_der: der::Der = pem.decode().expect("Failed to decode PEM to Der");
 
-        let asn1_obj: ASN1Object = original_der.decode().expect("Failed to decode Der to ASN1Object");
-        let re_encoded_der = asn1_obj.encode().expect("Failed to encode ASN1Object to Der");
+        let asn1_obj: ASN1Object = original_der
+            .decode()
+            .expect("Failed to decode Der to ASN1Object");
+        let re_encoded_der = asn1_obj
+            .encode()
+            .expect("Failed to encode ASN1Object to Der");
 
         assert_eq!(original_der, re_encoded_der);
     }

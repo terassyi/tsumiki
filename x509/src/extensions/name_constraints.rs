@@ -68,7 +68,9 @@ impl Decoder<Element, GeneralSubtree> for Element {
                 // Process optional minimum [0] and maximum [1] fields
                 for elem in iter {
                     match elem {
-                        Element::ContextSpecific { slot: 0, element, .. } => {
+                        Element::ContextSpecific {
+                            slot: 0, element, ..
+                        } => {
                             // minimum [0] IMPLICIT INTEGER DEFAULT 0
                             // IMPLICIT tagging: content is raw INTEGER bytes as OctetString
                             match element.as_ref() {
@@ -94,7 +96,9 @@ impl Decoder<Element, GeneralSubtree> for Element {
                                 }
                             }
                         }
-                        Element::ContextSpecific { slot: 1, element, .. } => {
+                        Element::ContextSpecific {
+                            slot: 1, element, ..
+                        } => {
                             // maximum [1] IMPLICIT INTEGER OPTIONAL
                             // IMPLICIT tagging: content is raw INTEGER bytes as OctetString
                             match element.as_ref() {
@@ -183,7 +187,9 @@ impl Decoder<Element, NameConstraints> for Element {
 
                 for elem in elements {
                     match elem {
-                        Element::ContextSpecific { slot: 0, element, .. } => {
+                        Element::ContextSpecific {
+                            slot: 0, element, ..
+                        } => {
                             // permittedSubtrees [0] IMPLICIT GeneralSubtrees
                             match element.as_ref() {
                                 Element::Sequence(subtrees) => {
@@ -206,7 +212,9 @@ impl Decoder<Element, NameConstraints> for Element {
                                 }
                             }
                         }
-                        Element::ContextSpecific { slot: 1, element, .. } => {
+                        Element::ContextSpecific {
+                            slot: 1, element, ..
+                        } => {
                             // excludedSubtrees [1] IMPLICIT GeneralSubtrees
                             match element.as_ref() {
                                 Element::Sequence(subtrees) => {
@@ -486,19 +494,19 @@ mod tests {
         let input = Element::Sequence(vec![
             Element::ContextSpecific {
                 constructed: false,
-            slot: 2,
+                slot: 2,
                 element: Box::new(Element::OctetString(OctetString::from(
                     b".example.com".to_vec(),
                 ))),
             },
             Element::ContextSpecific {
                 constructed: false,
-            slot: 0,
+                slot: 0,
                 element: Box::new(Element::OctetString(OctetString::from(vec![0x01]))),
             },
             Element::ContextSpecific {
                 constructed: false,
-            slot: 1,
+                slot: 1,
                 element: Box::new(Element::OctetString(OctetString::from(vec![0x05]))),
             },
         ]);
@@ -526,7 +534,7 @@ mod tests {
             element: Box::new(Element::Sequence(vec![Element::Sequence(vec![
                 Element::ContextSpecific {
                     constructed: false,
-            slot: 7,
+                    slot: 7,
                     element: Box::new(Element::OctetString(OctetString::from(vec![
                         192, 0, 2, 0, 255, 255, 255, 0,
                     ]))),
@@ -564,7 +572,7 @@ mod tests {
             element: Box::new(Element::Sequence(vec![Element::Sequence(vec![
                 Element::ContextSpecific {
                     constructed: false,
-            slot: 2,
+                    slot: 2,
                     element: Box::new(Element::IA5String(".example.com".to_string())),
                 },
             ])])),

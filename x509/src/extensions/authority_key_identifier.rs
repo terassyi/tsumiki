@@ -95,7 +95,9 @@ impl Decoder<Element, AuthorityKeyIdentifier> for Element {
                 for elem in elements {
                     match elem {
                         // [0] IMPLICIT KeyIdentifier (OCTET STRING)
-                        Element::ContextSpecific { slot: 0, element, .. } => {
+                        Element::ContextSpecific {
+                            slot: 0, element, ..
+                        } => {
                             if let Element::OctetString(os) = element.as_ref() {
                                 key_identifier = Some(os.as_bytes().to_vec());
                             } else {
@@ -105,7 +107,9 @@ impl Decoder<Element, AuthorityKeyIdentifier> for Element {
                             }
                         }
                         // [1] IMPLICIT GeneralNames (SEQUENCE OF GeneralName)
-                        Element::ContextSpecific { slot: 1, element, .. } => {
+                        Element::ContextSpecific {
+                            slot: 1, element, ..
+                        } => {
                             // GeneralNames is a SEQUENCE OF GeneralName
                             match element.as_ref() {
                                 Element::Sequence(names) => {
@@ -126,7 +130,9 @@ impl Decoder<Element, AuthorityKeyIdentifier> for Element {
                             }
                         }
                         // [2] IMPLICIT CertificateSerialNumber (INTEGER)
-                        Element::ContextSpecific { slot: 2, element, .. } => {
+                        Element::ContextSpecific {
+                            slot: 2, element, ..
+                        } => {
                             // IMPLICIT tagging: OctetString wrapper around raw INTEGER bytes
                             if let Element::OctetString(os) = element.as_ref() {
                                 authority_cert_serial_number = Some(

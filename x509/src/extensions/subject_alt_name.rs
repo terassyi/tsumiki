@@ -312,7 +312,7 @@ mod tests {
             Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.3.4").unwrap()),
             Element::ContextSpecific {
                 constructed: true,
-            slot: 0,
+                slot: 0,
                 element: Box::new(Element::UTF8String("test".to_string())),
             },
         ]);
@@ -340,12 +340,12 @@ mod tests {
         let edi_elem = Element::Sequence(vec![
             Element::ContextSpecific {
                 constructed: true,
-            slot: 0,
+                slot: 0,
                 element: Box::new(Element::UTF8String("Assigner".to_string())),
             },
             Element::ContextSpecific {
                 constructed: false,
-            slot: 1,
+                slot: 1,
                 element: Box::new(Element::UTF8String("Party".to_string())),
             },
         ]);

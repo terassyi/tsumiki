@@ -176,7 +176,7 @@ mod tests {
         if let Some(value) = require_explicit {
             elements.push(Element::ContextSpecific {
                 constructed: false,
-            slot: 0,
+                slot: 0,
                 element: Box::new(Element::Integer(Integer::from(vec![value as u8]))),
             });
         }
@@ -184,7 +184,7 @@ mod tests {
         if let Some(value) = inhibit_mapping {
             elements.push(Element::ContextSpecific {
                 constructed: false,
-            slot: 1,
+                slot: 1,
                 element: Box::new(Element::Integer(Integer::from(vec![value as u8]))),
             });
         }
@@ -287,12 +287,12 @@ mod tests {
         let elem = Element::Sequence(vec![
             Element::ContextSpecific {
                 constructed: false,
-            slot: 0,
+                slot: 0,
                 element: Box::new(Element::Integer(Integer::from(vec![0x03, 0xE8]))), // 1000
             },
             Element::ContextSpecific {
                 constructed: false,
-            slot: 1,
+                slot: 1,
                 element: Box::new(Element::Integer(Integer::from(vec![0x01, 0xF4]))), // 500
             },
         ]);
@@ -311,12 +311,12 @@ mod tests {
         let elem = Element::Sequence(vec![
             Element::ContextSpecific {
                 constructed: false,
-            slot: 0,
+                slot: 0,
                 element: Box::new(Element::Integer(Integer::from(vec![0x00]))),
             },
             Element::ContextSpecific {
                 constructed: false,
-            slot: 1,
+                slot: 1,
                 element: Box::new(Element::Integer(Integer::from(vec![0x00]))),
             },
         ]);

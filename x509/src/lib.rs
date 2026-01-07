@@ -2145,7 +2145,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                 assert!(matches!(elems[0], Element::ObjectIdentifier(_)));
                 if expected_len == 2 {
                     // Parameters exist
-                    assert!(matches!(&alg_id.parameters, Some(_)));
+                    assert!(alg_id.parameters.is_some());
                 }
             }
             _ => panic!("Expected Sequence"),
@@ -2812,8 +2812,8 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                 slot, constructed, ..
             } => {
                 assert_eq!(slot, 0);
-                assert_eq!(
-                    constructed, true,
+                assert!(
+                    constructed,
                     "Version [0] EXPLICIT should have constructed=true"
                 );
             }
@@ -2876,8 +2876,8 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             } = issuer_uid
             {
                 assert_eq!(*slot, 1);
-                assert_eq!(
-                    *constructed, false,
+                assert!(
+                    !(*constructed),
                     "issuerUniqueID [1] IMPLICIT should have constructed=false"
                 );
             }
