@@ -12,7 +12,7 @@ use crate::utils::read_input;
 use super::format::format_asn1;
 
 #[derive(Args)]
-pub struct Config {
+pub(crate) struct Config {
     /// Path to the DER or PEM file. If not specified, reads from stdin
     file: Option<String>,
 
@@ -21,7 +21,7 @@ pub struct Config {
     parse_implicit: bool,
 }
 
-pub fn execute(config: Config) -> Result<()> {
+pub(crate) fn execute(config: Config) -> Result<()> {
     // Read input
     let input_bytes = read_input(config.file.as_deref())?;
 

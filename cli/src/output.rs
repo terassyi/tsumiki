@@ -1,5 +1,5 @@
 #[derive(Clone, Copy, clap::ValueEnum)]
-pub enum OutputFormat {
+pub(crate) enum OutputFormat {
     /// Human-readable text format (OpenSSL-like)
     Text,
     /// JSON format

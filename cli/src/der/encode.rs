@@ -5,7 +5,7 @@ use crate::error::Result;
 use crate::utils::read_input;
 
 #[derive(Args)]
-pub struct Config {
+pub(crate) struct Config {
     /// Path to the DER file. If not specified, reads from stdin
     file: Option<String>,
 
@@ -31,7 +31,7 @@ impl From<LabelType> for Label {
     }
 }
 
-pub fn execute(config: Config) -> Result<()> {
+pub(crate) fn execute(config: Config) -> Result<()> {
     // Read DER bytes from input
     let der_bytes = read_input(config.file.as_deref())?;
 
