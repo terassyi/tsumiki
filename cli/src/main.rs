@@ -53,6 +53,9 @@ fn main() -> Result<()> {
             DerCommands::Decode { config } => {
                 der::decode::execute(config)?;
             }
+            DerCommands::Dump { config } => {
+                der::dump::execute(config)?;
+            }
             DerCommands::Encode { config } => {
                 der::encode::execute(config)?;
             }

@@ -1,9 +1,9 @@
-pub mod decode;
+pub(crate) mod decode;
 
 use clap::Subcommand;
 
 #[derive(Subcommand)]
-pub enum CertCommands {
+pub(crate) enum CertCommands {
     /// Decode and display a certificate
     Decode {
         #[command(flatten)]

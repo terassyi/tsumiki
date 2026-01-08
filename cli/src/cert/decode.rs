@@ -11,7 +11,7 @@ use crate::output::OutputFormat;
 use crate::utils::read_input;
 
 #[derive(Args)]
-pub struct Config {
+pub(crate) struct Config {
     /// Path to the certificate file (PEM or DER format). If not specified, reads from stdin
     file: Option<String>,
 
@@ -42,7 +42,7 @@ impl Config {
     }
 }
 
-pub fn execute(config: Config) -> Result<()> {
+pub(crate) fn execute(config: Config) -> Result<()> {
     // Read input
     let input_bytes = read_input(config.file.as_deref())?;
 
