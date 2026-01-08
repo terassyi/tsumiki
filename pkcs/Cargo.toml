@@ -1,20 +1,23 @@
 [package]
-name = "x509"
+name = "pkcs"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [dependencies]
 asn1 = { path = "../asn1" }
-chrono = { workspace = true }
 der = { path = "../der" }
-ipnet = { version = "2.10.1", features = ["serde"] }
 pem = { path = "../pem" }
-serde = { workspace = true }
-serde_json = { workspace = true }
-thiserror = { workspace = true }
 tsumiki = { path = "../tsumiki" }
+thiserror.workspace = true
+num-bigint = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 rstest.workspace = true
+pem = { path = "../pem" }
+der = { path = "../der" }
+asn1 = { path = "../asn1" }

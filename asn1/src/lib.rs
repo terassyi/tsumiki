@@ -1,4 +1,4 @@
-use std::{fmt::Display, str::FromStr};
+use std::{fmt::Display, ops::Deref, str::FromStr};
 
 use chrono::NaiveDateTime;
 use der::{Der, PrimitiveTag, TAG_CONSTRUCTED, Tag, Tlv};
@@ -304,7 +304,7 @@ impl TryFrom<&Element> for Tlv {
             }
             Element::Integer(i) => {
                 let tag = Tag::Primitive(PrimitiveTag::Integer, u8::from(&PrimitiveTag::Integer));
-                let data = i.as_bigint().to_signed_bytes_be();
+                let data = i.as_ref().to_signed_bytes_be();
                 Ok(Tlv::new_primitive(tag, data))
             }
             Element::BitString(bs) => {
@@ -448,11 +448,6 @@ pub struct Integer {
 }
 
 impl Integer {
-    /// Returns a reference to the inner BigInt
-    pub fn as_bigint(&self) -> &BigInt {
-        &self.inner
-    }
-
     /// Converts the Integer to u32 if it fits in the range
     pub fn to_u32(&self) -> Option<u32> {
         self.inner.to_u32()
@@ -515,6 +510,38 @@ impl From<Vec<u8>> for Integer {
         Integer {
             inner: BigInt::from_signed_bytes_be(&value),
         }
+    }
+}
+
+impl From<BigInt> for Integer {
+    fn from(value: BigInt) -> Self {
+        Integer { inner: value }
+    }
+}
+
+impl AsRef<BigInt> for Integer {
+    fn as_ref(&self) -> &BigInt {
+        &self.inner
+    }
+}
+
+impl Deref for Integer {
+    type Target = BigInt;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl From<Integer> for BigInt {
+    fn from(value: Integer) -> Self {
+        value.inner
+    }
+}
+
+impl From<&Integer> for BigInt {
+    fn from(value: &Integer) -> Self {
+        value.inner.clone()
     }
 }
 

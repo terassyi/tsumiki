@@ -2,9 +2,11 @@ use clap::{Parser, Subcommand};
 
 mod asn1;
 mod cert;
+mod decode;
 mod der;
 mod error;
 mod output;
+mod pkcs;
 mod utils;
 
 use error::Result;
@@ -12,6 +14,7 @@ use error::Result;
 use asn1::Asn1Commands;
 use cert::CertCommands;
 use der::DerCommands;
+use pkcs::PkcsCommands;
 
 #[derive(Parser)]
 #[command(name = "tsumiki")]
@@ -38,6 +41,11 @@ enum Commands {
         #[command(subcommand)]
         command: Asn1Commands,
     },
+    /// PKCS operations
+    Pkcs {
+        #[command(subcommand)]
+        command: PkcsCommands,
+    },
 }
 
 fn main() -> Result<()> {
@@ -63,6 +71,11 @@ fn main() -> Result<()> {
         Commands::Asn1 { command } => match command {
             Asn1Commands::Decode { config } => {
                 asn1::decode::execute(config)?;
+            }
+        },
+        Commands::Pkcs { command } => match command {
+            PkcsCommands::Decode { config } => {
+                pkcs::decode::execute(config)?;
             }
         },
     }

@@ -188,6 +188,7 @@ dependencies = [
  "clap",
  "der",
  "pem",
+ "pkcs",
  "serde_json",
  "serde_yml",
  "thiserror",
@@ -317,9 +318,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.12.1"
+version = "2.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ad4bb2b565bca0645f4d68c5c9af97fba094e9791da685bf83cb5f3ce74acf2"
+checksum = "7714e70437a7dc3ac8eb7e6f8df75fd8eb422675fc7678aff7364301092b1017"
 dependencies = [
  "equivalent",
  "hashbrown",
@@ -455,6 +456,20 @@ name = "pin-utils"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
+
+[[package]]
+name = "pkcs"
+version = "0.0.1"
+dependencies = [
+ "asn1",
+ "der",
+ "num-bigint",
+ "pem",
+ "rstest",
+ "serde",
+ "thiserror",
+ "tsumiki",
+]
 
 [[package]]
 name = "proc-macro-crate"

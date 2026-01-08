@@ -130,7 +130,7 @@ impl fmt::Display for Certificate {
             .tbs_certificate
             .serial_number
             .inner
-            .as_bigint()
+            .as_ref()
             .to_signed_bytes_be();
         let serial_hex: Vec<String> = serial_bytes.iter().map(|b| format!("{:02x}", b)).collect();
         writeln!(f, "        Serial Number: {}", serial_hex.join(":"))?;
@@ -406,6 +406,36 @@ impl Encoder<Certificate, ASN1Object> for Certificate {
 
     fn encode(&self) -> Result<ASN1Object, Self::Error> {
         Ok(ASN1Object::new(vec![self.encode()?]))
+    }
+}
+
+// Pem -> Certificate decoder
+impl DecodableFrom<pem::Pem> for Certificate {}
+
+impl Decoder<pem::Pem, Certificate> for pem::Pem {
+    type Error = Error;
+
+    fn decode(&self) -> Result<Certificate, Self::Error> {
+        // Decode PEM to DER
+        let der: der::Der = self.decode().map_err(|e| {
+            Error::InvalidCertificate(format!("Failed to decode PEM to DER: {}", e))
+        })?;
+
+        // Decode DER to ASN1Object
+        let asn1_obj: asn1::ASN1Object = der.decode().map_err(|e| {
+            Error::InvalidCertificate(format!("Failed to decode DER to ASN1Object: {}", e))
+        })?;
+
+        // Get first element
+        if asn1_obj.elements().is_empty() {
+            return Err(Error::InvalidCertificate(
+                "No elements in ASN1Object".to_string(),
+            ));
+        }
+        let element = &asn1_obj.elements()[0];
+
+        // Decode to Certificate
+        element.decode()
     }
 }
 
@@ -1075,7 +1105,7 @@ impl Serialize for CertificateSerialNumber {
         S: serde::Serializer,
     {
         // Convert to hex string with colon separators (like OpenSSL format)
-        let bytes = self.inner.as_bigint().to_signed_bytes_be();
+        let bytes = self.inner.as_ref().to_signed_bytes_be();
         let hex_string = bytes
             .iter()
             .map(|b| format!("{:02x}", b))
@@ -1093,7 +1123,7 @@ impl CertificateSerialNumber {
 
     /// Format as hex string with colon separators (e.g., "00:f7:e9:eb")
     pub fn format_hex(&self) -> String {
-        let bytes = self.inner.as_bigint().to_signed_bytes_be();
+        let bytes = self.inner.as_ref().to_signed_bytes_be();
         bytes
             .iter()
             .map(|b| format!("{:02x}", b))

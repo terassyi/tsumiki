@@ -64,8 +64,6 @@ pub enum Error {
     InvalidTBSCertificate(String),
     #[error("invalid ASN.1: {0}")]
     InvalidASN1(#[source] asn1::error::Error),
-    #[error("invalid DER: {0}")]
-    InvalidDer(#[source] der::error::Error),
     #[error("serialization error: {0}")]
     SerializationError(String),
 }
