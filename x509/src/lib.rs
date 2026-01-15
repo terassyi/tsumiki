@@ -1,21 +1,22 @@
 use asn1::{ASN1Object, BitString, Element, Integer, ObjectIdentifier};
 use chrono::{Datelike, NaiveDateTime};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, ser::SerializeStruct};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
-use crate::{
-    error::Error,
-    extensions::{Extensions, RawExtensions},
-};
+use crate::error::Error;
+use crate::extensions::{Extensions, ParsedExtensions};
 
 pub mod error;
 pub mod extensions;
 mod types;
 
-// Re-export public types
-pub use types::{DirectoryString, Name};
+// Re-export public types from pkix-types
+pub use pkix_types::{
+    AlgorithmIdentifier, AlgorithmParameters, CertificateSerialNumber, DirectoryString, Name,
+    SubjectPublicKeyInfo,
+};
 
 /*
 https://datatracker.ietf.org/doc/html/rfc5280#section-4.1
@@ -39,8 +40,6 @@ impl Serialize for Certificate {
     where
         S: serde::Serializer,
     {
-        use serde::ser::SerializeStruct;
-
         let mut state = serializer.serialize_struct("Certificate", 3)?;
 
         // Serialize TBSCertificate with RawExtensions
@@ -61,7 +60,7 @@ impl Certificate {
     /// ```ignore
     /// let basic_constraints = cert.extension::<BasicConstraints>()?;
     /// ```
-    pub fn extension<T: extensions::StandardExtension>(&self) -> Result<Option<T>, Error> {
+    pub fn extension<T: extensions::Extension>(&self) -> Result<Option<T>, Error> {
         if let Some(ref exts) = self.tbs_certificate.extensions {
             exts.extension::<T>()
         } else {
@@ -129,7 +128,6 @@ impl fmt::Display for Certificate {
         let serial_bytes = self
             .tbs_certificate
             .serial_number
-            .inner
             .as_ref()
             .to_signed_bytes_be();
         let serial_hex: Vec<String> = serial_bytes.iter().map(|b| format!("{:02x}", b)).collect();
@@ -170,7 +168,7 @@ impl fmt::Display for Certificate {
             &self
                 .tbs_certificate
                 .subject_public_key_info
-                .algorithm
+                .algorithm()
                 .algorithm,
         );
         writeln!(f, "            Public Key Algorithm: {}", pubkey_alg)?;
@@ -179,7 +177,7 @@ impl fmt::Display for Certificate {
         let pubkey_bytes = self
             .tbs_certificate
             .subject_public_key_info
-            .subject_public_key
+            .subject_public_key()
             .as_bytes();
         writeln!(
             f,
@@ -200,6 +198,7 @@ impl fmt::Display for Certificate {
                 writeln!(f, "            X509v3 Subject Key Identifier:")?;
                 let hex_str: Vec<String> = ski
                     .key_identifier
+                    .as_bytes()
                     .iter()
                     .map(|b| format!("{:02X}", b))
                     .collect();
@@ -210,8 +209,11 @@ impl fmt::Display for Certificate {
             if let Ok(Some(aki)) = self.extension::<extensions::AuthorityKeyIdentifier>() {
                 writeln!(f, "            X509v3 Authority Key Identifier:")?;
                 if let Some(ref key_id) = aki.key_identifier {
-                    let hex_str: Vec<String> =
-                        key_id.iter().map(|b| format!("{:02X}", b)).collect();
+                    let hex_str: Vec<String> = key_id
+                        .as_bytes()
+                        .iter()
+                        .map(|b| format!("{:02X}", b))
+                        .collect();
                     writeln!(f, "                keyid:{}", hex_str.join(":"))?;
                 }
             }
@@ -697,162 +699,6 @@ impl Decoder<Element, TBSCertificate> for Element {
     }
 }
 
-// https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.1.2
-/*
-AlgorithmIdentifier  ::=  SEQUENCE  {
-    algorithm               OBJECT IDENTIFIER,
-    parameters              ANY DEFINED BY algorithm OPTIONAL
-}
- */
-
-/// Parameters field in AlgorithmIdentifier
-///
-/// Wrapped in Option:
-/// - None: Field not present (OPTIONAL field omitted, 0 bytes) - Absent
-/// - Some(Data(Element::Null)): Explicit NULL value - Common for RSA
-/// - Some(Data(Element::ObjectIdentifier)): OID - Used for ECDSA curve parameters
-/// - Some(Data(Element::Sequence)): Complex SEQUENCE structure - Used for DSA, RSASSA-PSS
-/// - Some(Data(Element::OctetString)): Arbitrary octet string data
-/// - Some(Elm(other)): Any other ASN.1 element
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum AlgorithmParameters {
-    Null,         // Explicit NULL (05 00)
-    Elm(Element), // Any other ASN.1 element
-}
-
-impl Serialize for AlgorithmParameters {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            AlgorithmParameters::Null => serializer.serialize_none(),
-            AlgorithmParameters::Elm(elm) => {
-                // TODO: Serialize based on the actual element type
-                let type_name = match elm {
-                    Element::Boolean(_) => "Boolean",
-                    Element::Integer(_) => "Integer",
-                    Element::BitString(_) => "BitString",
-                    Element::OctetString(_) => "OctetString",
-                    Element::Null => "Null",
-                    Element::ObjectIdentifier(_) => "ObjectIdentifier",
-                    Element::UTF8String(_) => "UTF8String",
-                    Element::Sequence(_) => "Sequence",
-                    Element::Set(_) => "Set",
-                    Element::PrintableString(_) => "PrintableString",
-                    Element::IA5String(_) => "IA5String",
-                    Element::UTCTime(_) => "UTCTime",
-                    Element::GeneralizedTime(_) => "GeneralizedTime",
-                    Element::ContextSpecific { .. } => "ContextSpecific",
-                    Element::Unimplemented(_) => "Unimplemented",
-                };
-                serializer.serialize_str(type_name)
-            }
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for AlgorithmParameters {
-    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        Err(serde::de::Error::custom(
-            "AlgorithmParameters deserialization not supported",
-        ))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct AlgorithmIdentifier {
-    algorithm: ObjectIdentifier, // OBJECT IDENTIFIER
-    #[serde(skip_serializing_if = "Option::is_none")]
-    parameters: Option<AlgorithmParameters>,
-}
-
-impl Serialize for AlgorithmIdentifier {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("AlgorithmIdentifier", 2)?;
-        // Use algorithm name instead of OID string
-        let alg_name = algorithm_oid_to_name(&self.algorithm);
-        state.serialize_field("algorithm", &alg_name)?;
-        if let Some(ref params) = self.parameters {
-            state.serialize_field("parameters", params)?;
-        }
-        state.end()
-    }
-}
-
-impl DecodableFrom<Element> for AlgorithmIdentifier {}
-
-impl Decoder<Element, AlgorithmIdentifier> for Element {
-    type Error = Error;
-
-    fn decode(&self) -> Result<AlgorithmIdentifier, Self::Error> {
-        match self {
-            Element::Sequence(elements) => {
-                if elements.is_empty() || elements.len() > 2 {
-                    return Err(Error::InvalidAlgorithmIdentifier(
-                        "expected 1 or 2 elements in sequence".to_string(),
-                    ));
-                }
-
-                let algorithm = if let Element::ObjectIdentifier(oid) = &elements[0] {
-                    oid.clone()
-                } else {
-                    return Err(Error::InvalidAlgorithmIdentifier(
-                        "expected ObjectIdentifier for algorithm".to_string(),
-                    ));
-                };
-
-                let parameters = if elements.len() == 2 {
-                    Some(match &elements[1] {
-                        Element::Null => AlgorithmParameters::Null,
-                        other => AlgorithmParameters::Elm(other.clone()),
-                    })
-                } else {
-                    None
-                };
-
-                Ok(AlgorithmIdentifier {
-                    algorithm,
-                    parameters,
-                })
-            }
-            _ => Err(Error::InvalidAlgorithmIdentifier(
-                "expected Sequence for AlgorithmIdentifier".to_string(),
-            )),
-        }
-    }
-}
-
-impl EncodableTo<AlgorithmIdentifier> for Element {}
-
-impl Encoder<AlgorithmIdentifier, Element> for AlgorithmIdentifier {
-    type Error = Error;
-
-    fn encode(&self) -> Result<Element, Self::Error> {
-        let mut elements = vec![Element::ObjectIdentifier(self.algorithm.clone())];
-
-        if let Some(ref params) = self.parameters {
-            match params {
-                AlgorithmParameters::Null => {
-                    elements.push(Element::Null);
-                }
-                AlgorithmParameters::Elm(elm) => {
-                    elements.push(elm.clone());
-                }
-            }
-        }
-
-        Ok(Element::Sequence(elements))
-    }
-}
-
 /*
 Version  ::=  INTEGER  {  v1(0), v2(1), v3(2)  }
 
@@ -866,70 +712,10 @@ Time ::= CHOICE {
 
 UniqueIdentifier  ::=  BIT STRING
 
-SubjectPublicKeyInfo  ::=  SEQUENCE  {
-    algorithm            AlgorithmIdentifier,
-    subjectPublicKey     BIT STRING
-}
+SubjectPublicKeyInfo is now provided by pkix-types
 
 Extensions  ::=  SEQUENCE SIZE (1..MAX) OF Extension
 */
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SubjectPublicKeyInfo {
-    algorithm: AlgorithmIdentifier,
-    subject_public_key: BitString,
-}
-
-impl DecodableFrom<Element> for SubjectPublicKeyInfo {}
-
-impl Decoder<Element, SubjectPublicKeyInfo> for Element {
-    type Error = Error;
-
-    fn decode(&self) -> Result<SubjectPublicKeyInfo, Self::Error> {
-        match self {
-            Element::Sequence(elements) => {
-                if elements.len() != 2 {
-                    return Err(Error::InvalidSubjectPublicKeyInfo(format!(
-                        "expected 2 elements in sequence, got {}",
-                        elements.len()
-                    )));
-                }
-
-                let algorithm = elements[0].decode().map_err(|e| {
-                    Error::InvalidSubjectPublicKeyInfo(format!("failed to decode algorithm: {}", e))
-                })?;
-
-                let subject_public_key = if let Element::BitString(bit_string) = &elements[1] {
-                    bit_string.clone()
-                } else {
-                    return Err(Error::InvalidSubjectPublicKeyInfo(
-                        "expected BitString for subject public key".to_string(),
-                    ));
-                };
-
-                Ok(SubjectPublicKeyInfo {
-                    algorithm,
-                    subject_public_key,
-                })
-            }
-            _ => Err(Error::InvalidSubjectPublicKeyInfo(
-                "expected Sequence".to_string(),
-            )),
-        }
-    }
-}
-
-impl EncodableTo<SubjectPublicKeyInfo> for Element {}
-
-impl Encoder<SubjectPublicKeyInfo, Element> for SubjectPublicKeyInfo {
-    type Error = Error;
-
-    fn encode(&self) -> Result<Element, Self::Error> {
-        let algorithm_elm = self.algorithm.encode()?;
-        let public_key_elm = Element::BitString(self.subject_public_key.clone());
-        Ok(Element::Sequence(vec![algorithm_elm, public_key_elm]))
-    }
-}
 
 // UniqueIdentifier is a BIT STRING used in X.509 v2 certificates
 // RFC 5280 Section 4.1.2.8: CAs conforming to this profile MUST NOT generate
@@ -1094,74 +880,8 @@ impl Encoder<Version, Element> for Version {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Deserialize)]
-pub struct CertificateSerialNumber {
-    inner: Integer,
-}
-
-impl Serialize for CertificateSerialNumber {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        // Convert to hex string with colon separators (like OpenSSL format)
-        let bytes = self.inner.as_ref().to_signed_bytes_be();
-        let hex_string = bytes
-            .iter()
-            .map(|b| format!("{:02x}", b))
-            .collect::<Vec<_>>()
-            .join(":");
-        serializer.serialize_str(&hex_string)
-    }
-}
-
-impl CertificateSerialNumber {
-    /// Create from raw bytes (IMPLICIT INTEGER encoding)
-    pub fn from_bytes(bytes: Vec<u8>) -> Self {
-        Integer::from(bytes).into()
-    }
-
-    /// Format as hex string with colon separators (e.g., "00:f7:e9:eb")
-    pub fn format_hex(&self) -> String {
-        let bytes = self.inner.as_ref().to_signed_bytes_be();
-        bytes
-            .iter()
-            .map(|b| format!("{:02x}", b))
-            .collect::<Vec<_>>()
-            .join(":")
-    }
-}
-
-impl From<Integer> for CertificateSerialNumber {
-    fn from(inner: Integer) -> Self {
-        Self { inner }
-    }
-}
-
-impl DecodableFrom<Element> for CertificateSerialNumber {}
-
-impl Decoder<Element, CertificateSerialNumber> for Element {
-    type Error = Error;
-
-    fn decode(&self) -> Result<CertificateSerialNumber, Self::Error> {
-        match self {
-            Element::Integer(i) => Ok(CertificateSerialNumber { inner: i.clone() }),
-            _ => Err(Error::InvalidCertificateSerialNumber(
-                "expected Integer for CertificateSerialNumber".to_string(),
-            )),
-        }
-    }
-}
-
-impl EncodableTo<CertificateSerialNumber> for Element {}
-
-impl Encoder<CertificateSerialNumber, Element> for CertificateSerialNumber {
-    type Error = Error;
-
-    fn encode(&self) -> Result<Element, Self::Error> {
-        Ok(Element::Integer(self.inner.clone()))
-    }
-}
+// CertificateSerialNumber is now in pkix-types crate
+// No need for adapter implementations - pkix-types provides the Encoder/Decoder traits
 
 // https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.5
 /*
@@ -1262,7 +982,7 @@ struct SerializableTBSCertificate {
     #[serde(skip_serializing_if = "Option::is_none")]
     subject_unique_id: Option<UniqueIdentifier>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    extensions: Option<RawExtensions>,
+    extensions: Option<ParsedExtensions>,
 }
 
 impl TryFrom<&TBSCertificate> for SerializableTBSCertificate {
@@ -1270,7 +990,7 @@ impl TryFrom<&TBSCertificate> for SerializableTBSCertificate {
 
     fn try_from(tbs: &TBSCertificate) -> Result<Self, Self::Error> {
         let extensions = if let Some(ref exts) = tbs.extensions {
-            Some(RawExtensions::from_extensions(exts)?)
+            Some(ParsedExtensions::from_extensions(exts)?)
         } else {
             None
         };
@@ -1310,7 +1030,7 @@ fn algorithm_oid_to_name(oid: &ObjectIdentifier) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::extensions::{Extension, Extensions};
+    use crate::extensions::{Extensions, RawExtension};
     use crate::types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
     use asn1::{BitString, OctetString};
     use chrono::NaiveDate;
@@ -1407,7 +1127,7 @@ mod tests {
         )
     )]
     fn test_algorithm_identifier_decode_failure(input: Element, expected_error_variant: &str) {
-        let result: Result<AlgorithmIdentifier, Error> = input.decode();
+        let result: Result<AlgorithmIdentifier, pkix_types::Error> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);
@@ -1497,11 +1217,11 @@ mod tests {
     #[rstest]
     #[case::simple_serial(
         Element::Integer(Integer::from(vec![0x01])),
-        CertificateSerialNumber { inner: Integer::from(vec![0x01]) }
+        CertificateSerialNumber::from(Integer::from(vec![0x01]))
     )]
     #[case::medium_serial(
         Element::Integer(Integer::from(vec![0x01, 0x02, 0x03, 0x04])),
-        CertificateSerialNumber { inner: Integer::from(vec![0x01, 0x02, 0x03, 0x04]) }
+        CertificateSerialNumber::from(Integer::from(vec![0x01, 0x02, 0x03, 0x04]))
     )]
     #[case::long_serial(
         Element::Integer(Integer::from(vec![
@@ -1509,17 +1229,17 @@ mod tests {
             0x74, 0x7b, 0xb0, 0x50, 0xc9, 0x16, 0xea, 0xae,
             0x99, 0xd6, 0x8f, 0x82
         ])),
-        CertificateSerialNumber { inner: Integer::from(vec![
+        CertificateSerialNumber::from(Integer::from(vec![
             0x48, 0xc3, 0x54, 0x8e, 0x4a, 0x5e, 0xe7, 0x64,
             0x74, 0x7b, 0xb0, 0x50, 0xc9, 0x16, 0xea, 0xae,
             0x99, 0xd6, 0x8f, 0x82
-        ]) }
+        ]))
     )]
     fn test_certificate_serial_number_decode_success(
         #[case] input: Element,
         #[case] expected: CertificateSerialNumber,
     ) {
-        let result: Result<CertificateSerialNumber, Error> = input.decode();
+        let result: Result<CertificateSerialNumber, pkix_types::Error> = input.decode();
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), expected);
     }
@@ -1533,7 +1253,7 @@ mod tests {
         #[case] input: Element,
         #[case] expected_error_variant: &str,
     ) {
-        let result: Result<CertificateSerialNumber, Error> = input.decode();
+        let result: Result<CertificateSerialNumber, pkix_types::Error> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);
@@ -1681,17 +1401,17 @@ mod tests {
                     0x00, 0xb4, 0x6c, 0x8f, // First few bytes of modulus
                 ])),
             ]),
-            SubjectPublicKeyInfo {
-                algorithm: AlgorithmIdentifier {
-                    algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
-                    parameters: Some(AlgorithmParameters::Null),
-                },
-                subject_public_key: BitString::new(0, vec![
+            SubjectPublicKeyInfo::new(
+                AlgorithmIdentifier::new_with_params(
+                    ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
+                    AlgorithmParameters::Null,
+                ),
+                BitString::new(0, vec![
                     0x30, 0x82, 0x01, 0x0a,
                     0x02, 0x82, 0x01, 0x01,
                     0x00, 0xb4, 0x6c, 0x8f,
                 ]),
-            }
+            )
         ),
         // Test case: ECDSA public key (P-256)
         case(
@@ -1706,19 +1426,19 @@ mod tests {
                     0x3b, 0x6b, 0x80, 0x69, // Y coordinate (first 4 bytes)
                 ])),
             ]),
-            SubjectPublicKeyInfo {
-                algorithm: AlgorithmIdentifier {
-                    algorithm: ObjectIdentifier::from_str("1.2.840.10045.2.1").unwrap(),
-                    parameters: Some(AlgorithmParameters::Elm(
+            SubjectPublicKeyInfo::new(
+                AlgorithmIdentifier::new_with_params(
+                    ObjectIdentifier::from_str("1.2.840.10045.2.1").unwrap(),
+                    AlgorithmParameters::Elm(
                         Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.10045.3.1.7").unwrap())
-                    )),
-                },
-                subject_public_key: BitString::new(0, vec![
+                    ),
+                ),
+                BitString::new(0, vec![
                     0x04,
                     0x8d, 0x61, 0x7e, 0x65,
                     0x3b, 0x6b, 0x80, 0x69,
                 ]),
-            }
+            )
         ),
         // Test case: Ed25519 public key
         case(
@@ -1733,18 +1453,17 @@ mod tests {
                     0x9f, 0x3f, 0x31, 0x21, 0x91, 0x3b, 0xa2, 0x16,
                 ])),
             ]),
-            SubjectPublicKeyInfo {
-                algorithm: AlgorithmIdentifier {
-                    algorithm: ObjectIdentifier::from_str("1.3.101.112").unwrap(),
-                    parameters: None,
-                },
-                subject_public_key: BitString::new(0, vec![
+            SubjectPublicKeyInfo::new(
+                AlgorithmIdentifier::new(
+                    ObjectIdentifier::from_str("1.3.101.112").unwrap(),
+                ),
+                BitString::new(0, vec![
                     0x8d, 0x61, 0x7e, 0x65, 0x3b, 0x6b, 0x80, 0x69,
                     0x1b, 0x21, 0x4c, 0x28, 0xf8, 0x3a, 0x8b, 0x27,
                     0x3f, 0x49, 0x40, 0xea, 0xc0, 0x8e, 0x73, 0x6d,
                     0x9f, 0x3f, 0x31, 0x21, 0x91, 0x3b, 0xa2, 0x16,
                 ]),
-            }
+            )
         ),
         // Test case: BitString with unused bits
         case(
@@ -1755,17 +1474,17 @@ mod tests {
                 ]),
                 Element::BitString(BitString::new(3, vec![0xFF, 0xE0])), // 13 bits (3 unused in last byte)
             ]),
-            SubjectPublicKeyInfo {
-                algorithm: AlgorithmIdentifier {
-                    algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
-                    parameters: Some(AlgorithmParameters::Null),
-                },
-                subject_public_key: BitString::new(3, vec![0xFF, 0xE0]),
-            }
+            SubjectPublicKeyInfo::new(
+                AlgorithmIdentifier::new_with_params(
+                    ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
+                    AlgorithmParameters::Null,
+                ),
+                BitString::new(3, vec![0xFF, 0xE0]),
+            )
         ),
     )]
     fn test_subject_public_key_info_decode_success(input: Element, expected: SubjectPublicKeyInfo) {
-        let result: Result<SubjectPublicKeyInfo, Error> = input.decode();
+        let result: Result<SubjectPublicKeyInfo, pkix_types::Error> = input.decode();
         assert!(result.is_ok());
         let spki = result.unwrap();
         assert_eq!(spki, expected);
@@ -1832,7 +1551,7 @@ mod tests {
         ),
     )]
     fn test_subject_public_key_info_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<SubjectPublicKeyInfo, Error> = input.decode();
+        let result: Result<SubjectPublicKeyInfo, pkix_types::Error> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);
@@ -1987,8 +1706,8 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         // V1 certificate assertions
         assert_eq!(cert.tbs_certificate.version, Version::V1);
         assert!(cert.tbs_certificate.extensions.is_none());
-        assert_eq!(cert.tbs_certificate.issuer.rdn_sequence.len(), 3); // C, O, CN
-        assert_eq!(cert.tbs_certificate.subject.rdn_sequence.len(), 3);
+        assert_eq!(cert.tbs_certificate.issuer.rdn_sequence().len(), 3); // C, O, CN
+        assert_eq!(cert.tbs_certificate.subject.rdn_sequence().len(), 3);
     }
 
     #[test]
@@ -2007,7 +1726,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         assert!(cert.tbs_certificate.extensions.is_some());
         let extensions = cert.tbs_certificate.extensions.as_ref().unwrap();
         assert_eq!(extensions.extensions().len(), 4); // SKI, AKI, BasicConstraints, KeyUsage
-        assert_eq!(cert.tbs_certificate.issuer.rdn_sequence.len(), 6); // C, ST, L, O, OU, CN
+        assert_eq!(cert.tbs_certificate.issuer.rdn_sequence().len(), 6); // C, ST, L, O, OU, CN
     }
 
     #[test]
@@ -2032,7 +1751,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         assert!(cert.tbs_certificate.extensions.is_some());
         let extensions = cert.tbs_certificate.extensions.as_ref().unwrap();
         assert_eq!(extensions.extensions().len(), 4); // SKI, KeyUsage, ExtKeyUsage, SAN
-        assert_eq!(cert.tbs_certificate.issuer.rdn_sequence.len(), 4); // C, ST, O, CN
+        assert_eq!(cert.tbs_certificate.issuer.rdn_sequence().len(), 4); // C, ST, O, CN
     }
 
     #[test]
@@ -2056,7 +1775,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         assert_eq!(
             cert.tbs_certificate
                 .subject_public_key_info
-                .algorithm
+                .algorithm()
                 .algorithm
                 .to_string(),
             "1.2.840.10045.2.1"
@@ -2089,7 +1808,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         assert_eq!(
             cert.tbs_certificate
                 .subject_public_key_info
-                .algorithm
+                .algorithm()
                 .algorithm
                 .to_string(),
             "1.2.840.10045.2.1"
@@ -2129,11 +1848,11 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         assert!(cert.tbs_certificate.extensions.is_none());
         // Verify subject/issuer
         assert_eq!(
-            cert.tbs_certificate.issuer.rdn_sequence.len(),
+            cert.tbs_certificate.issuer.rdn_sequence().len(),
             3 // C, O, CN
         );
         assert_eq!(
-            cert.tbs_certificate.subject.rdn_sequence.len(),
+            cert.tbs_certificate.subject.rdn_sequence().len(),
             3 // C, O, CN
         );
     }
@@ -2327,10 +2046,10 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         algorithm: AlgorithmIdentifier,
         public_key_bytes: Vec<u8>,
     ) {
-        let subject_public_key_info = SubjectPublicKeyInfo {
-            algorithm: algorithm.clone(),
-            subject_public_key: BitString::new(0, public_key_bytes.clone()),
-        };
+        let subject_public_key_info = SubjectPublicKeyInfo::new(
+            algorithm.clone(),
+            BitString::new(0, public_key_bytes.clone()),
+        );
 
         let encoded = subject_public_key_info.encode().unwrap();
 
@@ -2363,7 +2082,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         case(Name {
             rdn_sequence: vec![
                 RelativeDistinguishedName {
-                    attribute: vec![AttributeTypeAndValue {
+                    attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
                         attribute_value: "Example CA".to_string(),
                     }],
@@ -2373,19 +2092,19 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         case(Name {
             rdn_sequence: vec![
                 RelativeDistinguishedName {
-                    attribute: vec![AttributeTypeAndValue {
+                    attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
                         attribute_value: "US".to_string(),
                     }],
                 },
                 RelativeDistinguishedName {
-                    attribute: vec![AttributeTypeAndValue {
+                    attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.8").unwrap(),
                         attribute_value: "California".to_string(),
                     }],
                 },
                 RelativeDistinguishedName {
-                    attribute: vec![AttributeTypeAndValue {
+                    attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.10").unwrap(),
                         attribute_value: "Example Corp".to_string(),
                     }],
@@ -2395,19 +2114,19 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         case(Name {
             rdn_sequence: vec![
                 RelativeDistinguishedName {
-                    attribute: vec![AttributeTypeAndValue {
+                    attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
                         attribute_value: "JP".to_string(),
                     }],
                 },
                 RelativeDistinguishedName {
-                    attribute: vec![AttributeTypeAndValue {
+                    attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.8").unwrap(),
                         attribute_value: "Tokyo".to_string(),
                     }],
                 },
                 RelativeDistinguishedName {
-                    attribute: vec![
+                    attributes: vec![
                         AttributeTypeAndValue {
                             attribute_type: ObjectIdentifier::from_str("2.5.4.10").unwrap(),
                             attribute_value: "ACME Inc".to_string(),
@@ -2419,7 +2138,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                     ],
                 },
                 RelativeDistinguishedName {
-                    attribute: vec![AttributeTypeAndValue {
+                    attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
                         attribute_value: "www.example.com".to_string(),
                     }],
@@ -2429,7 +2148,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         case(Name {
             rdn_sequence: vec![
                 RelativeDistinguishedName {
-                    attribute: vec![AttributeTypeAndValue {
+                    attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
                         attribute_value: "日本語ドメイン.jp".to_string(),
                     }],
@@ -2442,11 +2161,14 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
 
         match &encoded {
             Element::Sequence(rdn_elements) => {
-                assert_eq!(rdn_elements.len(), name.rdn_sequence.len());
+                assert_eq!(rdn_elements.len(), name.rdn_sequence().len());
                 for (i, rdn_elm) in rdn_elements.iter().enumerate() {
                     match rdn_elm {
                         Element::Set(attr_elements) => {
-                            assert_eq!(attr_elements.len(), name.rdn_sequence[i].attribute.len());
+                            assert_eq!(
+                                attr_elements.len(),
+                                name.rdn_sequence()[i].attributes.len()
+                            );
                             for (j, attr_elm) in attr_elements.iter().enumerate() {
                                 match attr_elm {
                                     Element::Sequence(seq) => {
@@ -2455,7 +2177,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                                             Element::ObjectIdentifier(oid) => {
                                                 assert_eq!(
                                                     oid,
-                                                    &name.rdn_sequence[i].attribute[j]
+                                                    &name.rdn_sequence()[i].attributes[j]
                                                         .attribute_type
                                                 );
                                             }
@@ -2466,14 +2188,14 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                                             Element::PrintableString(s) => {
                                                 assert_eq!(
                                                     s,
-                                                    &name.rdn_sequence[i].attribute[j]
+                                                    &name.rdn_sequence()[i].attributes[j]
                                                         .attribute_value
                                                 );
                                             }
                                             Element::UTF8String(s) => {
                                                 assert_eq!(
                                                     s,
-                                                    &name.rdn_sequence[i].attribute[j]
+                                                    &name.rdn_sequence()[i].attributes[j]
                                                         .attribute_value
                                                 );
                                             }
@@ -2500,34 +2222,34 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         exts,
         case(Extensions {
             extensions: vec![
-                Extension {
-                    id: ObjectIdentifier::from_str("2.5.29.19").unwrap(),
-                    critical: false,
-                    value: OctetString::from(vec![0x30, 0x00]),
-                },
+                RawExtension::new(
+                    ObjectIdentifier::from_str("2.5.29.19").unwrap(),
+                    false,
+                    OctetString::from(vec![0x30, 0x00]),
+                ),
             ],
         }),
         case(Extensions {
             extensions: vec![
-                Extension {
-                    id: ObjectIdentifier::from_str("2.5.29.15").unwrap(),
-                    critical: true,
-                    value: OctetString::from(vec![0x03, 0x02, 0x05, 0xa0]),
-                },
+                RawExtension::new(
+                    ObjectIdentifier::from_str("2.5.29.15").unwrap(),
+                    true,
+                    OctetString::from(vec![0x03, 0x02, 0x05, 0xa0]),
+                ),
             ],
         }),
         case(Extensions {
             extensions: vec![
-                Extension {
-                    id: ObjectIdentifier::from_str("2.5.29.19").unwrap(),
-                    critical: true,
-                    value: OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xff]),
-                },
-                Extension {
-                    id: ObjectIdentifier::from_str("2.5.29.14").unwrap(),
-                    critical: false,
-                    value: OctetString::from(vec![0x04, 0x14, 0x01, 0x02, 0x03]),
-                },
+                RawExtension::new(
+                    ObjectIdentifier::from_str("2.5.29.19").unwrap(),
+                    true,
+                    OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xff]),
+                ),
+                RawExtension::new(
+                    ObjectIdentifier::from_str("2.5.29.14").unwrap(),
+                    false,
+                    OctetString::from(vec![0x04, 0x14, 0x01, 0x02, 0x03]),
+                ),
             ],
         })
     )]
@@ -2548,13 +2270,13 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                                     // Check OID
                                     match &fields[0] {
                                         Element::ObjectIdentifier(oid) => {
-                                            assert_eq!(oid, &exts.extensions[i].id);
+                                            assert_eq!(oid, exts.extensions[i].oid());
                                         }
                                         _ => panic!("Expected ObjectIdentifier"),
                                     }
 
                                     // Check critical field (only present if true)
-                                    let value_index = if exts.extensions[i].critical {
+                                    let value_index = if exts.extensions[i].is_critical() {
                                         assert_eq!(fields.len(), 3);
                                         match &fields[1] {
                                             Element::Boolean(b) => assert!(b),
@@ -2571,7 +2293,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                                         Element::OctetString(octets) => {
                                             assert_eq!(
                                                 octets.as_bytes(),
-                                                exts.extensions[i].value.as_bytes()
+                                                exts.extensions[i].value().as_bytes()
                                             );
                                         }
                                         _ => panic!("Expected OctetString"),
@@ -2602,7 +2324,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             },
             issuer: Name {
                 rdn_sequence: vec![RelativeDistinguishedName {
-                    attribute: vec![AttributeTypeAndValue {
+                    attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
                         attribute_value: "Test CA".to_string(),
                     }],
@@ -2620,27 +2342,27 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             },
             subject: Name {
                 rdn_sequence: vec![RelativeDistinguishedName {
-                    attribute: vec![AttributeTypeAndValue {
+                    attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
                         attribute_value: "Test Subject".to_string(),
                     }],
                 }],
             },
-            subject_public_key_info: SubjectPublicKeyInfo {
-                algorithm: AlgorithmIdentifier {
-                    algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
-                    parameters: Some(AlgorithmParameters::Null),
-                },
-                subject_public_key: BitString::new(0, vec![0x30, 0x0d]),
-            },
+            subject_public_key_info: SubjectPublicKeyInfo::new(
+                AlgorithmIdentifier::new_with_params(
+                    ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
+                    AlgorithmParameters::Null,
+                ),
+                BitString::new(0, vec![0x30, 0x0d]),
+            ),
             issuer_unique_id: None,
             subject_unique_id: None,
             extensions: Some(Extensions {
-                extensions: vec![Extension {
-                    id: ObjectIdentifier::from_str("2.5.29.19").unwrap(),
-                    critical: true,
-                    value: OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xff]),
-                }],
+                extensions: vec![RawExtension::new(
+                    ObjectIdentifier::from_str("2.5.29.19").unwrap(),
+                    true,
+                    OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xff]),
+                )],
             }),
         }
     }
@@ -2655,7 +2377,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             },
             issuer: Name {
                 rdn_sequence: vec![RelativeDistinguishedName {
-                    attribute: vec![AttributeTypeAndValue {
+                    attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
                         attribute_value: "CA".to_string(),
                     }],
@@ -2673,19 +2395,19 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             },
             subject: Name {
                 rdn_sequence: vec![RelativeDistinguishedName {
-                    attribute: vec![AttributeTypeAndValue {
+                    attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
                         attribute_value: "Subject".to_string(),
                     }],
                 }],
             },
-            subject_public_key_info: SubjectPublicKeyInfo {
-                algorithm: AlgorithmIdentifier {
-                    algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
-                    parameters: Some(AlgorithmParameters::Null),
-                },
-                subject_public_key: BitString::new(0, vec![0x30, 0x0d]),
-            },
+            subject_public_key_info: SubjectPublicKeyInfo::new(
+                AlgorithmIdentifier::new_with_params(
+                    ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
+                    AlgorithmParameters::Null,
+                ),
+                BitString::new(0, vec![0x30, 0x0d]),
+            ),
             issuer_unique_id: None,
             subject_unique_id: None,
             extensions: None,
@@ -2835,7 +2557,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
     fn test_version_constructed_flag() {
         // Version is [0] EXPLICIT, so constructed should be true
         let version = Version::V3;
-        let encoded: Element = version.encode().unwrap();
+        let encoded = version.encode().unwrap();
 
         match encoded {
             Element::ContextSpecific {
@@ -2880,19 +2602,18 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             subject: Name {
                 rdn_sequence: vec![],
             },
-            subject_public_key_info: SubjectPublicKeyInfo {
-                algorithm: AlgorithmIdentifier {
-                    algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
-                    parameters: None,
-                },
-                subject_public_key: BitString::new(0, vec![0x00]),
-            },
+            subject_public_key_info: SubjectPublicKeyInfo::new(
+                AlgorithmIdentifier::new(
+                    ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
+                ),
+                BitString::new(0, vec![0x00]),
+            ),
             issuer_unique_id: Some(unique_id),
             subject_unique_id: None,
             extensions: None,
         };
 
-        let encoded: Element = tbs.encode().unwrap();
+        let encoded = tbs.encode().unwrap();
 
         if let Element::Sequence(elements) = encoded {
             // Find the issuerUniqueID element (slot 1)

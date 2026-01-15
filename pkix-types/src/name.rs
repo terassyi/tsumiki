@@ -1,0 +1,334 @@
+//! Name and related types
+//!
+//! Defined in RFC 5280 Section 4.1.2.4
+//!
+//! ```asn1
+//! Name ::= CHOICE { -- only one possibility for now --
+//!     rdnSequence  RDNSequence
+//! }
+//!
+//! RDNSequence ::= SEQUENCE OF RelativeDistinguishedName
+//!
+//! RelativeDistinguishedName ::= SET OF AttributeTypeAndValue
+//!
+//! AttributeTypeAndValue ::= SEQUENCE {
+//!     type     AttributeType,
+//!     value    AttributeValue
+//! }
+//!
+//! AttributeType ::= OBJECT IDENTIFIER
+//! AttributeValue ::= ANY -- DEFINED BY AttributeType
+//! ```
+
+use std::fmt;
+use std::str::FromStr;
+
+use asn1::{Element, ObjectIdentifier};
+use serde::{ser::SerializeStruct, Deserialize, Serialize};
+use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
+
+use crate::directory_string::DirectoryString;
+use crate::error::{Error, Result};
+
+/// X.509 Distinguished Name
+///
+/// A Name identifies an entity in an X.509 certificate. It consists of
+/// a sequence of Relative Distinguished Names (RDNs).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Name {
+    pub rdn_sequence: Vec<RelativeDistinguishedName>,
+}
+
+impl Name {
+    /// Create a new Name with the given RDN sequence
+    pub fn new(rdn_sequence: Vec<RelativeDistinguishedName>) -> Self {
+        Self { rdn_sequence }
+    }
+
+    /// Get a reference to the RDN sequence
+    pub fn rdn_sequence(&self) -> &[RelativeDistinguishedName] {
+        &self.rdn_sequence
+    }
+}
+
+impl fmt::Display for Name {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let formatted = self
+            .rdn_sequence
+            .iter()
+            .map(|rdn| {
+                rdn.attributes
+                    .iter()
+                    .map(|attr| {
+                        let key = if let Some(name) = oid_to_name(&attr.attribute_type) {
+                            name.to_string()
+                        } else {
+                            attr.attribute_type.to_string()
+                        };
+                        format!("{}={}", key, attr.attribute_value)
+                    })
+                    .collect::<Vec<_>>()
+                    .join("+")
+            })
+            .collect::<Vec<_>>()
+            .join(", ");
+        write!(f, "{}", formatted)
+    }
+}
+
+impl DecodableFrom<Element> for Name {}
+
+impl Decoder<Element, Name> for Element {
+    type Error = Error;
+
+    fn decode(&self) -> Result<Name> {
+        match self {
+            Element::Sequence(elements) => {
+                let rdn_sequence = elements
+                    .iter()
+                    .map(|elem| elem.decode())
+                    .collect::<Result<Vec<RelativeDistinguishedName>>>()?;
+                Ok(Name { rdn_sequence })
+            }
+            _ => Err(Error::InvalidName("expected Sequence for Name".to_string())),
+        }
+    }
+}
+
+impl EncodableTo<Name> for Element {}
+
+impl Encoder<Name, Element> for Name {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element> {
+        let rdn_elements: Result<Vec<Element>> =
+            self.rdn_sequence.iter().map(|rdn| rdn.encode()).collect();
+        Ok(Element::Sequence(rdn_elements?))
+    }
+}
+
+/// Relative Distinguished Name (RDN)
+///
+/// A set of attribute-value pairs that together form one component of a Name.
+/// Typically contains a single AttributeTypeAndValue, but can contain multiple
+/// for multi-valued RDNs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RelativeDistinguishedName {
+    pub attributes: Vec<AttributeTypeAndValue>,
+}
+
+impl RelativeDistinguishedName {
+    /// Create a new RDN with a single attribute
+    pub fn new_single(attribute: AttributeTypeAndValue) -> Self {
+        Self {
+            attributes: vec![attribute],
+        }
+    }
+
+    /// Create a new RDN with multiple attributes
+    pub fn new(attributes: Vec<AttributeTypeAndValue>) -> Self {
+        Self { attributes }
+    }
+}
+
+impl DecodableFrom<Element> for RelativeDistinguishedName {}
+
+impl Decoder<Element, RelativeDistinguishedName> for Element {
+    type Error = Error;
+
+    fn decode(&self) -> Result<RelativeDistinguishedName> {
+        match self {
+            Element::Set(elements) => {
+                let attributes = elements
+                    .iter()
+                    .map(|elem| elem.decode())
+                    .collect::<Result<Vec<AttributeTypeAndValue>>>()?;
+                Ok(RelativeDistinguishedName { attributes })
+            }
+            _ => Err(Error::InvalidRelativeDistinguishedName(
+                "expected Set for RelativeDistinguishedName".to_string(),
+            )),
+        }
+    }
+}
+
+impl EncodableTo<RelativeDistinguishedName> for Element {}
+
+impl Encoder<RelativeDistinguishedName, Element> for RelativeDistinguishedName {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element> {
+        let attr_elements: Result<Vec<Element>> =
+            self.attributes.iter().map(|attr| attr.encode()).collect();
+        Ok(Element::Set(attr_elements?))
+    }
+}
+
+/// Attribute Type and Value pair
+///
+/// Represents a single attribute in an X.509 Name, such as CN=example.com
+/// or O=Example Organization.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct AttributeTypeAndValue {
+    pub attribute_type: ObjectIdentifier,
+    pub attribute_value: String,
+}
+
+impl AttributeTypeAndValue {
+    /// Create a new AttributeTypeAndValue
+    pub fn new(attribute_type: ObjectIdentifier, attribute_value: String) -> Self {
+        Self {
+            attribute_type,
+            attribute_value,
+        }
+    }
+}
+
+impl Serialize for AttributeTypeAndValue {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("AttributeTypeAndValue", 2)?;
+        // Try to use human-readable name, fall back to OID string
+        let type_name = oid_to_name(&self.attribute_type)
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| self.attribute_type.to_string());
+        state.serialize_field("attribute_type", &type_name)?;
+        state.serialize_field("attribute_value", &self.attribute_value)?;
+        state.end()
+    }
+}
+
+impl DecodableFrom<Element> for AttributeTypeAndValue {}
+
+impl Decoder<Element, AttributeTypeAndValue> for Element {
+    type Error = Error;
+
+    fn decode(&self) -> Result<AttributeTypeAndValue> {
+        if let Element::Sequence(seq) = self {
+            if seq.len() != 2 {
+                return Err(Error::InvalidAttributeTypeAndValue(
+                    "expected 2 elements in AttributeTypeAndValue sequence".to_string(),
+                ));
+            }
+            let attribute_type = if let Element::ObjectIdentifier(oid) = &seq[0] {
+                oid.clone()
+            } else {
+                return Err(Error::InvalidAttributeTypeAndValue(
+                    "expected ObjectIdentifier for attribute type".to_string(),
+                ));
+            };
+
+            // attribute_value can be various types depending on the attribute_type
+            // Most X.509 attributes are strings (DirectoryString)
+            let dir_string: DirectoryString = seq[1].decode()?;
+            let attribute_value = dir_string.into();
+
+            Ok(AttributeTypeAndValue {
+                attribute_type,
+                attribute_value,
+            })
+        } else {
+            Err(Error::InvalidAttributeTypeAndValue(
+                "expected Sequence for AttributeTypeAndValue".to_string(),
+            ))
+        }
+    }
+}
+
+impl EncodableTo<AttributeTypeAndValue> for Element {}
+
+impl Encoder<AttributeTypeAndValue, Element> for AttributeTypeAndValue {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element> {
+        let oid_elm = Element::ObjectIdentifier(self.attribute_type.clone());
+        let dir_string = DirectoryString::from_str(&self.attribute_value)
+            .expect("DirectoryString::from_str is infallible");
+        let value_elm = dir_string.encode()?;
+        Ok(Element::Sequence(vec![oid_elm, value_elm]))
+    }
+}
+
+/// Map common X.509 attribute OIDs to human-readable names
+pub fn oid_to_name(oid: &ObjectIdentifier) -> Option<&'static str> {
+    match oid.to_string().as_str() {
+        "2.5.4.3" => Some("CN"),  // commonName
+        "2.5.4.6" => Some("C"),   // countryName
+        "2.5.4.7" => Some("L"),   // localityName
+        "2.5.4.8" => Some("ST"),  // stateOrProvinceName
+        "2.5.4.10" => Some("O"),  // organizationName
+        "2.5.4.11" => Some("OU"), // organizationalUnitName
+        "2.5.4.5" => Some("serialNumber"),
+        "2.5.4.4" => Some("SN"),  // surname
+        "2.5.4.42" => Some("GN"), // givenName
+        "2.5.4.43" => Some("initials"),
+        "2.5.4.44" => Some("generationQualifier"),
+        "2.5.4.12" => Some("title"),
+        "2.5.4.46" => Some("dnQualifier"),
+        "2.5.4.65" => Some("pseudonym"),
+        "0.9.2342.19200300.100.1.25" => Some("DC"), // domainComponent
+        "1.2.840.113549.1.9.1" => Some("emailAddress"),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rstest::rstest;
+
+    #[test]
+    fn test_name_display() {
+        let name = Name {
+            rdn_sequence: vec![
+                RelativeDistinguishedName {
+                    attributes: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
+                        attribute_value: "US".to_string(),
+                    }],
+                },
+                RelativeDistinguishedName {
+                    attributes: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.10").unwrap(),
+                        attribute_value: "Example Org".to_string(),
+                    }],
+                },
+                RelativeDistinguishedName {
+                    attributes: vec![AttributeTypeAndValue {
+                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_value: "example.com".to_string(),
+                    }],
+                },
+            ],
+        };
+
+        assert_eq!(name.to_string(), "C=US, O=Example Org, CN=example.com");
+    }
+
+    #[rstest]
+    #[case("2.5.4.3", Some("CN"))]
+    #[case("2.5.4.6", Some("C"))]
+    #[case("2.5.4.10", Some("O"))]
+    #[case("2.5.4.11", Some("OU"))]
+    #[case("1.2.3.4", None)]
+    fn test_oid_to_name(#[case] oid_str: &str, #[case] expected: Option<&str>) {
+        let oid = ObjectIdentifier::from_str(oid_str).unwrap();
+        assert_eq!(oid_to_name(&oid), expected);
+    }
+
+    #[test]
+    fn test_attribute_type_and_value_encode_decode() {
+        let attr = AttributeTypeAndValue {
+            attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+            attribute_value: "Test".to_string(),
+        };
+
+        let encoded = attr.encode().unwrap();
+        let decoded: AttributeTypeAndValue = encoded.decode().unwrap();
+
+        assert_eq!(decoded, attr);
+    }
+}

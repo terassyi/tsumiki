@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "asn1", "cli", "der", "pem", "pkcs", "tsumiki" , "x509"]
+members = [ "asn1", "cli", "der", "pem", "pkcs", "pkix-types", "tsumiki" , "x509"]
 
 [workspace.package]
 version = "0.0.1"

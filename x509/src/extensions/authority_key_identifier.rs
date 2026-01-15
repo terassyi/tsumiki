@@ -1,10 +1,10 @@
 use asn1::{ASN1Object, Element, OctetString};
-use serde::{Deserialize, Serialize, Serializer};
+use pkix_types::{CertificateSerialNumber, KeyIdentifier};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
-use crate::CertificateSerialNumber;
 use crate::error::Error;
-use crate::extensions::StandardExtension;
+use crate::extensions::Extension;
 use crate::extensions::general_name::GeneralName;
 
 /*
@@ -19,9 +19,7 @@ KeyIdentifier ::= OCTET STRING
 CertificateSerialNumber ::= INTEGER
 */
 
-/// KeyIdentifier is an OCTET STRING used to identify a public key
-/// Typically a SHA-1 hash of the SubjectPublicKeyInfo (20 bytes)
-pub type KeyIdentifier = Vec<u8>;
+// KeyIdentifier is already imported above, no need to re-export here
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct AuthorityKeyIdentifier {
@@ -38,11 +36,11 @@ impl Serialize for AuthorityKeyIdentifier {
     where
         S: Serializer,
     {
-        use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("AuthorityKeyIdentifier", 3)?;
         // Serialize key_identifier as hex string
         if let Some(ref key_id) = self.key_identifier {
             let hex_string = key_id
+                .as_bytes()
                 .iter()
                 .map(|b| format!("{:02x}", b))
                 .collect::<Vec<_>>()
@@ -60,7 +58,7 @@ impl Serialize for AuthorityKeyIdentifier {
     }
 }
 
-impl StandardExtension for AuthorityKeyIdentifier {
+impl Extension for AuthorityKeyIdentifier {
     /// OID for AuthorityKeyIdentifier extension (2.5.29.35)
     const OID: &'static str = "2.5.29.35";
 
@@ -99,7 +97,7 @@ impl Decoder<Element, AuthorityKeyIdentifier> for Element {
                             slot: 0, element, ..
                         } => {
                             if let Element::OctetString(os) = element.as_ref() {
-                                key_identifier = Some(os.as_bytes().to_vec());
+                                key_identifier = Some(os.clone());
                             } else {
                                 return Err(Error::InvalidAuthorityKeyIdentifier(
                                     "keyIdentifier must be OctetString".to_string(),
@@ -173,7 +171,9 @@ impl Decoder<Element, AuthorityKeyIdentifier> for Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CertificateSerialNumber, extensions::Extension};
+    use crate::CertificateSerialNumber;
+    use crate::extensions::RawExtension;
+
     use asn1::OctetString;
     use asn1::{Element, ObjectIdentifier};
     use rstest::rstest;
@@ -193,7 +193,7 @@ mod tests {
                 },
             ]),
             AuthorityKeyIdentifier {
-                key_identifier: Some(vec![0x01, 0x02, 0x03, 0x04]),
+                key_identifier: Some(OctetString::from(vec![0x01, 0x02, 0x03, 0x04])),
                 authority_cert_issuer: None,
                 authority_cert_serial_number: None,
             }
@@ -228,7 +228,7 @@ mod tests {
                 },
             ]),
             AuthorityKeyIdentifier {
-                key_identifier: Some(vec![0xAA, 0xBB, 0xCC]),
+                key_identifier: Some(OctetString::from(vec![0xAA, 0xBB, 0xCC])),
                 authority_cert_issuer: None,
                 authority_cert_serial_number: Some(CertificateSerialNumber::from_bytes(vec![0xFF])),
             }
@@ -316,7 +316,7 @@ mod tests {
         let result: Result<AuthorityKeyIdentifier, Error> = element.decode();
         assert!(result.is_ok(), "Failed to decode: {:?}", result);
         let aki = result.unwrap();
-        assert_eq!(aki.key_identifier, Some(key_id));
+        assert_eq!(aki.key_identifier, Some(OctetString::from(key_id)));
         assert_eq!(aki.authority_cert_issuer, None);
         assert_eq!(aki.authority_cert_serial_number, None);
     }
@@ -333,20 +333,20 @@ mod tests {
         ];
         let octet_string = OctetString::from(der_bytes);
 
-        let extension = Extension {
-            id: ObjectIdentifier::from_str(AuthorityKeyIdentifier::OID).unwrap(),
-            critical: false,
-            value: octet_string,
-        };
+        let extension = RawExtension::new(
+            ObjectIdentifier::from_str(AuthorityKeyIdentifier::OID).unwrap(),
+            false,
+            octet_string,
+        );
 
         let result = extension.parse::<AuthorityKeyIdentifier>();
         assert!(result.is_ok(), "Failed to parse: {:?}", result);
         let aki = result.unwrap();
 
-        let expected_key_id = vec![
+        let expected_key_id = OctetString::from(vec![
             0x78, 0xD4, 0x81, 0x76, 0xCD, 0xF7, 0x8D, 0x59, 0x6D, 0xD4, 0xC4, 0x86, 0xA4, 0x1D,
             0x23, 0x0A, 0x53, 0xCE, 0xCD, 0xD7,
-        ];
+        ]);
         assert_eq!(aki.key_identifier, Some(expected_key_id));
         assert_eq!(aki.authority_cert_issuer, None);
         assert_eq!(aki.authority_cert_serial_number, None);

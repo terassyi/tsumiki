@@ -462,11 +462,26 @@ name = "pkcs"
 version = "0.0.1"
 dependencies = [
  "asn1",
+ "chrono",
  "der",
  "num-bigint",
  "pem",
+ "pkix-types",
  "rstest",
  "serde",
+ "serde_json",
+ "thiserror",
+ "tsumiki",
+]
+
+[[package]]
+name = "pkix-types"
+version = "0.0.1"
+dependencies = [
+ "asn1",
+ "rstest",
+ "serde",
+ "serde_json",
  "thiserror",
  "tsumiki",
 ]
@@ -879,6 +894,7 @@ dependencies = [
  "der",
  "ipnet",
  "pem",
+ "pkix-types",
  "rstest",
  "serde",
  "serde_json",

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
 use crate::error::Error;
-use crate::extensions::StandardExtension;
+use crate::extensions::Extension;
 use crate::extensions::general_name::GeneralName;
 
 /*
@@ -74,7 +74,7 @@ impl Decoder<Element, IssuerAltName> for Element {
     }
 }
 
-impl StandardExtension for IssuerAltName {
+impl Extension for IssuerAltName {
     const OID: &'static str = "2.5.29.18";
 
     fn parse(value: &OctetString) -> Result<Self, Error> {

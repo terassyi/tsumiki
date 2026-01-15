@@ -457,7 +457,7 @@ EB7VTM4mzawmSqcOq3/aYDSYqcRBlk5lfWc43qcPVNoKZ9x993MFIgkCAwEAAQ==
             coefficient: Integer::from(vec![0x00, 0x03]),
         };
 
-        let encoded: Element = privkey.encode().unwrap();
+        let encoded = privkey.encode().unwrap();
         let decoded: RSAPrivateKey = encoded.decode().unwrap();
 
         assert_eq!(decoded.version, privkey.version);

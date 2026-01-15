@@ -5,7 +5,7 @@ use tsumiki::decoder::{DecodableFrom, Decoder};
 
 use crate::error::Error;
 
-use super::{StandardExtension, policy_constraints::SkipCerts};
+use super::{Extension, policy_constraints::SkipCerts};
 
 /*
 RFC 5280 Section 4.2.1.14
@@ -35,7 +35,7 @@ pub struct InhibitAnyPolicy {
     pub skip_certs: SkipCerts,
 }
 
-impl StandardExtension for InhibitAnyPolicy {
+impl Extension for InhibitAnyPolicy {
     /// OID for InhibitAnyPolicy extension (2.5.29.54)
     const OID: &'static str = "2.5.29.54";
 
@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn test_inhibit_any_policy_parse() {
-        // Test full parsing through StandardExtension::parse
+        // Test full parsing through Extension::parse
         // DER: OCTET STRING containing INTEGER 3
         let octet_string = OctetString::from(vec![0x02, 0x01, 0x03]);
 

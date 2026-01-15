@@ -1,9 +1,14 @@
 use std::str::FromStr;
 
-use asn1::{Element, ObjectIdentifier, OctetString};
-use serde::{Deserialize, Serialize};
-use tsumiki::decoder::{DecodableFrom, Decoder};
-use tsumiki::encoder::{EncodableTo, Encoder};
+use asn1::Element;
+use asn1::ObjectIdentifier;
+use asn1::OctetString;
+use serde::Deserialize;
+use serde::Serialize;
+use tsumiki::decoder::DecodableFrom;
+use tsumiki::decoder::Decoder;
+use tsumiki::encoder::EncodableTo;
+use tsumiki::encoder::Encoder;
 
 use crate::error::Error;
 
@@ -49,6 +54,106 @@ pub use policy_mappings::{PolicyMapping, PolicyMappings};
 pub use subject_alt_name::SubjectAltName;
 pub use subject_key_identifier::SubjectKeyIdentifier;
 
+/// RawExtension wraps pkix_types::Extension for X.509-specific operations
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct RawExtension(pkix_types::Extension);
+
+impl RawExtension {
+    /// Create a new RawExtension
+    pub fn new(oid: ObjectIdentifier, critical: bool, value: OctetString) -> Self {
+        Self(pkix_types::Extension::new(oid, critical, value))
+    }
+
+    /// Get the extension OID
+    pub fn oid(&self) -> &ObjectIdentifier {
+        self.0.oid()
+    }
+
+    /// Get the critical flag
+    pub fn critical(&self) -> bool {
+        self.0.is_critical()
+    }
+
+    /// Get the extension value
+    pub fn value(&self) -> &OctetString {
+        self.0.value()
+    }
+
+    /// Parse the extension value as a specific extension type
+    pub fn parse<T: Extension>(&self) -> Result<T, Error> {
+        // Verify OID matches
+        let expected_oid = T::oid()?;
+        if self.oid() != &expected_oid {
+            return Err(Error::InvalidExtension(format!(
+                "OID mismatch: expected {}, got {}",
+                expected_oid,
+                self.oid()
+            )));
+        }
+        T::parse(self.value())
+    }
+
+    /// Get a reference to the inner pkix_types::Extension
+    pub fn inner(&self) -> &pkix_types::Extension {
+        &self.0
+    }
+
+    /// Convert into the inner pkix_types::Extension
+    pub fn into_inner(self) -> pkix_types::Extension {
+        self.0
+    }
+}
+
+impl From<pkix_types::Extension> for RawExtension {
+    fn from(ext: pkix_types::Extension) -> Self {
+        Self(ext)
+    }
+}
+
+impl From<RawExtension> for pkix_types::Extension {
+    fn from(ext: RawExtension) -> Self {
+        ext.0
+    }
+}
+
+impl AsRef<pkix_types::Extension> for RawExtension {
+    fn as_ref(&self) -> &pkix_types::Extension {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for RawExtension {
+    type Target = pkix_types::Extension;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+// Implement marker traits
+impl DecodableFrom<Element> for RawExtension {}
+impl EncodableTo<RawExtension> for Element {}
+
+// Implement Decoder for Element -> RawExtension
+impl Decoder<Element, RawExtension> for Element {
+    type Error = pkix_types::Error;
+
+    fn decode(&self) -> Result<RawExtension, Self::Error> {
+        let ext: pkix_types::Extension = self.decode()?;
+        Ok(RawExtension(ext))
+    }
+}
+
+// Implement Encoder for RawExtension -> Element
+impl Encoder<RawExtension, Element> for RawExtension {
+    type Error = pkix_types::Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        self.0.encode()
+    }
+}
+
 /*
 RFC 5280 Section 4.1.2.9
 
@@ -64,7 +169,7 @@ Extension  ::=  SEQUENCE  {
 }
 */
 
-/// Extensions is a sequence of Extension
+/// Extensions is a sequence of RawExtension
 /// RFC 5280: Extensions ::= SEQUENCE SIZE (1..MAX) OF Extension
 ///
 /// Note: In TBSCertificate, this appears as:
@@ -72,22 +177,22 @@ Extension  ::=  SEQUENCE  {
 /// - Element::ContextSpecific { slot: 3, element: Box<Element::Sequence> }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Extensions {
-    pub(crate) extensions: Vec<Extension>,
+    pub(crate) extensions: Vec<RawExtension>,
 }
 
 impl Extensions {
-    pub fn extensions(&self) -> &Vec<Extension> {
+    pub fn extensions(&self) -> &Vec<RawExtension> {
         &self.extensions
     }
 
     /// Get a specific extension by OID
-    pub fn get_by_oid<O: AsOid>(&self, oid: O) -> Result<Option<&Extension>, Error> {
+    pub fn get_by_oid<O: AsOid>(&self, oid: O) -> Result<Option<&RawExtension>, Error> {
         let oid_obj = oid.as_oid().map_err(Error::InvalidASN1)?;
-        Ok(self.extensions.iter().find(|ext| ext.id == oid_obj))
+        Ok(self.extensions.iter().find(|ext| ext.oid() == &oid_obj))
     }
 
     /// Get and parse a specific extension by type
-    pub fn extension<T: StandardExtension>(&self) -> Result<Option<T>, Error> {
+    pub fn extension<T: Extension>(&self) -> Result<Option<T>, Error> {
         let oid = T::oid()?;
         if let Some(ext) = self.get_by_oid(&oid)? {
             Ok(Some(ext.parse::<T>()?))
@@ -119,11 +224,10 @@ impl Decoder<Element, Extensions> for Element {
                                 "Extensions must contain at least one Extension".to_string(),
                             ));
                         }
-                        let mut extensions = Vec::new();
-                        for elem in seq_elements {
-                            let extension: Extension = elem.decode()?;
-                            extensions.push(extension);
-                        }
+                        let extensions = seq_elements
+                            .iter()
+                            .map(|elem| elem.decode().map_err(Error::from))
+                            .collect::<Result<Vec<RawExtension>, Error>>()?;
                         Ok(Extensions { extensions })
                     }
                     _ => Err(Error::InvalidExtensions(
@@ -138,11 +242,10 @@ impl Decoder<Element, Extensions> for Element {
                         "Extensions must contain at least one Extension".to_string(),
                     ));
                 }
-                let mut extensions = Vec::new();
-                for elem in seq_elements {
-                    let extension: Extension = elem.decode()?;
-                    extensions.push(extension);
-                }
+                let extensions = seq_elements
+                    .iter()
+                    .map(|elem| elem.decode().map_err(Error::from))
+                    .collect::<Result<Vec<RawExtension>, Error>>()?;
                 Ok(Extensions { extensions })
             }
             _ => Err(Error::InvalidExtensions(
@@ -164,8 +267,11 @@ impl Encoder<Extensions, Element> for Extensions {
             ));
         }
 
-        let extension_elements: Result<Vec<Element>, Error> =
-            self.extensions.iter().map(|ext| ext.encode()).collect();
+        let extension_elements: Result<Vec<Element>, Error> = self
+            .extensions
+            .iter()
+            .map(|ext| ext.encode().map_err(Error::from))
+            .collect();
 
         // Wrap in [3] EXPLICIT tag for TBSCertificate
         Ok(Element::ContextSpecific {
@@ -176,129 +282,8 @@ impl Encoder<Extensions, Element> for Extensions {
     }
 }
 
-/// Extension represents a single X.509 extension
-/// RFC 5280: Extension ::= SEQUENCE { extnID, critical, extnValue }
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Extension {
-    pub(crate) id: ObjectIdentifier,
-    pub(crate) critical: bool,
-    pub(crate) value: OctetString,
-}
-
-impl Extension {
-    /// Get the extension ID (OID)
-    pub fn oid(&self) -> &ObjectIdentifier {
-        &self.id
-    }
-
-    /// Check if the extension is critical
-    pub fn is_critical(&self) -> bool {
-        self.critical
-    }
-
-    /// Get the raw extension value (DER-encoded ASN.1)
-    pub fn value(&self) -> &OctetString {
-        &self.value
-    }
-
-    /// Parse the extension value as a specific standard extension type
-    pub fn parse<T: StandardExtension>(&self) -> Result<T, Error> {
-        // Verify OID matches
-        if self.id != T::OID {
-            return Err(Error::InvalidExtension(format!(
-                "OID mismatch: expected {}, got {}",
-                T::OID,
-                self.id
-            )));
-        }
-        T::parse(&self.value)
-    }
-}
-
-impl DecodableFrom<Element> for Extension {}
-
-impl Decoder<Element, Extension> for Element {
-    type Error = Error;
-
-    fn decode(&self) -> Result<Extension, Self::Error> {
-        match self {
-            Element::Sequence(elements) => {
-                if elements.len() < 2 || elements.len() > 3 {
-                    return Err(Error::InvalidExtension(format!(
-                        "expected 2 or 3 elements in Extension sequence, got {}",
-                        elements.len()
-                    )));
-                }
-
-                // First element: extnID (OBJECT IDENTIFIER)
-                let id = if let Element::ObjectIdentifier(oid) = &elements[0] {
-                    oid.clone()
-                } else {
-                    return Err(Error::InvalidExtension(
-                        "expected ObjectIdentifier for extnID".to_string(),
-                    ));
-                };
-
-                // Second and third elements: critical (BOOLEAN) and extnValue (OCTET STRING)
-                // critical has DEFAULT FALSE, so it may be omitted
-                let (critical, extn_value_element) = if elements.len() == 3 {
-                    // critical is present
-                    let crit = if let Element::Boolean(b) = &elements[1] {
-                        *b
-                    } else {
-                        return Err(Error::InvalidExtension(
-                            "expected Boolean for critical".to_string(),
-                        ));
-                    };
-                    (crit, &elements[2])
-                } else {
-                    // critical is omitted, defaults to FALSE
-                    (false, &elements[1])
-                };
-
-                // extnValue (OCTET STRING)
-                let value = if let Element::OctetString(octets) = extn_value_element {
-                    octets.clone()
-                } else {
-                    return Err(Error::InvalidExtension(
-                        "expected OctetString for extnValue".to_string(),
-                    ));
-                };
-
-                Ok(Extension {
-                    id,
-                    critical,
-                    value,
-                })
-            }
-            _ => Err(Error::InvalidExtension(
-                "expected Sequence for Extension".to_string(),
-            )),
-        }
-    }
-}
-
-impl EncodableTo<Extension> for Element {}
-
-impl Encoder<Extension, Element> for Extension {
-    type Error = Error;
-
-    fn encode(&self) -> Result<Element, Self::Error> {
-        let mut elements = vec![Element::ObjectIdentifier(self.id.clone())];
-
-        // Only include critical field if it's true (since DEFAULT FALSE)
-        if self.critical {
-            elements.push(Element::Boolean(true));
-        }
-
-        elements.push(Element::OctetString(self.value.clone()));
-
-        Ok(Element::Sequence(elements))
-    }
-}
-
-/// Trait for standard X.509 extensions that can be parsed from Extension.value
-pub trait StandardExtension: Sized {
+/// Trait for X.509 extensions that can be parsed from RawExtension.value
+pub trait Extension: Sized {
     const OID: &'static str;
 
     fn oid() -> Result<ObjectIdentifier, Error> {
@@ -310,9 +295,9 @@ pub trait StandardExtension: Sized {
     fn parse(value: &OctetString) -> Result<Self, Error>;
 }
 
-/// RawExtensions holds all parsed extension types for JSON serialization
+/// ParsedExtensions holds all parsed extension types for JSON serialization
 #[derive(Debug, Clone, Serialize)]
-pub(crate) struct RawExtensions {
+pub(crate) struct ParsedExtensions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) basic_constraints: Option<BasicConstraints>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -345,9 +330,9 @@ pub(crate) struct RawExtensions {
     pub(crate) freshest_crl: Option<FreshestCRL>,
 }
 
-impl RawExtensions {
+impl ParsedExtensions {
     pub(crate) fn from_extensions(extensions: &Extensions) -> Result<Self, Error> {
-        let mut raw = RawExtensions {
+        let mut raw = ParsedExtensions {
             basic_constraints: None,
             key_usage: None,
             extended_key_usage: None,
@@ -536,11 +521,11 @@ mod tests {
                 Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.29.19").unwrap()), // basicConstraints
                 Element::OctetString(OctetString::from(vec![0x30, 0x00])), // SEQUENCE {}
             ]),
-            Extension {
-                id: ObjectIdentifier::from_str("2.5.29.19").unwrap(),
-                critical: false,
-                value: OctetString::from(vec![0x30, 0x00]),
-            }
+            RawExtension::new(
+                ObjectIdentifier::from_str("2.5.29.19").unwrap(),
+                false,
+                OctetString::from(vec![0x30, 0x00]),
+            )
         ),
         // Test case: Extension with critical=true
         case(
@@ -549,11 +534,11 @@ mod tests {
                 Element::Boolean(true),
                 Element::OctetString(OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xFF])),
             ]),
-            Extension {
-                id: ObjectIdentifier::from_str("2.5.29.19").unwrap(),
-                critical: true,
-                value: OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xFF]),
-            }
+            RawExtension::new(
+                ObjectIdentifier::from_str("2.5.29.19").unwrap(),
+                true,
+                OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xFF]),
+            )
         ),
         // Test case: Extension with critical=false (explicit)
         case(
@@ -562,15 +547,15 @@ mod tests {
                 Element::Boolean(false),
                 Element::OctetString(OctetString::from(vec![0x03, 0x02, 0x05, 0xA0])),
             ]),
-            Extension {
-                id: ObjectIdentifier::from_str("2.5.29.15").unwrap(),
-                critical: false,
-                value: OctetString::from(vec![0x03, 0x02, 0x05, 0xA0]),
-            }
+            RawExtension::new(
+                ObjectIdentifier::from_str("2.5.29.15").unwrap(),
+                false,
+                OctetString::from(vec![0x03, 0x02, 0x05, 0xA0]),
+            )
         ),
     )]
-    fn test_extension_decode_success(input: Element, expected: Extension) {
-        let result: Result<Extension, Error> = input.decode();
+    fn test_extension_decode_success(input: Element, expected: RawExtension) {
+        let result: Result<RawExtension, Error> = input.decode().map_err(Error::from);
         assert!(result.is_ok());
         let extension = result.unwrap();
         assert_eq!(extension, expected);
@@ -633,7 +618,7 @@ mod tests {
         ),
     )]
     fn test_extension_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<Extension, Error> = input.decode();
+        let result: Result<RawExtension, Error> = input.decode().map_err(Error::from);
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);

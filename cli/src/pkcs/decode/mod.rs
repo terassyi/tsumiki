@@ -1,4 +1,5 @@
 pub(crate) mod pkcs1;
+pub(crate) mod pkcs8;
 
 use clap::Args;
 use pem::Pem;
@@ -30,12 +31,20 @@ pub(crate) fn execute(config: Config) -> Result<()> {
     // Dispatch based on PEM label
     match pem.label() {
         pem::Label::RSAPrivateKey => {
-            let key: pkcs::pkcs1::RSAPrivateKey = decode(pem)?;
+            let key = decode(pem)?;
             pkcs1::output_rsa_private_key(&key, config.output)
         }
         pem::Label::RSAPublicKey => {
-            let key: pkcs::pkcs1::RSAPublicKey = decode(pem)?;
+            let key = decode(pem)?;
             pkcs1::output_rsa_public_key(&key, config.output)
+        }
+        pem::Label::PrivateKey => {
+            let key = decode(pem)?;
+            pkcs8::output_private_key_info(&key, config.output)
+        }
+        pem::Label::EncryptedPrivateKey => {
+            let key = decode(pem)?;
+            pkcs8::output_encrypted_private_key_info(&key, config.output)
         }
         _ => Err(format!("Unsupported PEM label: {}", pem.label()).into()),
     }

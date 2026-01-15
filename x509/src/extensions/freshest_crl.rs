@@ -2,7 +2,7 @@ use asn1::OctetString;
 use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
-use crate::extensions::{CRLDistributionPoints, StandardExtension};
+use crate::extensions::{CRLDistributionPoints, Extension};
 
 /*
 RFC 5280 Section 4.2.1.15
@@ -59,7 +59,7 @@ pub struct FreshestCRL {
     pub distribution_points: CRLDistributionPoints,
 }
 
-impl StandardExtension for FreshestCRL {
+impl Extension for FreshestCRL {
     /// OID for FreshestCRL extension (2.5.29.46)
     const OID: &'static str = "2.5.29.46";
 

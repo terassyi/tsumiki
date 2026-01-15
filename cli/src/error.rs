@@ -20,6 +20,9 @@ pub(crate) enum Error {
     #[error("PKCS decode error: {0}")]
     Pkcs(#[from] pkcs::pkcs1::Error),
 
+    #[error("PKCS#8 decode error: {0}")]
+    Pkcs8(#[from] pkcs::pkcs8::Error),
+
     #[error("JSON serialization error: {0}")]
     Json(#[from] serde_json::Error),
 

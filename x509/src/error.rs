@@ -20,8 +20,6 @@ pub enum Error {
     InvalidCertificateSerialNumber(String),
     #[error("invalid version: {0}")]
     InvalidVersion(String),
-    #[error("invalid subject public key info: {0}")]
-    InvalidSubjectPublicKeyInfo(String),
     #[error("invalid unique identifier: {0}")]
     InvalidUniqueIdentifier(String),
     #[error("invalid extension: {0}")]
@@ -64,6 +62,8 @@ pub enum Error {
     InvalidTBSCertificate(String),
     #[error("invalid ASN.1: {0}")]
     InvalidASN1(#[source] asn1::error::Error),
+    #[error("PKIX types error: {0}")]
+    PKIXTypesError(#[from] pkix_types::Error),
     #[error("serialization error: {0}")]
     SerializationError(String),
 }

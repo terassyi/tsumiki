@@ -1,0 +1,14 @@
+[package]
+name = "pkix-types"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+asn1 = { path = "../asn1" }
+serde = { workspace = true }
+thiserror = { workspace = true }
+tsumiki = { path = "../tsumiki" }
+
+[dev-dependencies]
+rstest = { workspace = true }
+serde_json = { workspace = true }

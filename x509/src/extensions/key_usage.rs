@@ -2,7 +2,8 @@ use asn1::{ASN1Object, Element, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
-use crate::{error::Error, extensions::StandardExtension};
+use crate::error::Error;
+use crate::extensions::Extension;
 
 /*
 RFC 5280 Section 4.2.1.3
@@ -32,7 +33,7 @@ pub struct KeyUsage {
     pub decipher_only: bool,
 }
 
-impl StandardExtension for KeyUsage {
+impl Extension for KeyUsage {
     const OID: &'static str = "2.5.29.15";
 
     fn parse(value: &OctetString) -> Result<Self, Error> {

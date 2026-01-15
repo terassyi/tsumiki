@@ -2,7 +2,8 @@ use asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
-use crate::{error::Error, extensions::StandardExtension};
+use crate::error::Error;
+use crate::extensions::Extension;
 
 /*
 RFC 5280 Section 4.2.1.12
@@ -87,7 +88,7 @@ impl Decoder<Element, ExtendedKeyUsage> for Element {
     }
 }
 
-impl StandardExtension for ExtendedKeyUsage {
+impl Extension for ExtendedKeyUsage {
     /// OID for ExtendedKeyUsage extension (2.5.29.37)
     const OID: &'static str = "2.5.29.37";
 
@@ -99,7 +100,7 @@ impl StandardExtension for ExtendedKeyUsage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::extensions::Extension;
+    use crate::extensions::RawExtension;
     use asn1::OctetString;
     use asn1::{Element, ObjectIdentifier};
     use rstest::rstest;
@@ -222,11 +223,11 @@ mod tests {
         ];
         let octet_string = OctetString::from(der_bytes);
 
-        let extension = Extension {
-            id: ObjectIdentifier::from_str(ExtendedKeyUsage::OID).unwrap(),
-            critical: false,
-            value: octet_string,
-        };
+        let extension = RawExtension::new(
+            ObjectIdentifier::from_str(ExtendedKeyUsage::OID).unwrap(),
+            false,
+            octet_string,
+        );
 
         let result = extension.parse::<ExtendedKeyUsage>();
         assert!(result.is_ok(), "Failed to parse: {:?}", result);

@@ -69,6 +69,7 @@ pub enum Element {
     IA5String(String),
     UTCTime(NaiveDateTime),
     GeneralizedTime(NaiveDateTime),
+    BMPString(BMPString),
     ContextSpecific {
         slot: u8,
         constructed: bool,
@@ -202,6 +203,14 @@ impl TryFrom<&Tlv> for Element {
                         ))
                     }
                 }
+                PrimitiveTag::BMPString => {
+                    if let Some(data) = tlv.data() {
+                        let bmp_string = BMPString::from_be_bytes(data)?;
+                        Ok(Element::BMPString(bmp_string))
+                    } else {
+                        Ok(Element::BMPString(BMPString::try_from(Vec::<u16>::new())?))
+                    }
+                }
                 PrimitiveTag::Unimplemented(_) => {
                     // Handle unimplemented tags gracefully
                     Ok(Element::Unimplemented(tlv.clone()))
@@ -276,6 +285,7 @@ impl Display for Element {
             Element::IA5String(s) => write!(f, "IA5String({})", s),
             Element::UTCTime(dt) => write!(f, "UTCTime({})", dt),
             Element::GeneralizedTime(dt) => write!(f, "GeneralizedTime({})", dt),
+            Element::BMPString(s) => write!(f, "BMPString({})", s),
             Element::ContextSpecific {
                 slot,
                 constructed,
@@ -387,6 +397,11 @@ impl TryFrom<&Element> for Tlv {
                 );
                 let time_str = dt.format("%Y%m%d%H%M%SZ").to_string();
                 Ok(Tlv::new_primitive(tag, time_str.as_bytes().to_vec()))
+            }
+            Element::BMPString(bmp) => {
+                let tag =
+                    Tag::Primitive(PrimitiveTag::BMPString, u8::from(&PrimitiveTag::BMPString));
+                Ok(Tlv::new_primitive(tag, bmp.to_be_bytes()))
             }
             Element::ContextSpecific {
                 slot,
@@ -595,6 +610,216 @@ impl Display for Integer {
     }
 }
 
+/// BMPString (Basic Multilingual Plane String)
+///
+/// A string type that contains UCS-2 (UTF-16 without surrogate pairs) characters.
+/// This is a subset of UTF-16 containing only characters in the Basic Multilingual Plane
+/// (U+0000 to U+FFFF), excluding surrogate pairs (U+D800 to U+DFFF).
+///
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BMPString {
+    // Store as Vec<u16> to ensure we only have valid UCS-2 code units
+    inner: Vec<u16>,
+}
+
+impl BMPString {
+    /// Create a new BMPString from a Rust string slice.
+    ///
+    /// Returns an error if the string contains characters outside the BMP
+    /// (i.e., characters requiring surrogate pairs, U+10000 and above).
+    pub fn new(s: &str) -> Result<Self, Error> {
+        let mut inner = Vec::new();
+        for ch in s.chars() {
+            let code_point = ch as u32;
+            if code_point > 0xFFFF {
+                return Err(Error::InvalidBMPString(format!(
+                    "Character '{}' (U+{:04X}) is outside BMP range (U+0000-U+FFFF)",
+                    ch, code_point
+                )));
+            }
+            if (0xD800..=0xDFFF).contains(&code_point) {
+                return Err(Error::InvalidBMPString(format!(
+                    "Character U+{:04X} is in surrogate range (U+D800-U+DFFF)",
+                    code_point
+                )));
+            }
+            inner.push(code_point as u16);
+        }
+        Ok(BMPString { inner })
+    }
+
+    /// Create a BMPString from big-endian encoded bytes (DER/BER format).
+    ///
+    /// The input should be pairs of bytes representing UCS-2 code units in big-endian order.
+    /// Returns an error if:
+    /// - The byte length is not even
+    /// - Any code unit is in the surrogate range (U+D800-U+DFFF)
+    pub fn from_be_bytes(bytes: &[u8]) -> Result<Self, Error> {
+        if !bytes.len().is_multiple_of(2) {
+            return Err(Error::InvalidBMPString(
+                "BMPString byte length must be even".to_string(),
+            ));
+        }
+        let data: Vec<u16> = bytes
+            .chunks_exact(2)
+            .map(|chunk| u16::from_be_bytes([chunk[0], chunk[1]]))
+            .collect();
+        Self::try_from(data)
+    }
+
+    /// Try to convert the BMPString to a Rust String (UTF-8).
+    ///
+    /// This can fail if the BMPString contains invalid UTF-16 sequences,
+    /// though this should be rare since we validate on construction.
+    pub fn try_into_string(&self) -> Result<String, Error> {
+        String::from_utf16(&self.inner)
+            .map_err(|e| Error::InvalidBMPString(format!("Failed to convert to String: {}", e)))
+    }
+
+    /// Get the length in UCS-2 code units (not characters or bytes).
+    pub fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    /// Check if the BMPString is empty.
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
+    /// Convert the BMPString to big-endian encoded bytes (DER/BER format).
+    ///
+    /// Returns a byte vector where each UCS-2 code unit is encoded as 2 bytes in big-endian order.
+    pub fn to_be_bytes(&self) -> Vec<u8> {
+        self.inner
+            .iter()
+            .flat_map(|&code_unit| code_unit.to_be_bytes())
+            .collect()
+    }
+}
+
+impl Serialize for BMPString {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = self
+            .try_into_string()
+            .map_err(|e| serde::ser::Error::custom(e.to_string()))?;
+        serializer.serialize_str(&s)
+    }
+}
+
+impl<'de> Deserialize<'de> for BMPString {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        BMPString::new(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl Display for BMPString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self.try_into_string() {
+            Ok(s) => write!(f, "{}", s),
+            Err(_) => write!(f, "<invalid BMPString>"),
+        }
+    }
+}
+
+impl TryFrom<&str> for BMPString {
+    type Error = Error;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        BMPString::new(value)
+    }
+}
+
+impl TryFrom<String> for BMPString {
+    type Error = Error;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        BMPString::new(&value)
+    }
+}
+
+impl FromStr for BMPString {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        BMPString::new(s)
+    }
+}
+
+impl AsRef<[u16]> for BMPString {
+    fn as_ref(&self) -> &[u16] {
+        &self.inner
+    }
+}
+
+impl Deref for BMPString {
+    type Target = [u16];
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl From<BMPString> for Vec<u16> {
+    fn from(value: BMPString) -> Self {
+        value.inner
+    }
+}
+
+impl PartialEq<str> for BMPString {
+    fn eq(&self, other: &str) -> bool {
+        self.try_into_string().ok().as_deref() == Some(other)
+    }
+}
+
+impl PartialEq<&str> for BMPString {
+    fn eq(&self, other: &&str) -> bool {
+        self.try_into_string().ok().as_deref() == Some(*other)
+    }
+}
+
+impl PartialEq<String> for BMPString {
+    fn eq(&self, other: &String) -> bool {
+        self.try_into_string().ok().as_deref() == Some(other.as_str())
+    }
+}
+
+impl TryFrom<Vec<u16>> for BMPString {
+    type Error = Error;
+
+    /// Create a BMPString directly from UCS-2 code units.
+    ///
+    /// Returns an error if any code unit is in the surrogate range (U+D800-U+DFFF).
+    fn try_from(data: Vec<u16>) -> Result<Self, Self::Error> {
+        for &code_unit in &data {
+            if (0xD800..=0xDFFF).contains(&code_unit) {
+                return Err(Error::InvalidBMPString(format!(
+                    "Code unit U+{:04X} is in surrogate range (U+D800-U+DFFF)",
+                    code_unit
+                )));
+            }
+        }
+        Ok(BMPString { inner: data })
+    }
+}
+
+impl TryFrom<&[u16]> for BMPString {
+    type Error = Error;
+
+    /// Create a BMPString from a slice of UCS-2 code units.
+    ///
+    /// Returns an error if any code unit is in the surrogate range (U+D800-U+DFFF).
+    fn try_from(data: &[u16]) -> Result<Self, Self::Error> {
+        Self::try_from(data.to_vec())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectIdentifier {
     inner: Vec<u64>,
@@ -714,10 +939,9 @@ impl TryFrom<ObjectIdentifier> for Vec<u8> {
 
 impl Display for ObjectIdentifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self.inner.first() {
-            Some(n) => self.inner[1..]
-                .iter()
-                .fold(n.to_string(), |s, n| s + "." + &n.to_string()),
+        let mut iter = self.inner.iter();
+        let s = match iter.next() {
+            Some(n) => iter.fold(n.to_string(), |s, n| s + "." + &n.to_string()),
             None => String::new(),
         };
         write!(f, "{}", s)
@@ -1009,6 +1233,16 @@ impl OctetString {
     /// Consumes self and returns the inner bytes
     pub fn into_bytes(self) -> Vec<u8> {
         self.inner
+    }
+
+    /// Returns a hexadecimal string representation of the bytes
+    ///
+    /// Example: `OctetString::from(b"Hello")` returns `"48656c6c6f"`
+    pub fn hex(&self) -> String {
+        self.inner
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>()
     }
 }
 
@@ -2387,5 +2621,191 @@ e8ZYGIc4gvs5McdrVUyYGUs=
             .expect("Failed to encode ASN1Object to Der");
 
         assert_eq!(original_der, re_encoded_der);
+    }
+
+    // BMPString tests
+    #[rstest(
+        input,
+        expected_str,
+        expected_len,
+        case("Hello", "Hello", 5),
+        case("Test", "Test", 4),
+        case("日本語", "日本語", 3),
+        case("ABC", "ABC", 3),
+        case("", "", 0)
+    )]
+    fn test_bmpstring_new(input: &str, expected_str: &str, expected_len: usize) {
+        let bmp = super::BMPString::new(input).unwrap();
+        assert_eq!(bmp.to_string(), expected_str);
+        assert_eq!(bmp.len(), expected_len);
+        assert_eq!(bmp.is_empty(), expected_len == 0);
+    }
+
+    #[rstest(
+        input,
+        case("Test 😀"),  // Emoji U+1F600
+        case("Hello 🌟"), // Star emoji U+1F31F
+        case("👋"),        // Wave emoji U+1F44B
+    )]
+    fn test_bmpstring_emoji_rejected(input: &str) {
+        let result = super::BMPString::new(input);
+        assert!(result.is_err());
+    }
+
+    #[rstest(
+        input,
+        expected,
+        case("Test", "Test"),
+        case("Hello World", "Hello World"),
+        case("日本語", "日本語")
+    )]
+    fn test_bmpstring_from_str(input: &str, expected: &str) {
+        let bmp = super::BMPString::from_str(input).unwrap();
+        assert_eq!(bmp.to_string(), expected);
+    }
+
+    #[rstest(
+        input,
+        expected_codes,
+        case("AB", vec![0x0041, 0x0042]),
+        case("XY", vec![0x0058, 0x0059]),
+        case("12", vec![0x0031, 0x0032]),
+    )]
+    fn test_bmpstring_as_ref(input: &str, expected_codes: Vec<u16>) {
+        let bmp = super::BMPString::new(input).unwrap();
+        let slice: &[u16] = bmp.as_ref();
+        assert_eq!(slice, expected_codes.as_slice());
+    }
+
+    #[rstest(
+        input,
+        expected_codes,
+        case("AB", vec![0x0041, 0x0042]),
+        case("CD", vec![0x0043, 0x0044]),
+    )]
+    fn test_bmpstring_deref(input: &str, expected_codes: Vec<u16>) {
+        use std::ops::Deref;
+        let bmp = super::BMPString::new(input).unwrap();
+        assert_eq!(bmp.deref(), expected_codes.as_slice());
+    }
+
+    #[test]
+    fn test_octetstring_hex() {
+        let octets = OctetString::from(vec![0x48, 0x65, 0x6c, 0x6c, 0x6f]);
+        assert_eq!(octets.hex(), "48656c6c6f");
+
+        let octets2 = OctetString::from(vec![0xde, 0xad, 0xbe, 0xef]);
+        assert_eq!(octets2.hex(), "deadbeef");
+
+        let octets3 = OctetString::from(vec![0x00, 0x01, 0xff]);
+        assert_eq!(octets3.hex(), "0001ff");
+
+        let empty = OctetString::from(vec![]);
+        assert_eq!(empty.hex(), "");
+    }
+
+    #[rstest(
+        input,
+        equal_to,
+        not_equal_to,
+        case("Hello", "Hello", "World"),
+        case("Test", "Test", "Other")
+    )]
+    fn test_bmpstring_partial_eq_str(input: &str, equal_to: &str, not_equal_to: &str) {
+        let bmp = super::BMPString::new(input).unwrap();
+        assert_eq!(bmp, equal_to);
+        assert_eq!(bmp, equal_to.to_string());
+        assert_ne!(bmp, not_equal_to);
+    }
+
+    #[rstest(
+        input,
+        expected_display,
+        case("Test String", "Test String"),
+        case("Hello", "Hello"),
+        case("日本語", "日本語")
+    )]
+    fn test_bmpstring_display(input: &str, expected_display: &str) {
+        let bmp = super::BMPString::new(input).unwrap();
+        assert_eq!(format!("{}", bmp), expected_display);
+    }
+
+    #[rstest(
+        ucs2_data,
+        expected_str,
+        case(vec![0x0048, 0x0065, 0x006c, 0x006c, 0x006f], "Hello"),
+        case(vec![0x0054, 0x0065, 0x0073, 0x0074], "Test"),
+        case(vec![0x65e5, 0x672c, 0x8a9e], "日本語"),
+    )]
+    fn test_bmpstring_from_ucs2(ucs2_data: Vec<u16>, expected_str: &str) {
+        let bmp = super::BMPString::try_from(ucs2_data).unwrap();
+        assert_eq!(bmp.to_string(), expected_str);
+    }
+
+    #[rstest(
+        surrogate_code,
+        case(vec![0xD800]),  // High surrogate start
+        case(vec![0xDBFF]),  // High surrogate end
+        case(vec![0xDC00]),  // Low surrogate start
+        case(vec![0xDFFF]),  // Low surrogate end
+    )]
+    fn test_bmpstring_from_ucs2_rejects_surrogates(surrogate_code: Vec<u16>) {
+        let result = super::BMPString::try_from(surrogate_code);
+        assert!(result.is_err());
+    }
+
+    #[rstest(
+        input,
+        expected_vec,
+        case("AB", vec![0x0041, 0x0042]),
+        case("XY", vec![0x0058, 0x0059]),
+    )]
+    fn test_bmpstring_into_vec(input: &str, expected_vec: Vec<u16>) {
+        let bmp = super::BMPString::new(input).unwrap();
+        let vec: Vec<u16> = bmp.into();
+        assert_eq!(vec, expected_vec);
+    }
+
+    #[rstest(
+        input,
+        expected_bytes,
+        case("AB", vec![0x00, 0x41, 0x00, 0x42]),
+        case("XY", vec![0x00, 0x58, 0x00, 0x59]),
+        case("日", vec![0x65, 0xE5]),
+    )]
+    fn test_bmpstring_to_be_bytes(input: &str, expected_bytes: Vec<u8>) {
+        let bmp = super::BMPString::new(input).unwrap();
+        assert_eq!(bmp.to_be_bytes(), expected_bytes);
+    }
+
+    #[rstest(
+        bytes,
+        expected_str,
+        case(vec![0x00, 0x41, 0x00, 0x42], "AB"),
+        case(vec![0x00, 0x48, 0x00, 0x69], "Hi"),
+        case(vec![0x65, 0xE5, 0x67, 0x2C, 0x8A, 0x9E], "日本語"),
+    )]
+    fn test_bmpstring_from_be_bytes(bytes: Vec<u8>, expected_str: &str) {
+        let bmp = super::BMPString::from_be_bytes(&bytes).unwrap();
+        assert_eq!(bmp.to_string(), expected_str);
+    }
+
+    #[rstest(
+        bytes,
+        case(vec![0x00]),           // Odd length
+        case(vec![0x00, 0x41, 0x00]), // Odd length
+    )]
+    fn test_bmpstring_from_be_bytes_odd_length_error(bytes: Vec<u8>) {
+        let result = super::BMPString::from_be_bytes(&bytes);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_bmpstring_roundtrip() {
+        let original = "Hello 日本語";
+        let bmp = super::BMPString::new(original).unwrap();
+        let bytes = bmp.to_be_bytes();
+        let restored = super::BMPString::from_be_bytes(&bytes).unwrap();
+        assert_eq!(restored.to_string(), original);
     }
 }

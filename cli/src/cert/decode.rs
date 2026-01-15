@@ -6,7 +6,6 @@ use der::Der;
 use pem::Pem;
 use tsumiki::decoder::Decoder;
 
-use crate::decode::decode;
 use crate::error::Result;
 use crate::output::OutputFormat;
 use crate::utils::read_input;
@@ -51,8 +50,8 @@ pub(crate) fn execute(config: Config) -> Result<()> {
     let cert: x509::Certificate = if let Ok(contents) = String::from_utf8(input_bytes.clone()) {
         // Text data - try PEM first
         if let Ok(pem) = Pem::from_str(&contents) {
-            // PEM format - decode directly using utility function
-            decode(pem)?
+            // PEM format - decode directly
+            pem.decode()?
         } else {
             // Not PEM, maybe UTF-8 encoded DER (unlikely but possible)
             // Try to parse as DER

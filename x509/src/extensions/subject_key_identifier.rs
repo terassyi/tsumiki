@@ -1,8 +1,9 @@
 use asn1::{ASN1Object, Element, OctetString};
-use serde::{Deserialize, Serialize, Serializer};
+use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
-use crate::{error::Error, extensions::StandardExtension};
+use crate::error::Error;
+use crate::extensions::Extension;
 
 /*
 RFC 5280 Section 4.2.1.2
@@ -14,9 +15,8 @@ that contain a particular public key. Typically, this is a SHA-1 hash of the
 subjectPublicKey (excluding the tag, length, and number of unused bits).
 */
 
-/// KeyIdentifier is an OCTET STRING used to identify a public key
-/// Typically a SHA-1 hash of the SubjectPublicKeyInfo (20 bytes)
-pub type KeyIdentifier = Vec<u8>;
+// Re-export KeyIdentifier from pkix-types for backward compatibility
+pub use pkix_types::KeyIdentifier;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct SubjectKeyIdentifier {
@@ -29,10 +29,10 @@ impl Serialize for SubjectKeyIdentifier {
     where
         S: Serializer,
     {
-        use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("SubjectKeyIdentifier", 1)?;
         let hex_string = self
             .key_identifier
+            .as_bytes()
             .iter()
             .map(|b| format!("{:02x}", b))
             .collect::<Vec<_>>()
@@ -73,7 +73,7 @@ impl Decoder<Element, SubjectKeyIdentifier> for Element {
     fn decode(&self) -> Result<SubjectKeyIdentifier, Self::Error> {
         match self {
             Element::OctetString(os) => Ok(SubjectKeyIdentifier {
-                key_identifier: os.as_bytes().to_vec(),
+                key_identifier: os.clone(),
             }),
             _ => Err(Error::InvalidSubjectKeyIdentifier(
                 "expected OctetString".to_string(),
@@ -82,7 +82,7 @@ impl Decoder<Element, SubjectKeyIdentifier> for Element {
     }
 }
 
-impl StandardExtension for SubjectKeyIdentifier {
+impl Extension for SubjectKeyIdentifier {
     /// OID for SubjectKeyIdentifier extension (2.5.29.14)
     const OID: &'static str = "2.5.29.14";
 
@@ -94,7 +94,7 @@ impl StandardExtension for SubjectKeyIdentifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::extensions::Extension;
+    use crate::extensions::RawExtension;
     use asn1::Element;
     use asn1::{ObjectIdentifier, OctetString};
     use rstest::rstest;
@@ -112,24 +112,24 @@ mod tests {
                 0xC4, 0x86, 0xA4, 0x1D, 0x23, 0x0A, 0x53, 0xCE, 0xCD, 0xD7,
             ])),
             SubjectKeyIdentifier {
-                key_identifier: vec![
+                key_identifier: OctetString::from(vec![
                     0x78, 0xD4, 0x81, 0x76, 0xCD, 0xF7, 0x8D, 0x59, 0x6D, 0xD4,
                     0xC4, 0x86, 0xA4, 0x1D, 0x23, 0x0A, 0x53, 0xCE, 0xCD, 0xD7,
-                ],
+                ]),
             }
         ),
         // Test case: Shorter identifier (4 bytes)
         case(
             Element::OctetString(OctetString::from(vec![0xAA, 0xBB, 0xCC, 0xDD])),
             SubjectKeyIdentifier {
-                key_identifier: vec![0xAA, 0xBB, 0xCC, 0xDD],
+                key_identifier: OctetString::from(vec![0xAA, 0xBB, 0xCC, 0xDD]),
             }
         ),
         // Test case: Single byte identifier
         case(
             Element::OctetString(OctetString::from(vec![0x42])),
             SubjectKeyIdentifier {
-                key_identifier: vec![0x42],
+                key_identifier: OctetString::from(vec![0x42]),
             }
         ),
     )]
@@ -180,20 +180,20 @@ mod tests {
         ];
         let octet_string = OctetString::from(der_bytes);
 
-        let extension = Extension {
-            id: ObjectIdentifier::from_str(SubjectKeyIdentifier::OID).unwrap(),
-            critical: false,
-            value: octet_string,
-        };
+        let extension = RawExtension::new(
+            ObjectIdentifier::from_str(SubjectKeyIdentifier::OID).unwrap(),
+            false,
+            octet_string,
+        );
 
         let result = extension.parse::<SubjectKeyIdentifier>();
         assert!(result.is_ok(), "Failed to parse: {:?}", result);
         let ski = result.unwrap();
 
-        let expected_key_id = vec![
+        let expected_key_id = OctetString::from(vec![
             0x78, 0xD4, 0x81, 0x76, 0xCD, 0xF7, 0x8D, 0x59, 0x6D, 0xD4, 0xC4, 0x86, 0xA4, 0x1D,
             0x23, 0x0A, 0x53, 0xCE, 0xCD, 0xD7,
-        ];
+        ]);
         assert_eq!(ski.key_identifier, expected_key_id);
     }
 }
