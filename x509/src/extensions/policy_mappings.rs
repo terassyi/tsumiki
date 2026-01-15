@@ -1,6 +1,7 @@
 use asn1::{ASN1Object, Element, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -96,6 +97,27 @@ impl Decoder<Element, PolicyMappings> for Element {
     }
 }
 
+impl EncodableTo<PolicyMappings> for Element {}
+
+impl Encoder<PolicyMappings, Element> for PolicyMappings {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.mappings.is_empty() {
+            return Err(Error::InvalidPolicyMappings(
+                "at least one mapping required".to_string(),
+            ));
+        }
+
+        let mapping_elements = self.mappings
+            .iter()
+            .map(|m| m.encode())
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Element::Sequence(mapping_elements))
+    }
+}
+
 impl DecodableFrom<Element> for PolicyMapping {}
 
 impl Decoder<Element, PolicyMapping> for Element {
@@ -152,6 +174,30 @@ impl Decoder<Element, PolicyMapping> for Element {
                 "expected Sequence for PolicyMapping".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<PolicyMapping> for Element {}
+
+impl Encoder<PolicyMapping, Element> for PolicyMapping {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.issuer_domain_policy == CertificatePolicies::ANY_POLICY {
+            return Err(Error::InvalidPolicyMappings(
+                "issuerDomainPolicy must not be anyPolicy".to_string(),
+            ));
+        }
+        if self.subject_domain_policy == CertificatePolicies::ANY_POLICY {
+            return Err(Error::InvalidPolicyMappings(
+                "subjectDomainPolicy must not be anyPolicy".to_string(),
+            ));
+        }
+
+        Ok(Element::Sequence(vec![
+            Element::ObjectIdentifier(self.issuer_domain_policy.clone()),
+            Element::ObjectIdentifier(self.subject_domain_policy.clone()),
+        ]))
     }
 }
 

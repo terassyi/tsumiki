@@ -1,6 +1,7 @@
 use asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -68,6 +69,21 @@ impl Decoder<Element, AccessDescription> for Element {
     }
 }
 
+impl EncodableTo<AccessDescription> for Element {}
+
+impl Encoder<AccessDescription, Element> for AccessDescription {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let access_method_elem = Element::ObjectIdentifier(self.access_method.clone());
+        let access_location_elem = self.access_location.encode()?;
+        Ok(Element::Sequence(vec![
+            access_method_elem,
+            access_location_elem,
+        ]))
+    }
+}
+
 /// AuthorityInfoAccess extension (RFC 5280 Section 4.2.2.1)
 /// Contains information about OCSP responders and CA certificate issuers
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -129,6 +145,27 @@ impl Decoder<Element, AuthorityInfoAccess> for Element {
                 "expected Sequence".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<AuthorityInfoAccess> for Element {}
+
+impl Encoder<AuthorityInfoAccess, Element> for AuthorityInfoAccess {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.descriptors.is_empty() {
+            return Err(Error::InvalidAuthorityInfoAccess(
+                "at least one AccessDescription required".to_string(),
+            ));
+        }
+
+        let desc_elements = self
+            .descriptors
+            .iter()
+            .map(|desc| desc.encode())
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Element::Sequence(desc_elements))
     }
 }
 

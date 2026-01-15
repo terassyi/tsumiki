@@ -1,6 +1,7 @@
 use asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -85,6 +86,28 @@ impl Decoder<Element, ExtendedKeyUsage> for Element {
                 "expected Sequence".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<ExtendedKeyUsage> for Element {}
+
+impl Encoder<ExtendedKeyUsage, Element> for ExtendedKeyUsage {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.purposes.is_empty() {
+            return Err(Error::InvalidExtendedKeyUsage(
+                "at least one KeyPurposeId required".to_string(),
+            ));
+        }
+
+        let elements = self
+            .purposes
+            .iter()
+            .map(|oid| Element::ObjectIdentifier(oid.clone()))
+            .collect();
+
+        Ok(Element::Sequence(elements))
     }
 }
 

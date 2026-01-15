@@ -1,7 +1,8 @@
 use asn1::OctetString;
-use asn1::{ASN1Object, Element};
+use asn1::{ASN1Object, Element, Integer};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 
@@ -70,6 +71,22 @@ impl Decoder<Element, InhibitAnyPolicy> for Element {
                 "expected Integer".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<InhibitAnyPolicy> for Element {}
+
+impl Encoder<InhibitAnyPolicy, Element> for InhibitAnyPolicy {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let bytes = self.skip_certs.to_be_bytes();
+        let start = bytes
+            .iter()
+            .position(|&b| b != 0)
+            .unwrap_or(bytes.len() - 1);
+        let slice = bytes.get(start..).unwrap_or(&bytes);
+        Ok(Element::Integer(Integer::from(slice)))
     }
 }
 

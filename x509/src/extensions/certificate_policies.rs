@@ -1,6 +1,7 @@
-use asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
+use asn1::{ASN1Object, Element, Integer, ObjectIdentifier, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -151,6 +152,28 @@ impl Decoder<Element, CertificatePolicies> for Element {
     }
 }
 
+impl EncodableTo<CertificatePolicies> for Element {}
+
+impl Encoder<CertificatePolicies, Element> for CertificatePolicies {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.policies.is_empty() {
+            return Err(Error::InvalidCertificatePolicies(
+                "at least one PolicyInformation required".to_string(),
+            ));
+        }
+
+        let policy_elements = self
+            .policies
+            .iter()
+            .map(|p| p.encode())
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Element::Sequence(policy_elements))
+    }
+}
+
 impl DecodableFrom<Element> for PolicyInformation {}
 
 impl Decoder<Element, PolicyInformation> for Element {
@@ -202,6 +225,34 @@ impl Decoder<Element, PolicyInformation> for Element {
                 "expected Sequence for PolicyInformation".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<PolicyInformation> for Element {}
+
+impl Encoder<PolicyInformation, Element> for PolicyInformation {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let policy_id = Element::ObjectIdentifier(self.policy_identifier.clone());
+
+        let qualifiers_elem = match &self.policy_qualifiers {
+            Some(qualifiers) => {
+                let encoded = qualifiers
+                    .iter()
+                    .map(|q| q.encode())
+                    .collect::<Result<Vec<_>, _>>()?;
+                Some(Element::Sequence(encoded))
+            }
+            None => None,
+        };
+
+        let mut elements = vec![policy_id];
+        if let Some(qualifiers) = qualifiers_elem {
+            elements.push(qualifiers);
+        }
+
+        Ok(Element::Sequence(elements))
     }
 }
 
@@ -275,6 +326,25 @@ impl Decoder<Element, PolicyQualifierInfo> for Element {
     }
 }
 
+impl EncodableTo<PolicyQualifierInfo> for Element {}
+
+impl Encoder<PolicyQualifierInfo, Element> for PolicyQualifierInfo {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let qualifier_elem = match &self.qualifier {
+            Qualifier::CpsUri(uri) => Element::IA5String(uri.clone()),
+            Qualifier::UserNotice(notice) => notice.encode()?,
+            Qualifier::Other(bytes) => Element::OctetString(bytes.clone().into()),
+        };
+
+        Ok(Element::Sequence(vec![
+            Element::ObjectIdentifier(self.policy_qualifier_id.clone()),
+            qualifier_elem,
+        ]))
+    }
+}
+
 impl DecodableFrom<Element> for UserNotice {}
 
 impl Decoder<Element, UserNotice> for Element {
@@ -315,6 +385,28 @@ impl Decoder<Element, UserNotice> for Element {
                 "expected Sequence for UserNotice".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<UserNotice> for Element {}
+
+impl Encoder<UserNotice, Element> for UserNotice {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let notice_ref_elem = if let Some(nr) = &self.notice_ref {
+            Some(nr.encode()?)
+        } else {
+            None
+        };
+        let text_elem = self
+            .explicit_text
+            .as_ref()
+            .map(|text| Element::UTF8String(text.clone()));
+
+        let elements = notice_ref_elem.into_iter().chain(text_elem).collect();
+
+        Ok(Element::Sequence(elements))
     }
 }
 
@@ -385,6 +477,34 @@ impl Decoder<Element, NoticeReference> for Element {
                 "expected Sequence for NoticeReference".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<NoticeReference> for Element {}
+
+impl Encoder<NoticeReference, Element> for NoticeReference {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let org_elem = Element::UTF8String(self.organization.clone());
+        let numbers = self
+            .notice_numbers
+            .iter()
+            .map(|&num| {
+                let bytes = num.to_be_bytes();
+                let start = bytes
+                    .iter()
+                    .position(|&b| b != 0)
+                    .unwrap_or(bytes.len() - 1);
+                let slice = bytes.get(start..).unwrap_or(&bytes);
+                Element::Integer(Integer::from(slice))
+            })
+            .collect();
+
+        Ok(Element::Sequence(vec![
+            org_elem,
+            Element::Sequence(numbers),
+        ]))
     }
 }
 

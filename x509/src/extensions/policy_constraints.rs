@@ -1,6 +1,7 @@
-use asn1::{ASN1Object, Element, OctetString};
+use asn1::{ASN1Object, Element, Integer, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -148,6 +149,52 @@ impl Decoder<Element, PolicyConstraints> for Element {
                 "expected Sequence".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<PolicyConstraints> for Element {}
+
+impl Encoder<PolicyConstraints, Element> for PolicyConstraints {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.require_explicit_policy.is_none() && self.inhibit_policy_mapping.is_none() {
+            return Err(Error::InvalidPolicyConstraints(
+                "at least one field must be present".to_string(),
+            ));
+        }
+
+        let require_elem = self.require_explicit_policy.map(|value| {
+            let bytes = value.to_be_bytes();
+            let start = bytes
+                .iter()
+                .position(|&b| b != 0)
+                .unwrap_or(bytes.len() - 1);
+            let slice = bytes.get(start..).unwrap_or(&bytes);
+            Element::ContextSpecific {
+                constructed: false,
+                slot: 0,
+                element: Box::new(Element::Integer(Integer::from(slice))),
+            }
+        });
+
+        let inhibit_elem = self.inhibit_policy_mapping.map(|value| {
+            let bytes = value.to_be_bytes();
+            let start = bytes
+                .iter()
+                .position(|&b| b != 0)
+                .unwrap_or(bytes.len() - 1);
+            let slice = bytes.get(start..).unwrap_or(&bytes);
+            Element::ContextSpecific {
+                constructed: false,
+                slot: 1,
+                element: Box::new(Element::Integer(Integer::from(slice))),
+            }
+        });
+
+        let elements = require_elem.into_iter().chain(inhibit_elem).collect();
+
+        Ok(Element::Sequence(elements))
     }
 }
 

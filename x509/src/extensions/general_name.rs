@@ -1,9 +1,10 @@
 use std::net::IpAddr;
 
-use asn1::{Element, ObjectIdentifier};
+use asn1::{Element, ObjectIdentifier, OctetString};
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::DirectoryString;
 use crate::Name;
@@ -371,6 +372,34 @@ impl GeneralName {
     }
 }
 
+impl EncodableTo<IpAddressOrRange> for Element {}
+
+impl Encoder<IpAddressOrRange, Element> for IpAddressOrRange {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let bytes = match self {
+            IpAddressOrRange::Address(IpAddr::V4(addr)) => addr.octets().to_vec(),
+            IpAddressOrRange::Address(IpAddr::V6(addr)) => addr.octets().to_vec(),
+            IpAddressOrRange::Network(IpNet::V4(net)) => {
+                let addr_bytes = net.addr().octets();
+                let prefix_len = net.prefix_len();
+                let mask = !0u32 << (32 - prefix_len);
+                let mask_bytes = mask.to_be_bytes();
+                [&addr_bytes[..], &mask_bytes[..]].concat()
+            }
+            IpAddressOrRange::Network(IpNet::V6(net)) => {
+                let addr_bytes = net.addr().octets();
+                let prefix_len = net.prefix_len();
+                let mask = !0u128 << (128 - prefix_len);
+                let mask_bytes = mask.to_be_bytes();
+                [&addr_bytes[..], &mask_bytes[..]].concat()
+            }
+        };
+        Ok(Element::OctetString(OctetString::from(bytes)))
+    }
+}
+
 impl DecodableFrom<Element> for GeneralName {}
 
 impl Decoder<Element, GeneralName> for Element {
@@ -384,6 +413,99 @@ impl Decoder<Element, GeneralName> for Element {
             _ => Err(Error::InvalidGeneralName(
                 "GeneralName must be context-specific element".to_string(),
             )),
+        }
+    }
+}
+
+impl EncodableTo<GeneralName> for Element {}
+
+impl Encoder<GeneralName, Element> for GeneralName {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        match self {
+            GeneralName::OtherName(other) => {
+                let value_elem = Element::ContextSpecific {
+                    constructed: true,
+                    slot: 0,
+                    element: Box::new(Element::OctetString(OctetString::from(other.value.clone()))),
+                };
+                Ok(Element::ContextSpecific {
+                    constructed: true,
+                    slot: 0,
+                    element: Box::new(Element::Sequence(vec![
+                        Element::ObjectIdentifier(other.type_id.clone()),
+                        value_elem,
+                    ])),
+                })
+            }
+            GeneralName::Rfc822Name(s) | GeneralName::DnsName(s) | GeneralName::Uri(s) => {
+                let slot = match self {
+                    GeneralName::Rfc822Name(_) => 1,
+                    GeneralName::DnsName(_) => 2,
+                    GeneralName::Uri(_) => 6,
+                    _ => unreachable!(),
+                };
+                Ok(Element::ContextSpecific {
+                    constructed: false,
+                    slot,
+                    element: Box::new(Element::OctetString(OctetString::from(
+                        s.as_bytes().to_vec(),
+                    ))),
+                })
+            }
+            GeneralName::X400Address(bytes) => Ok(Element::ContextSpecific {
+                constructed: false,
+                slot: 3,
+                element: Box::new(Element::OctetString(OctetString::from(bytes.clone()))),
+            }),
+            GeneralName::DirectoryName(name) => {
+                let name_elem = name.encode()?;
+                Ok(Element::ContextSpecific {
+                    constructed: true,
+                    slot: 4,
+                    element: Box::new(name_elem),
+                })
+            }
+            GeneralName::EdiPartyName(edi) => {
+                let elements = std::iter::once(edi.name_assigner.as_ref().map(|na| {
+                    Element::ContextSpecific {
+                        constructed: false,
+                        slot: 0,
+                        element: Box::new(Element::OctetString(OctetString::from(
+                            na.as_bytes().to_vec(),
+                        ))),
+                    }
+                }))
+                .chain(std::iter::once(Some(Element::ContextSpecific {
+                    constructed: false,
+                    slot: 1,
+                    element: Box::new(Element::OctetString(OctetString::from(
+                        edi.party_name.as_bytes().to_vec(),
+                    ))),
+                })))
+                .flatten()
+                .collect();
+
+                Ok(Element::ContextSpecific {
+                    constructed: true,
+                    slot: 5,
+                    element: Box::new(Element::Sequence(elements)),
+                })
+            }
+            GeneralName::IpAddress(ip) => {
+                let ip_elem = ip.encode()?;
+                Ok(Element::ContextSpecific {
+                    constructed: false,
+                    slot: 7,
+                    element: Box::new(ip_elem),
+                })
+            }
+            GeneralName::RegisteredId(oid) => Ok(Element::ContextSpecific {
+                constructed: false,
+                slot: 8,
+                element: Box::new(Element::ObjectIdentifier(oid.clone())),
+            }),
         }
     }
 }

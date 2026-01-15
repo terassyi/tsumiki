@@ -1,6 +1,7 @@
-use asn1::{ASN1Object, Element, OctetString};
+use asn1::{ASN1Object, BitString, Element, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -113,6 +114,45 @@ impl From<asn1::BitString> for ReasonFlags {
     }
 }
 
+impl EncodableTo<ReasonFlags> for Element {}
+
+impl Encoder<ReasonFlags, Element> for ReasonFlags {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let flags = [
+            false,
+            self.key_compromise,
+            self.ca_compromise,
+            self.affiliation_changed,
+            self.superseded,
+            self.cessation_of_operation,
+            self.certificate_hold,
+            self.privilege_withdrawn,
+            self.aa_compromise,
+        ];
+
+        let last_set = flags.iter().rposition(|&b| b).unwrap_or(0);
+        let num_bytes = (last_set + 1 + 7) / 8;
+        let unused_bits = num_bytes * 8 - (last_set + 1);
+
+        let bytes: Vec<u8> = (0..num_bytes)
+            .map(|byte_idx| {
+                let mut byte = 0u8;
+                for bit_idx in 0..8 {
+                    let flag_idx = byte_idx * 8 + bit_idx;
+                    if flags.get(flag_idx).copied().unwrap_or(false) {
+                        byte |= 1u8 << (7 - bit_idx);
+                    }
+                }
+                byte
+            })
+            .collect();
+
+        Ok(Element::BitString(BitString::new(unused_bits as u8, bytes)))
+    }
+}
+
 impl DecodableFrom<OctetString> for CRLDistributionPoints {}
 
 impl Decoder<OctetString, CRLDistributionPoints> for OctetString {
@@ -160,6 +200,27 @@ impl Decoder<Element, CRLDistributionPoints> for Element {
                 "expected Sequence".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<CRLDistributionPoints> for Element {}
+
+impl Encoder<CRLDistributionPoints, Element> for CRLDistributionPoints {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.distribution_points.is_empty() {
+            return Err(Error::InvalidCRLDistributionPoints(
+                "at least one DistributionPoint required".to_string(),
+            ));
+        }
+
+        let dp_elements = self.distribution_points
+            .iter()
+            .map(|dp| dp.encode())
+            .collect::<Result<Vec<_>, _>>()?;
+        
+        Ok(Element::Sequence(dp_elements))
     }
 }
 
@@ -234,6 +295,53 @@ impl Decoder<Element, DistributionPoint> for Element {
     }
 }
 
+impl EncodableTo<DistributionPoint> for Element {}
+
+impl Encoder<DistributionPoint, Element> for DistributionPoint {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let dp_elem = if let Some(dp) = &self.distribution_point {
+            Some(dp.encode()?)
+        } else {
+            None
+        };
+
+        let reasons_elem = match &self.reasons {
+            Some(r) => {
+                let bit_string = r.encode()?;
+                Some(Element::ContextSpecific {
+                    constructed: false,
+                    slot: 1,
+                    element: Box::new(bit_string),
+                })
+            }
+            None => None,
+        };
+
+        let issuer_elem = match &self.crl_issuer {
+            Some(issuers) => {
+                let encoded = issuers.iter()
+                    .map(|i| i.encode())
+                    .collect::<Result<Vec<_>, _>>()?;
+                Some(Element::ContextSpecific {
+                    constructed: true,
+                    slot: 2,
+                    element: Box::new(Element::Sequence(encoded)),
+                })
+            }
+            None => None,
+        };
+
+        let elements = dp_elem.into_iter()
+            .chain(reasons_elem)
+            .chain(issuer_elem)
+            .collect();
+
+        Ok(Element::Sequence(elements))
+    }
+}
+
 impl DecodableFrom<Element> for DistributionPointName {}
 
 impl Decoder<Element, DistributionPointName> for Element {
@@ -271,6 +379,27 @@ impl Decoder<Element, DistributionPointName> for Element {
             _ => Err(Error::InvalidCRLDistributionPoints(
                 "expected context-specific element for DistributionPointName".to_string(),
             )),
+        }
+    }
+}
+
+impl EncodableTo<DistributionPointName> for Element {}
+
+impl Encoder<DistributionPointName, Element> for DistributionPointName {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        match self {
+            DistributionPointName::FullName(names) => {
+                let encoded_names = names.iter()
+                    .map(|n| n.encode())
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(Element::ContextSpecific {
+                    constructed: true,
+                    slot: 0,
+                    element: Box::new(Element::Sequence(encoded_names)),
+                })
+            }
         }
     }
 }

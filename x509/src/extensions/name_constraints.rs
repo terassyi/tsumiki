@@ -1,6 +1,7 @@
 use asn1::{ASN1Object, Element, Integer, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -147,6 +148,58 @@ impl Decoder<Element, GeneralSubtree> for Element {
     }
 }
 
+impl EncodableTo<GeneralSubtree> for Element {}
+
+impl Encoder<GeneralSubtree, Element> for GeneralSubtree {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let base_elem = self.base.encode()?;
+
+        let minimum_elem = if self.minimum != 0 {
+            let bytes = self.minimum.to_be_bytes();
+            let start = bytes
+                .iter()
+                .position(|&b| b != 0)
+                .unwrap_or(bytes.len() - 1);
+            let slice = bytes.get(start..).unwrap_or(&bytes);
+            let integer = Integer::from(slice);
+            Some(Element::ContextSpecific {
+                constructed: false,
+                slot: 0,
+                element: Box::new(Element::OctetString(integer.to_signed_bytes_be().into())),
+            })
+        } else {
+            None
+        };
+
+        let maximum_elem = self.maximum.map(|max| {
+            let bytes = max.to_be_bytes();
+            let start = bytes
+                .iter()
+                .position(|&b| b != 0)
+                .unwrap_or(bytes.len() - 1);
+            let slice = bytes.get(start..).unwrap_or(&bytes);
+            let integer = Integer::from(slice);
+            Element::ContextSpecific {
+                constructed: false,
+                slot: 1,
+                element: Box::new(Element::OctetString(integer.to_signed_bytes_be().into())),
+            }
+        });
+
+        let mut elements = vec![base_elem];
+        if let Some(min) = minimum_elem {
+            elements.push(min);
+        }
+        if let Some(max) = maximum_elem {
+            elements.push(max);
+        }
+
+        Ok(Element::Sequence(elements))
+    }
+}
+
 /// NameConstraints extension (RFC 5280 Section 4.2.1.10)
 /// Defines name spaces within which all subject names in subsequent certificates must be located
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -264,6 +317,54 @@ impl Decoder<Element, NameConstraints> for Element {
                 "expected Sequence".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<NameConstraints> for Element {}
+
+impl Encoder<NameConstraints, Element> for NameConstraints {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.permitted_subtrees.is_none() && self.excluded_subtrees.is_none() {
+            return Err(Error::InvalidNameConstraints(
+                "at least one of permittedSubtrees or excludedSubtrees must be present".to_string(),
+            ));
+        }
+
+        let permitted_elem = match &self.permitted_subtrees {
+            Some(subtrees) => {
+                let encoded_subtrees = subtrees
+                    .iter()
+                    .map(|s| s.encode())
+                    .collect::<Result<Vec<_>, _>>()?;
+                Some(Element::ContextSpecific {
+                    constructed: true,
+                    slot: 0,
+                    element: Box::new(Element::Sequence(encoded_subtrees)),
+                })
+            }
+            None => None,
+        };
+
+        let excluded_elem = match &self.excluded_subtrees {
+            Some(subtrees) => {
+                let encoded_subtrees = subtrees
+                    .iter()
+                    .map(|s| s.encode())
+                    .collect::<Result<Vec<_>, _>>()?;
+                Some(Element::ContextSpecific {
+                    constructed: true,
+                    slot: 1,
+                    element: Box::new(Element::Sequence(encoded_subtrees)),
+                })
+            }
+            None => None,
+        };
+
+        let elements = permitted_elem.into_iter().chain(excluded_elem).collect();
+
+        Ok(Element::Sequence(elements))
     }
 }
 

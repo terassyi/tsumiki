@@ -1,6 +1,7 @@
 use asn1::{ASN1Object, Element, OctetString};
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -79,6 +80,16 @@ impl Decoder<Element, SubjectKeyIdentifier> for Element {
                 "expected OctetString".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<SubjectKeyIdentifier> for Element {}
+
+impl Encoder<SubjectKeyIdentifier, Element> for SubjectKeyIdentifier {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        Ok(Element::OctetString(self.key_identifier.clone()))
     }
 }
 

@@ -1,6 +1,7 @@
 use asn1::{ASN1Object, Element, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -68,6 +69,28 @@ impl Decoder<Element, SubjectAltName> for Element {
                 "expected Sequence".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<SubjectAltName> for Element {}
+
+impl Encoder<SubjectAltName, Element> for SubjectAltName {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.names.is_empty() {
+            return Err(Error::InvalidSubjectAltName(
+                "at least one GeneralName required".to_string(),
+            ));
+        }
+
+        let elements = self
+            .names
+            .iter()
+            .map(|name| name.encode())
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Element::Sequence(elements))
     }
 }
 

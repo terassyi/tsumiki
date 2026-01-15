@@ -1,5 +1,6 @@
-use asn1::OctetString;
+use asn1::{Element, OctetString};
 use serde::{Deserialize, Serialize};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::{CRLDistributionPoints, Extension};
@@ -69,6 +70,16 @@ impl Extension for FreshestCRL {
         Ok(Self {
             distribution_points,
         })
+    }
+}
+
+impl EncodableTo<FreshestCRL> for Element {}
+
+impl Encoder<FreshestCRL, Element> for FreshestCRL {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        self.distribution_points.encode()
     }
 }
 

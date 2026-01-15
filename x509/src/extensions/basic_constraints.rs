@@ -1,6 +1,7 @@
-use asn1::{ASN1Object, Element, OctetString};
+use asn1::{ASN1Object, Element, Integer, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -92,6 +93,30 @@ impl Decoder<Element, BasicConstraints> for Element {
                 "expected Sequence".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<BasicConstraints> for Element {}
+
+impl Encoder<BasicConstraints, Element> for BasicConstraints {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let ca = self.ca.then_some(Element::Boolean(true));
+
+        let path_len = self.path_len_constraint.map(|len| {
+            let bytes = len.to_be_bytes();
+            let start = bytes
+                .iter()
+                .position(|&b| b != 0)
+                .unwrap_or(bytes.len() - 1);
+            let slice = bytes.get(start..).unwrap_or(&bytes);
+            Element::Integer(Integer::from(slice))
+        });
+
+        let elements = ca.into_iter().chain(path_len).collect();
+
+        Ok(Element::Sequence(elements))
     }
 }
 

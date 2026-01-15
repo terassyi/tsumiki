@@ -2,6 +2,7 @@ use asn1::{ASN1Object, Element, OctetString};
 use pkix_types::{CertificateSerialNumber, KeyIdentifier};
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -165,6 +166,51 @@ impl Decoder<Element, AuthorityKeyIdentifier> for Element {
                 "expected Sequence".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<AuthorityKeyIdentifier> for Element {}
+
+impl Encoder<AuthorityKeyIdentifier, Element> for AuthorityKeyIdentifier {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let key_id_elem = self.key_identifier.as_ref().map(|key_id| Element::ContextSpecific {
+            constructed: false,
+            slot: 0,
+            element: Box::new(Element::OctetString(key_id.clone())),
+        });
+
+        let issuer_elem = match &self.authority_cert_issuer {
+            Some(issuers) => {
+                let issuer_elements = issuers
+                    .iter()
+                    .map(|name| name.encode())
+                    .collect::<Result<Vec<_>, _>>()?;
+                Some(Element::ContextSpecific {
+                    constructed: true,
+                    slot: 1,
+                    element: Box::new(Element::Sequence(issuer_elements)),
+                })
+            }
+            None => None,
+        };
+
+        let serial_elem = self.authority_cert_serial_number.as_ref().map(|serial| {
+            let serial_bytes = serial.as_ref().to_signed_bytes_be();
+            Element::ContextSpecific {
+                constructed: false,
+                slot: 2,
+                element: Box::new(Element::OctetString(OctetString::from(serial_bytes))),
+            }
+        });
+
+        let elements = key_id_elem.into_iter()
+            .chain(issuer_elem)
+            .chain(serial_elem)
+            .collect();
+
+        Ok(Element::Sequence(elements))
     }
 }
 

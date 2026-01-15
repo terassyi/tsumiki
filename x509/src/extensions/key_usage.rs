@@ -1,6 +1,7 @@
-use asn1::{ASN1Object, Element, OctetString};
+use asn1::{ASN1Object, BitString, Element, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -90,6 +91,48 @@ impl Decoder<Element, KeyUsage> for Element {
             }
             _ => Err(Error::InvalidKeyUsage("expected BitString".to_string())),
         }
+    }
+}
+
+impl EncodableTo<KeyUsage> for Element {}
+
+impl Encoder<KeyUsage, Element> for KeyUsage {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let bits = [
+            self.digital_signature,
+            self.content_commitment,
+            self.key_encipherment,
+            self.data_encipherment,
+            self.key_agreement,
+            self.key_cert_sign,
+            self.crl_sign,
+            self.encipher_only,
+            self.decipher_only,
+        ];
+
+        let last_bit = bits.iter().rposition(|&b| b).map_or(0, |p| p + 1);
+        let num_bytes = (last_bit + 7) / 8;
+
+        let bytes = (0..num_bytes)
+            .map(|byte_idx| {
+                (0..8)
+                    .filter_map(|bit_idx| {
+                        let bit_pos = byte_idx * 8 + bit_idx;
+                        (bit_pos < last_bit && bits.get(bit_pos) == Some(&true))
+                            .then_some(1u8 << (7 - bit_idx))
+                    })
+                    .sum()
+            })
+            .collect::<Vec<_>>();
+
+        let unused_bits = if last_bit == 0 {
+            0
+        } else {
+            (num_bytes * 8 - last_bit) as u8
+        };
+        Ok(Element::BitString(BitString::new(unused_bits, bytes)))
     }
 }
 
