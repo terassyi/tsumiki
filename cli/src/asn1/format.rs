@@ -107,6 +107,9 @@ fn format_element(element: &Element, depth: usize, parse_implicit: bool, output:
                 dt.format("%Y-%m-%d %H:%M:%S")
             ));
         }
+        Element::BMPString(bmp) => {
+            output.push_str(&format!("{}BMPString '{}'\n", prefix, bmp));
+        }
         Element::Sequence(elements) => {
             output.push_str(&format!("{}SEQUENCE ({} elem)\n", prefix, elements.len()));
             for elem in elements {

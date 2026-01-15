@@ -5,8 +5,9 @@ use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
+use crate::DirectoryString;
+use crate::Name;
 use crate::error::Error;
-use crate::{DirectoryString, Name};
 
 /// Represents an IP address or an IP network range (for NameConstraints)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

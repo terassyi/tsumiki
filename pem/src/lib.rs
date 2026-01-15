@@ -11,13 +11,28 @@ use regex::Regex;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
 const PRIVATE_KEY_LABEL: &str = "PRIVATE KEY";
+const ENCRYPTED_PRIVATE_KEY_LABEL: &str = "ENCRYPTED PRIVATE KEY";
+const RSA_PRIVATE_KEY_LABEL: &str = "RSA PRIVATE KEY";
+const EC_PRIVATE_KEY_LABEL: &str = "EC PRIVATE KEY";
 const PUBLIC_KEY_LABEL: &str = "PUBLIC KEY";
+const RSA_PUBLIC_KEY_LABEL: &str = "RSA PUBLIC KEY";
 const CERTIFICATE_LABEL: &str = "CERTIFICATE";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Label {
+    /// PKCS#8 private key (non-encrypted)
     PrivateKey,
+    /// PKCS#8 encrypted private key
+    EncryptedPrivateKey,
+    /// PKCS#1 RSA private key
+    RSAPrivateKey,
+    /// SEC1 EC private key
+    ECPrivateKey,
+    /// X.509 SubjectPublicKeyInfo
     PublicKey,
+    /// PKCS#1 RSA public key
+    RSAPublicKey,
+    /// X.509 Certificate
     Certificate,
     Unknown,
 }
@@ -26,7 +41,11 @@ impl Display for Label {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             Label::PrivateKey => write!(f, "{}", PRIVATE_KEY_LABEL),
+            Label::EncryptedPrivateKey => write!(f, "{}", ENCRYPTED_PRIVATE_KEY_LABEL),
+            Label::RSAPrivateKey => write!(f, "{}", RSA_PRIVATE_KEY_LABEL),
+            Label::ECPrivateKey => write!(f, "{}", EC_PRIVATE_KEY_LABEL),
             Label::PublicKey => write!(f, "{}", PUBLIC_KEY_LABEL),
+            Label::RSAPublicKey => write!(f, "{}", RSA_PUBLIC_KEY_LABEL),
             Label::Certificate => write!(f, "{}", CERTIFICATE_LABEL),
             Label::Unknown => write!(f, "UNKNOWN"),
         }
@@ -39,7 +58,11 @@ impl FromStr for Label {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             PRIVATE_KEY_LABEL => Ok(Label::PrivateKey),
+            ENCRYPTED_PRIVATE_KEY_LABEL => Ok(Label::EncryptedPrivateKey),
+            RSA_PRIVATE_KEY_LABEL => Ok(Label::RSAPrivateKey),
+            EC_PRIVATE_KEY_LABEL => Ok(Label::ECPrivateKey),
             PUBLIC_KEY_LABEL => Ok(Label::PublicKey),
+            RSA_PUBLIC_KEY_LABEL => Ok(Label::RSAPublicKey),
             CERTIFICATE_LABEL => Ok(Label::Certificate),
             _ => Err(Error::InvalidLabel),
         }

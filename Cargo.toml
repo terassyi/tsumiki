@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "asn1", "cli", "der", "pem", "tsumiki" , "x509"]
+members = [ "asn1", "cli", "der", "pem", "pkcs", "pkix-types", "tsumiki" , "x509"]
 
 [workspace.package]
 version = "0.0.1"
@@ -14,4 +14,6 @@ repository = "https://github.com/terassyi/tsumiki"
 chrono = { version = "0.4.42", features = ["serde"] }
 thiserror = "2.0.17"
 rstest = "0.26.1"
+serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+num-bigint = "0.4.6"

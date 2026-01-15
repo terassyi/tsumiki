@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
 use crate::error::Error;
+use crate::extensions::Extension;
 use crate::extensions::general_name::GeneralName;
 
 /*
@@ -70,7 +71,7 @@ impl Decoder<Element, SubjectAltName> for Element {
     }
 }
 
-impl super::StandardExtension for SubjectAltName {
+impl Extension for SubjectAltName {
     const OID: &'static str = Self::OID;
 
     fn parse(value: &OctetString) -> Result<Self, Error> {
@@ -81,7 +82,7 @@ impl super::StandardExtension for SubjectAltName {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::extensions::Extension;
+    use crate::extensions::RawExtension;
     use asn1::OctetString;
     use asn1::{Element, ObjectIdentifier};
     use rstest::rstest;
@@ -284,11 +285,11 @@ mod tests {
         ];
         let octet_string = OctetString::from(der_bytes);
 
-        let extension = Extension {
-            id: ObjectIdentifier::from_str(SubjectAltName::OID).unwrap(),
-            critical: false,
-            value: octet_string,
-        };
+        let extension = RawExtension::new(
+            ObjectIdentifier::from_str(SubjectAltName::OID).unwrap(),
+            false,
+            octet_string,
+        );
 
         let result = extension.parse::<SubjectAltName>();
         assert!(result.is_ok(), "Failed to parse: {:?}", result);

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
 use crate::error::Error;
-use crate::extensions::StandardExtension;
+use crate::extensions::Extension;
 use crate::extensions::general_name::GeneralName;
 
 /*
@@ -132,7 +132,7 @@ impl Decoder<Element, AuthorityInfoAccess> for Element {
     }
 }
 
-impl StandardExtension for AuthorityInfoAccess {
+impl Extension for AuthorityInfoAccess {
     /// OID for AuthorityInfoAccess extension (1.3.6.1.5.5.7.1.1)
     const OID: &'static str = "1.3.6.1.5.5.7.1.1";
 
@@ -144,7 +144,7 @@ impl StandardExtension for AuthorityInfoAccess {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::extensions::{Extension, StandardExtension};
+    use crate::extensions::{Extension, RawExtension};
     use asn1::OctetString;
     use asn1::{Element, ObjectIdentifier};
     use rstest::rstest;
@@ -357,11 +357,11 @@ mod tests {
         ];
         let octet_string = OctetString::from(der_bytes);
 
-        let extension = Extension {
-            id: ObjectIdentifier::from_str(AuthorityInfoAccess::OID).unwrap(),
-            critical: false,
-            value: octet_string,
-        };
+        let extension = RawExtension::new(
+            ObjectIdentifier::from_str(AuthorityInfoAccess::OID).unwrap(),
+            false,
+            octet_string,
+        );
 
         let result = extension.parse::<AuthorityInfoAccess>();
         assert!(result.is_ok(), "Failed to parse: {:?}", result);

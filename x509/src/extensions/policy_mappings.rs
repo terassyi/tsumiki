@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
 use crate::error::Error;
-use crate::extensions::StandardExtension;
+use crate::extensions::Extension;
 use crate::extensions::certificate_policies::{CertPolicyId, CertificatePolicies};
 
 /*
@@ -52,7 +52,7 @@ pub struct PolicyMapping {
     pub subject_domain_policy: CertPolicyId,
 }
 
-impl StandardExtension for PolicyMappings {
+impl Extension for PolicyMappings {
     /// OID for PolicyMappings extension (2.5.29.33)
     const OID: &'static str = "2.5.29.33";
 

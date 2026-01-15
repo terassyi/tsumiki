@@ -10,12 +10,12 @@ asn1 = { path = "../asn1" }
 chrono = { workspace = true }
 der = { path = "../der" }
 ipnet = { version = "2.10.1", features = ["serde"] }
-serde = { version = "1.0.228", features = ["derive"] }
+pem = { path = "../pem" }
+pkix-types = { path = "../pkix-types" }
+serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tsumiki = { path = "../tsumiki" }
 
 [dev-dependencies]
-der = { path = "../der" }
-pem = { path = "../pem" }
 rstest.workspace = true

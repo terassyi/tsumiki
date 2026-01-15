@@ -1,0 +1,26 @@
+[package]
+name = "pkcs"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+asn1 = { path = "../asn1" }
+der = { path = "../der" }
+pem = { path = "../pem" }
+pkix-types = { path = "../pkix-types" }
+tsumiki = { path = "../tsumiki" }
+thiserror.workspace = true
+num-bigint = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+chrono = { workspace = true }
+
+[dev-dependencies]
+rstest.workspace = true
+serde_json.workspace = true
+pem = { path = "../pem" }
+der = { path = "../der" }
+asn1 = { path = "../asn1" }

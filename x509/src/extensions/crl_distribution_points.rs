@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
 use crate::error::Error;
-use crate::extensions::StandardExtension;
+use crate::extensions::Extension;
 use crate::extensions::general_name::GeneralName;
 
 /*
@@ -275,7 +275,7 @@ impl Decoder<Element, DistributionPointName> for Element {
     }
 }
 
-impl StandardExtension for CRLDistributionPoints {
+impl Extension for CRLDistributionPoints {
     const OID: &'static str = "2.5.29.31";
 
     fn parse(value: &OctetString) -> Result<Self, Error> {

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
 use crate::error::Error;
-use crate::extensions::StandardExtension;
+use crate::extensions::Extension;
 
 /*
 RFC 5280 Section 4.2.1.4
@@ -388,7 +388,7 @@ impl Decoder<Element, NoticeReference> for Element {
     }
 }
 
-impl StandardExtension for CertificatePolicies {
+impl Extension for CertificatePolicies {
     const OID: &'static str = "2.5.29.32";
 
     fn parse(value: &OctetString) -> Result<Self, Error> {

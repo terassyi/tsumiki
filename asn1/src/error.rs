@@ -24,6 +24,8 @@ pub enum Error {
     InvalidUTCTime(String),
     #[error("invalid generalized time: {0}")]
     InvalidGeneralizedTime(String),
+    #[error("invalid BMP string: {0}")]
+    InvalidBMPString(String),
     #[error("invalid context-specific value: {slot}, {msg}")]
     InvalidContextSpecific { slot: u8, msg: String },
     #[error("invalid DER encoding: {0}")]

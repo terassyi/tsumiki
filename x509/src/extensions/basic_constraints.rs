@@ -2,7 +2,8 @@ use asn1::{ASN1Object, Element, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
-use crate::{error::Error, extensions::StandardExtension};
+use crate::error::Error;
+use crate::extensions::Extension;
 
 /*
 RFC 5280 Section 4.2.1.9
@@ -18,7 +19,7 @@ pub struct BasicConstraints {
     pub path_len_constraint: Option<u32>,
 }
 
-impl StandardExtension for BasicConstraints {
+impl Extension for BasicConstraints {
     /// OID for BasicConstraints extension (2.5.29.19)
     const OID: &'static str = "2.5.29.19";
 

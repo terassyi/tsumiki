@@ -8,11 +8,15 @@ rust-version.workspace = true
 [dependencies]
 chrono = { workspace = true }
 der = { path = "../der" }
-num-bigint = "0.4.6"
-num-traits = "0.2"
-serde = { version = "1.0.228", features = ["derive"] }
+num-bigint = { workspace = true }
+num-traits = "0.2.19"
+serde = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tsumiki ={ path = "../tsumiki" }
+
+[features]
+default = ["serde"]
+serde = ["dep:serde", "chrono/serde"]
 
 [dev-dependencies]
 pem = { path = "../pem" }

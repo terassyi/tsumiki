@@ -47,13 +47,11 @@ pub(crate) fn execute(config: Config) -> Result<()> {
     let input_bytes = read_input(config.file.as_deref())?;
 
     // Try to parse as PEM first, fallback to DER
-    let cert = if let Ok(contents) = String::from_utf8(input_bytes.clone()) {
+    let cert: x509::Certificate = if let Ok(contents) = String::from_utf8(input_bytes.clone()) {
         // Text data - try PEM first
         if let Ok(pem) = Pem::from_str(&contents) {
-            // PEM format
-            let der: Der = pem.decode()?;
-            let asn1_obj: ASN1Object = der.decode()?;
-            asn1_obj.decode()?
+            // PEM format - decode directly
+            pem.decode()?
         } else {
             // Not PEM, maybe UTF-8 encoded DER (unlikely but possible)
             // Try to parse as DER

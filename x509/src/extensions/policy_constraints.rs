@@ -2,7 +2,8 @@ use asn1::{ASN1Object, Element, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
-use crate::{error::Error, extensions::StandardExtension};
+use crate::error::Error;
+use crate::extensions::Extension;
 
 /// The number of certificates that may appear in the path before a specific constraint
 /// becomes effective. This is commonly used in policy-related extensions.
@@ -48,7 +49,7 @@ pub struct PolicyConstraints {
     pub inhibit_policy_mapping: Option<SkipCerts>,
 }
 
-impl StandardExtension for PolicyConstraints {
+impl Extension for PolicyConstraints {
     /// OID for PolicyConstraints extension (2.5.29.36)
     const OID: &'static str = "2.5.29.36";
 

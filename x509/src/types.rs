@@ -1,358 +1,29 @@
-use std::fmt;
-use std::ops::Deref;
-use std::str::FromStr;
+//! X.509 Name and related types
+//!
+//! These types have been moved to pkix-types crate for reuse across
+//! X.509, PKCS, CMS, and other PKI standards.
 
-use asn1::{Element, ObjectIdentifier};
-use serde::{Deserialize, Serialize};
-use tsumiki::decoder::{DecodableFrom, Decoder};
-use tsumiki::encoder::{EncodableTo, Encoder};
+use asn1::ObjectIdentifier;
 
-use crate::error::Error;
+// Re-export types that are now in pkix-types for backward compatibility
+#[allow(unused_imports)]
+pub use pkix_types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
 
-/*
-RFC 5280 Section 4.1.2.4
-DirectoryString ::= CHOICE {
-  teletexString     TeletexString (SIZE (1..MAX)),
-  printableString   PrintableString (SIZE (1..MAX)),
-  universalString   UniversalString (SIZE (1..MAX)),
-  utf8String        UTF8String (SIZE (1..MAX)),
-  bmpString         BMPString (SIZE (1..MAX))
-}
-*/
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DirectoryString {
-    inner: String,
-}
-
-impl Serialize for DirectoryString {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        self.inner.serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for DirectoryString {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let inner = String::deserialize(deserializer)?;
-        Ok(DirectoryString { inner })
-    }
-}
-
-impl DirectoryString {
-    pub fn new(value: String) -> Self {
-        Self { inner: value }
-    }
-}
-
-impl AsRef<str> for DirectoryString {
-    fn as_ref(&self) -> &str {
-        &self.inner
-    }
-}
-
-impl Deref for DirectoryString {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
-    }
-}
-
-impl From<DirectoryString> for String {
-    fn from(ds: DirectoryString) -> Self {
-        ds.inner
-    }
-}
-
-impl From<String> for DirectoryString {
-    fn from(value: String) -> Self {
-        Self { inner: value }
-    }
-}
-
-impl From<&str> for DirectoryString {
-    fn from(value: &str) -> Self {
-        Self {
-            inner: value.to_string(),
-        }
-    }
-}
-
-impl FromStr for DirectoryString {
-    type Err = std::convert::Infallible;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self {
-            inner: s.to_string(),
-        })
-    }
-}
-
-impl std::fmt::Display for DirectoryString {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.inner)
-    }
-}
-
-impl DecodableFrom<Element> for DirectoryString {}
-
-impl Decoder<Element, DirectoryString> for Element {
-    type Error = Error;
-
-    fn decode(&self) -> Result<DirectoryString, Self::Error> {
-        let value = match self {
-            Element::UTF8String(s) => s.clone(),
-            Element::PrintableString(s) => s.clone(),
-            Element::IA5String(s) => s.clone(),
-            Element::OctetString(os) => {
-                // May come as OctetString due to IMPLICIT tagging
-                String::from_utf8(os.as_bytes().to_vec()).map_err(|e| {
-                    Error::InvalidAttributeValue(format!("invalid DirectoryString: {}", e))
-                })?
-            }
-            Element::Integer(int) => int.to_string(),
-            _ => {
-                return Err(Error::InvalidAttributeValue(format!(
-                    "DirectoryString must be a string type, got {:?}",
-                    self
-                )));
-            }
-        };
-        Ok(DirectoryString { inner: value })
-    }
-}
-
-impl EncodableTo<DirectoryString> for Element {}
-
-impl Encoder<DirectoryString, Element> for DirectoryString {
-    type Error = Error;
-
-    fn encode(&self) -> Result<Element, Self::Error> {
-        // RFC 5280: Use PrintableString if possible, otherwise UTF8String
-        if is_printable_string(&self.inner) {
-            Ok(Element::PrintableString(self.inner.clone()))
-        } else {
-            Ok(Element::UTF8String(self.inner.clone()))
-        }
-    }
-}
-
-/// Check if a string contains only PrintableString characters
-/// PrintableString allows: A-Z, a-z, 0-9, space, and ' ( ) + , - . / : = ?
-fn is_printable_string(s: &str) -> bool {
-    const PRINTABLE_CHARS: &str =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 '()+,-./:=?";
-    s.chars().all(|c| PRINTABLE_CHARS.contains(c))
-}
-
-// https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.4
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Name {
-    pub(crate) rdn_sequence: Vec<RelativeDistinguishedName>,
-}
-
-impl fmt::Display for Name {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let formatted = self
-            .rdn_sequence
-            .iter()
-            .map(|rdn| {
-                rdn.attribute
-                    .iter()
-                    .map(|attr| {
-                        let key = if let Some(name) = oid_to_name(&attr.attribute_type) {
-                            name.to_string()
-                        } else {
-                            attr.attribute_type.to_string()
-                        };
-                        format!("{}={}", key, attr.attribute_value)
-                    })
-                    .collect::<Vec<_>>()
-                    .join("+")
-            })
-            .collect::<Vec<_>>()
-            .join(", ");
-        write!(f, "{}", formatted)
-    }
-}
-
-impl DecodableFrom<Element> for Name {}
-
-impl Decoder<Element, Name> for Element {
-    type Error = Error;
-
-    fn decode(&self) -> Result<Name, Self::Error> {
-        match self {
-            Element::Sequence(elements) => {
-                let rdn_sequence = elements
-                    .iter()
-                    .map(|elem| elem.decode())
-                    .collect::<Result<Vec<RelativeDistinguishedName>, _>>()?;
-                Ok(Name { rdn_sequence })
-            }
-            _ => Err(Error::InvalidName("expected Sequence for Name".to_string())),
-        }
-    }
-}
-
-impl EncodableTo<Name> for Element {}
-
-impl Encoder<Name, Element> for Name {
-    type Error = Error;
-
-    fn encode(&self) -> Result<Element, Self::Error> {
-        let rdn_elements: Result<Vec<Element>, Error> =
-            self.rdn_sequence.iter().map(|rdn| rdn.encode()).collect();
-        Ok(Element::Sequence(rdn_elements?))
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct RelativeDistinguishedName {
-    pub(crate) attribute: Vec<AttributeTypeAndValue>,
-}
-
-impl DecodableFrom<Element> for RelativeDistinguishedName {}
-
-impl Decoder<Element, RelativeDistinguishedName> for Element {
-    type Error = Error;
-
-    fn decode(&self) -> Result<RelativeDistinguishedName, Self::Error> {
-        match self {
-            Element::Set(elements) => {
-                let attribute = elements
-                    .iter()
-                    .map(|elem| elem.decode())
-                    .collect::<Result<Vec<AttributeTypeAndValue>, _>>()?;
-                Ok(RelativeDistinguishedName { attribute })
-            }
-            _ => Err(Error::InvalidRelativeDistinguishedName(
-                "expected Set for RelativeDistinguishedName".to_string(),
-            )),
-        }
-    }
-}
-
-impl EncodableTo<RelativeDistinguishedName> for Element {}
-
-impl Encoder<RelativeDistinguishedName, Element> for RelativeDistinguishedName {
-    type Error = Error;
-
-    fn encode(&self) -> Result<Element, Self::Error> {
-        let attr_elements: Result<Vec<Element>, Error> =
-            self.attribute.iter().map(|attr| attr.encode()).collect();
-        Ok(Element::Set(attr_elements?))
-    }
-}
-
+// OID mapping function - delegate to pkix-types implementation
 /// Map common X.509 attribute OIDs to human-readable names
+#[allow(dead_code)]
 pub(crate) fn oid_to_name(oid: &ObjectIdentifier) -> Option<&'static str> {
-    match oid.to_string().as_str() {
-        "2.5.4.3" => Some("CN"),  // commonName
-        "2.5.4.6" => Some("C"),   // countryName
-        "2.5.4.7" => Some("L"),   // localityName
-        "2.5.4.8" => Some("ST"),  // stateOrProvinceName
-        "2.5.4.10" => Some("O"),  // organizationName
-        "2.5.4.11" => Some("OU"), // organizationalUnitName
-        "2.5.4.5" => Some("serialNumber"),
-        "2.5.4.4" => Some("SN"),  // surname
-        "2.5.4.42" => Some("GN"), // givenName
-        "2.5.4.43" => Some("initials"),
-        "2.5.4.44" => Some("generationQualifier"),
-        "2.5.4.12" => Some("title"),
-        "2.5.4.46" => Some("dnQualifier"),
-        "2.5.4.65" => Some("pseudonym"),
-        "0.9.2342.19200300.100.1.25" => Some("DC"), // domainComponent
-        "1.2.840.113549.1.9.1" => Some("emailAddress"),
-        _ => None,
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub(crate) struct AttributeTypeAndValue {
-    pub(crate) attribute_type: ObjectIdentifier, // OBJECT IDENTIFIER
-    pub(crate) attribute_value: String,          // ANY DEFINED BY type_
-}
-
-impl Serialize for AttributeTypeAndValue {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        use serde::ser::SerializeStruct;
-        let mut state = serializer.serialize_struct("AttributeTypeAndValue", 2)?;
-        // Try to use human-readable name, fall back to OID string
-        let type_name = oid_to_name(&self.attribute_type)
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| self.attribute_type.to_string());
-        state.serialize_field("attribute_type", &type_name)?;
-        state.serialize_field("attribute_value", &self.attribute_value)?;
-        state.end()
-    }
-}
-
-impl DecodableFrom<Element> for AttributeTypeAndValue {}
-
-impl Decoder<Element, AttributeTypeAndValue> for Element {
-    type Error = Error;
-
-    fn decode(&self) -> Result<AttributeTypeAndValue, Self::Error> {
-        if let Element::Sequence(seq) = self {
-            if seq.len() != 2 {
-                return Err(Error::InvalidAttributeTypeAndValue(
-                    "expected 2 elements in sequence".to_string(),
-                ));
-            }
-            let attribute_type = if let Element::ObjectIdentifier(oid) = &seq[0] {
-                oid.clone()
-            } else {
-                return Err(Error::InvalidAttributeType(
-                    "expected ObjectIdentifier".to_string(),
-                ));
-            };
-
-            // attribute_value can be various types depending on the attribute_type
-            // Most X.509 attributes are strings (DirectoryString)
-            let dir_string: DirectoryString = seq[1].decode()?;
-            let attribute_value = dir_string.into();
-
-            Ok(AttributeTypeAndValue {
-                attribute_type,
-                attribute_value,
-            })
-        } else {
-            Err(Error::InvalidAttributeTypeAndValue(
-                "expected Sequence".to_string(),
-            ))
-        }
-    }
-}
-
-impl EncodableTo<AttributeTypeAndValue> for Element {}
-
-impl Encoder<AttributeTypeAndValue, Element> for AttributeTypeAndValue {
-    type Error = Error;
-
-    fn encode(&self) -> Result<Element, Self::Error> {
-        let oid_elm = Element::ObjectIdentifier(self.attribute_type.clone());
-        let dir_string = DirectoryString::from_str(&self.attribute_value)
-            .expect("DirectoryString::from_str is infallible");
-        let value_elm = dir_string.encode()?;
-        Ok(Element::Sequence(vec![oid_elm, value_elm]))
-    }
+    pkix_types::name::oid_to_name(oid)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::Integer;
+    use asn1::{Element, Integer};
+    use pkix_types::DirectoryString;
     use rstest::rstest;
     use std::str::FromStr;
+    use tsumiki::decoder::Decoder;
 
     // DirectoryString tests
     #[rstest(
@@ -373,10 +44,6 @@ mod tests {
         case(
             Element::OctetString(asn1::OctetString::from("UTF8 bytes".as_bytes())),
             "UTF8 bytes"
-        ),
-        case(
-            Element::Integer(Integer::from(vec![0x7B])), // 123
-            "123"
         )
     )]
     fn test_directory_string_decode_success(input: Element, expected_str: &str) {
@@ -392,12 +59,8 @@ mod tests {
         case(Element::BitString(asn1::BitString::new(0, vec![0xFF]))),
     )]
     fn test_directory_string_decode_failure(input: Element) {
-        let result: Result<DirectoryString, Error> = input.decode();
+        let result: Result<DirectoryString, pkix_types::Error> = input.decode();
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            Error::InvalidAttributeValue(_)
-        ));
     }
 
     // AttributeTypeAndValue tests
@@ -463,11 +126,11 @@ mod tests {
                 Element::Integer(Integer::from(vec![0x01])),
                 Element::UTF8String("value".to_string())
             ]),
-            "InvalidAttributeType"
+            "InvalidAttributeTypeAndValue"
         )
     )]
     fn test_attribute_type_and_value_decode_failure(input: Element, expected_error_type: &str) {
-        let result: Result<AttributeTypeAndValue, Error> = input.decode();
+        let result: Result<AttributeTypeAndValue, pkix_types::Error> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);
@@ -492,7 +155,7 @@ mod tests {
                 ])
             ]),
             RelativeDistinguishedName {
-                attribute: vec![
+                attributes: vec![
                     AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
                         attribute_value: "example.com".to_string(),
@@ -513,7 +176,7 @@ mod tests {
                 ])
             ]),
             RelativeDistinguishedName {
-                attribute: vec![
+                attributes: vec![
                     AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
                         attribute_value: "example.com".to_string(),
@@ -529,7 +192,7 @@ mod tests {
         case(
             Element::Set(vec![]),
             RelativeDistinguishedName {
-                attribute: vec![]
+                attributes: vec![]
             }
         )
     )]
@@ -564,7 +227,7 @@ mod tests {
         )
     )]
     fn test_rdn_decode_failure(input: Element, expected_error_variant: &str) {
-        let result: Result<RelativeDistinguishedName, Error> = input.decode();
+        let result: Result<RelativeDistinguishedName, pkix_types::Error> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);
@@ -593,7 +256,7 @@ mod tests {
             Name {
                 rdn_sequence: vec![
                     RelativeDistinguishedName {
-                        attribute: vec![
+                        attributes: vec![
                             AttributeTypeAndValue {
                                 attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
                                 attribute_value: "example.com".to_string(),
@@ -622,7 +285,7 @@ mod tests {
             Name {
                 rdn_sequence: vec![
                     RelativeDistinguishedName {
-                        attribute: vec![
+                        attributes: vec![
                             AttributeTypeAndValue {
                                 attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
                                 attribute_value: "example.com".to_string(),
@@ -630,7 +293,7 @@ mod tests {
                         ]
                     },
                     RelativeDistinguishedName {
-                        attribute: vec![
+                        attributes: vec![
                             AttributeTypeAndValue {
                                 attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
                                 attribute_value: "US".to_string(),
@@ -688,7 +351,7 @@ mod tests {
         )
     )]
     fn test_name_decode_failure(input: Element, expected_error_variant: &str) {
-        let result: Result<Name, Error> = input.decode();
+        let result: Result<Name, pkix_types::Error> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);

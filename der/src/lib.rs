@@ -187,6 +187,7 @@ pub enum PrimitiveTag {
     IA5String = 0x16,
     UTCTime = 0x17,
     GeneralizedTime = 0x18,
+    BMPString = 0x1e,
     Unimplemented(u8),
 }
 
@@ -208,6 +209,7 @@ impl From<u8> for PrimitiveTag {
             0x16 => Self::IA5String,
             0x17 => Self::UTCTime,
             0x18 => Self::GeneralizedTime,
+            0x1e => Self::BMPString,
             _ => PrimitiveTag::Unimplemented(value),
         }
     }
@@ -229,6 +231,7 @@ impl From<&PrimitiveTag> for u8 {
             PrimitiveTag::IA5String => 0x16,
             PrimitiveTag::UTCTime => 0x17,
             PrimitiveTag::GeneralizedTime => 0x18,
+            PrimitiveTag::BMPString => 0x1e,
             PrimitiveTag::Unimplemented(value) => *value,
         }
     }
