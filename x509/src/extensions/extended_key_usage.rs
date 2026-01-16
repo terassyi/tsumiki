@@ -1,6 +1,7 @@
 use asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -85,6 +86,28 @@ impl Decoder<Element, ExtendedKeyUsage> for Element {
                 "expected Sequence".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<ExtendedKeyUsage> for Element {}
+
+impl Encoder<ExtendedKeyUsage, Element> for ExtendedKeyUsage {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.purposes.is_empty() {
+            return Err(Error::InvalidExtendedKeyUsage(
+                "at least one KeyPurposeId required".to_string(),
+            ));
+        }
+
+        let elements = self
+            .purposes
+            .iter()
+            .map(|oid| Element::ObjectIdentifier(oid.clone()))
+            .collect();
+
+        Ok(Element::Sequence(elements))
     }
 }
 
@@ -199,7 +222,7 @@ mod tests {
         ),
     )]
     fn test_extended_key_usage_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<ExtendedKeyUsage, Error> = input.decode();
+        let result: Result<ExtendedKeyUsage, _> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);
@@ -236,5 +259,36 @@ mod tests {
         assert_eq!(eku.purposes.len(), 2);
         assert_eq!(eku.purposes[0].to_string(), ExtendedKeyUsage::SERVER_AUTH);
         assert_eq!(eku.purposes[1].to_string(), ExtendedKeyUsage::CLIENT_AUTH);
+    }
+
+    #[rstest]
+    #[case(ExtendedKeyUsage {
+        purposes: vec![
+            ObjectIdentifier::from_str(ExtendedKeyUsage::SERVER_AUTH).unwrap(),
+        ],
+    })]
+    #[case(ExtendedKeyUsage {
+        purposes: vec![
+            ObjectIdentifier::from_str(ExtendedKeyUsage::SERVER_AUTH).unwrap(),
+            ObjectIdentifier::from_str(ExtendedKeyUsage::CLIENT_AUTH).unwrap(),
+        ],
+    })]
+    #[case(ExtendedKeyUsage {
+        purposes: vec![
+            ObjectIdentifier::from_str(ExtendedKeyUsage::CODE_SIGNING).unwrap(),
+            ObjectIdentifier::from_str(ExtendedKeyUsage::EMAIL_PROTECTION).unwrap(),
+            ObjectIdentifier::from_str(ExtendedKeyUsage::TIME_STAMPING).unwrap(),
+        ],
+    })]
+    fn test_extended_key_usage_encode_decode(#[case] original: ExtendedKeyUsage) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<ExtendedKeyUsage, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original, roundtrip);
     }
 }

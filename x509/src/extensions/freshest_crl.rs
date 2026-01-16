@@ -1,5 +1,6 @@
-use asn1::OctetString;
+use asn1::{Element, OctetString};
 use serde::{Deserialize, Serialize};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::{CRLDistributionPoints, Extension};
@@ -72,9 +73,22 @@ impl Extension for FreshestCRL {
     }
 }
 
+impl EncodableTo<FreshestCRL> for Element {}
+
+impl Encoder<FreshestCRL, Element> for FreshestCRL {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        self.distribution_points.encode()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::extensions::general_name::GeneralName;
+    use crate::extensions::{DistributionPoint, DistributionPointName};
+    use rstest::rstest;
 
     /// Test parsing failure with wrong type
     #[test]
@@ -83,5 +97,50 @@ mod tests {
         let octet_string = OctetString::from(der_bytes);
         let result = FreshestCRL::parse(&octet_string);
         assert!(result.is_err());
+    }
+
+    #[rstest]
+    #[case(FreshestCRL {
+        distribution_points: CRLDistributionPoints {
+            distribution_points: vec![
+                DistributionPoint {
+                    distribution_point: Some(DistributionPointName::FullName(vec![
+                        GeneralName::Uri("http://delta-crl.example.com/delta.pem".to_string()),
+                    ])),
+                    reasons: None,
+                    crl_issuer: None,
+                },
+            ],
+        },
+    })]
+    #[case(FreshestCRL {
+        distribution_points: CRLDistributionPoints {
+            distribution_points: vec![
+                DistributionPoint {
+                    distribution_point: Some(DistributionPointName::FullName(vec![
+                        GeneralName::Uri("http://delta1.example.com/delta.pem".to_string()),
+                        GeneralName::Uri("http://delta2.example.com/delta.pem".to_string()),
+                    ])),
+                    reasons: None,
+                    crl_issuer: None,
+                },
+            ],
+        },
+    })]
+    fn test_freshest_crl_encode_decode(#[case] original: FreshestCRL) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        // Element -> Tlv -> Vec<u8>
+        let tlv = element.encode().unwrap();
+        let bytes = tlv.encode().unwrap();
+        let octet_string = OctetString::from(bytes);
+
+        let result = FreshestCRL::parse(&octet_string);
+        assert!(result.is_ok(), "Failed to decode: {:?}", result);
+
+        let roundtrip = result.unwrap();
+        assert_eq!(original, roundtrip);
     }
 }

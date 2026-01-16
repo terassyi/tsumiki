@@ -1,6 +1,7 @@
 use asn1::{ASN1Object, Element, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -68,6 +69,28 @@ impl Decoder<Element, SubjectAltName> for Element {
                 "expected Sequence".to_string(),
             )),
         }
+    }
+}
+
+impl EncodableTo<SubjectAltName> for Element {}
+
+impl Encoder<SubjectAltName, Element> for SubjectAltName {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.names.is_empty() {
+            return Err(Error::InvalidSubjectAltName(
+                "at least one GeneralName required".to_string(),
+            ));
+        }
+
+        let elements = self
+            .names
+            .iter()
+            .map(|name| name.encode())
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(Element::Sequence(elements))
     }
 }
 
@@ -260,7 +283,7 @@ mod tests {
         ),
     )]
     fn test_subject_alt_name_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<SubjectAltName, Error> = input.decode();
+        let result: Result<SubjectAltName, _> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);
@@ -270,6 +293,36 @@ mod tests {
             expected_error_msg,
             err_str
         );
+    }
+
+    #[rstest]
+    #[case(SubjectAltName {
+        names: vec![
+            GeneralName::DnsName("example.com".to_string()),
+        ],
+    })]
+    #[case(SubjectAltName {
+        names: vec![
+            GeneralName::DnsName("www.example.com".to_string()),
+            GeneralName::DnsName("mail.example.com".to_string()),
+        ],
+    })]
+    #[case(SubjectAltName {
+        names: vec![
+            GeneralName::Rfc822Name("user@example.com".to_string()),
+            GeneralName::Uri("https://example.com".to_string()),
+        ],
+    })]
+    fn test_subject_alt_name_encode_decode(#[case] original: SubjectAltName) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<SubjectAltName, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original, roundtrip);
     }
 
     #[test]

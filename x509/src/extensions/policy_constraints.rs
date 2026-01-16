@@ -1,6 +1,7 @@
-use asn1::{ASN1Object, Element, OctetString};
+use asn1::{ASN1Object, Element, Integer, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -151,6 +152,52 @@ impl Decoder<Element, PolicyConstraints> for Element {
     }
 }
 
+impl EncodableTo<PolicyConstraints> for Element {}
+
+impl Encoder<PolicyConstraints, Element> for PolicyConstraints {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.require_explicit_policy.is_none() && self.inhibit_policy_mapping.is_none() {
+            return Err(Error::InvalidPolicyConstraints(
+                "at least one field must be present".to_string(),
+            ));
+        }
+
+        let require_elem = self.require_explicit_policy.map(|value| {
+            let bytes = value.to_be_bytes();
+            let start = bytes
+                .iter()
+                .position(|&b| b != 0)
+                .unwrap_or(bytes.len() - 1);
+            let slice = bytes.get(start..).unwrap_or(&bytes);
+            Element::ContextSpecific {
+                constructed: false,
+                slot: 0,
+                element: Box::new(Element::Integer(Integer::from(slice))),
+            }
+        });
+
+        let inhibit_elem = self.inhibit_policy_mapping.map(|value| {
+            let bytes = value.to_be_bytes();
+            let start = bytes
+                .iter()
+                .position(|&b| b != 0)
+                .unwrap_or(bytes.len() - 1);
+            let slice = bytes.get(start..).unwrap_or(&bytes);
+            Element::ContextSpecific {
+                constructed: false,
+                slot: 1,
+                element: Box::new(Element::Integer(Integer::from(slice))),
+            }
+        });
+
+        let elements = require_elem.into_iter().chain(inhibit_elem).collect();
+
+        Ok(Element::Sequence(elements))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -191,7 +238,7 @@ mod tests {
         }
 
         let elem = Element::Sequence(elements);
-        let result: Result<PolicyConstraints, Error> = elem.decode();
+        let result: Result<PolicyConstraints, _> = elem.decode();
 
         assert!(result.is_ok(), "Failed to decode: {:?}", result);
         let pc = result.unwrap();
@@ -328,5 +375,34 @@ mod tests {
         let pc = result.unwrap();
         assert_eq!(pc.require_explicit_policy, Some(0));
         assert_eq!(pc.inhibit_policy_mapping, Some(0));
+    }
+
+    #[rstest]
+    #[case(PolicyConstraints {
+        require_explicit_policy: Some(5),
+        inhibit_policy_mapping: None,
+    })]
+    #[case(PolicyConstraints {
+        require_explicit_policy: None,
+        inhibit_policy_mapping: Some(3),
+    })]
+    #[case(PolicyConstraints {
+        require_explicit_policy: Some(10),
+        inhibit_policy_mapping: Some(20),
+    })]
+    #[case(PolicyConstraints {
+        require_explicit_policy: Some(0),
+        inhibit_policy_mapping: Some(0),
+    })]
+    fn test_policy_constraints_encode_decode(#[case] original: PolicyConstraints) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<PolicyConstraints, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original, roundtrip);
     }
 }

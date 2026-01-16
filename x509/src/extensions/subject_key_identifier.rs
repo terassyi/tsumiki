@@ -1,6 +1,7 @@
 use asn1::{ASN1Object, Element, OctetString};
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -82,6 +83,16 @@ impl Decoder<Element, SubjectKeyIdentifier> for Element {
     }
 }
 
+impl EncodableTo<SubjectKeyIdentifier> for Element {}
+
+impl Encoder<SubjectKeyIdentifier, Element> for SubjectKeyIdentifier {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        Ok(Element::OctetString(self.key_identifier.clone()))
+    }
+}
+
 impl Extension for SubjectKeyIdentifier {
     /// OID for SubjectKeyIdentifier extension (2.5.29.14)
     const OID: &'static str = "2.5.29.14";
@@ -157,7 +168,7 @@ mod tests {
         ),
     )]
     fn test_subject_key_identifier_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<SubjectKeyIdentifier, Error> = input.decode();
+        let result: Result<SubjectKeyIdentifier, _> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);
@@ -167,6 +178,25 @@ mod tests {
             expected_error_msg,
             err_str
         );
+    }
+
+    #[rstest]
+    #[case(SubjectKeyIdentifier { key_identifier: OctetString::from(vec![0x01, 0x02, 0x03, 0x04]) })]
+    #[case(SubjectKeyIdentifier { key_identifier: OctetString::from(vec![0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF]) })]
+    #[case(SubjectKeyIdentifier { key_identifier: OctetString::from(vec![
+        0x78, 0xD4, 0x81, 0x76, 0xCD, 0xF7, 0x8D, 0x59, 0x6D, 0xD4,
+        0xC4, 0x86, 0xA4, 0x1D, 0x23, 0x0A, 0x53, 0xCE, 0xCD, 0xD7,
+    ]) })]
+    fn test_subject_key_identifier_encode_decode(#[case] original: SubjectKeyIdentifier) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<SubjectKeyIdentifier, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original, roundtrip);
     }
 
     #[test]

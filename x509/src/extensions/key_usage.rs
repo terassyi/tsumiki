@@ -1,6 +1,7 @@
-use asn1::{ASN1Object, Element, OctetString};
+use asn1::{ASN1Object, BitString, Element, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
 use crate::extensions::Extension;
@@ -90,6 +91,48 @@ impl Decoder<Element, KeyUsage> for Element {
             }
             _ => Err(Error::InvalidKeyUsage("expected BitString".to_string())),
         }
+    }
+}
+
+impl EncodableTo<KeyUsage> for Element {}
+
+impl Encoder<KeyUsage, Element> for KeyUsage {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        let bits = [
+            self.digital_signature,
+            self.content_commitment,
+            self.key_encipherment,
+            self.data_encipherment,
+            self.key_agreement,
+            self.key_cert_sign,
+            self.crl_sign,
+            self.encipher_only,
+            self.decipher_only,
+        ];
+
+        let last_bit = bits.iter().rposition(|&b| b).map_or(0, |p| p + 1);
+        let num_bytes = last_bit.div_ceil(8);
+
+        let bytes = (0..num_bytes)
+            .map(|byte_idx| {
+                (0..8)
+                    .filter_map(|bit_idx| {
+                        let bit_pos = byte_idx * 8 + bit_idx;
+                        (bit_pos < last_bit && bits.get(bit_pos) == Some(&true))
+                            .then_some(1u8 << (7 - bit_idx))
+                    })
+                    .sum()
+            })
+            .collect::<Vec<_>>();
+
+        let unused_bits = if last_bit == 0 {
+            0
+        } else {
+            (num_bytes * 8 - last_bit) as u8
+        };
+        Ok(Element::BitString(BitString::new(unused_bits, bytes)))
     }
 }
 
@@ -191,7 +234,7 @@ mod tests {
         ),
     )]
     fn test_key_usage_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<KeyUsage, Error> = input.decode();
+        let result: Result<KeyUsage, _> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);
@@ -201,5 +244,51 @@ mod tests {
             expected_error_msg,
             err_str
         );
+    }
+
+    #[rstest]
+    #[case(KeyUsage {
+        digital_signature: true,
+        content_commitment: false,
+        key_encipherment: false,
+        data_encipherment: false,
+        key_agreement: false,
+        key_cert_sign: false,
+        crl_sign: false,
+        encipher_only: false,
+        decipher_only: false,
+    })]
+    #[case(KeyUsage {
+        digital_signature: true,
+        content_commitment: true,
+        key_encipherment: true,
+        data_encipherment: false,
+        key_agreement: false,
+        key_cert_sign: false,
+        crl_sign: false,
+        encipher_only: false,
+        decipher_only: false,
+    })]
+    #[case(KeyUsage {
+        digital_signature: false,
+        content_commitment: false,
+        key_encipherment: false,
+        data_encipherment: false,
+        key_agreement: false,
+        key_cert_sign: true,
+        crl_sign: true,
+        encipher_only: false,
+        decipher_only: false,
+    })]
+    fn test_key_usage_encode_decode(#[case] original: KeyUsage) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<KeyUsage, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original, roundtrip);
     }
 }
