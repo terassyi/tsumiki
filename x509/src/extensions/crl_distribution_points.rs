@@ -133,7 +133,7 @@ impl Encoder<ReasonFlags, Element> for ReasonFlags {
         ];
 
         let last_set = flags.iter().rposition(|&b| b).unwrap_or(0);
-        let num_bytes = (last_set + 1 + 7) / 8;
+        let num_bytes = (last_set + 1).div_ceil(8);
         let unused_bits = num_bytes * 8 - (last_set + 1);
 
         let bytes: Vec<u8> = (0..num_bytes)
@@ -215,11 +215,12 @@ impl Encoder<CRLDistributionPoints, Element> for CRLDistributionPoints {
             ));
         }
 
-        let dp_elements = self.distribution_points
+        let dp_elements = self
+            .distribution_points
             .iter()
             .map(|dp| dp.encode())
             .collect::<Result<Vec<_>, _>>()?;
-        
+
         Ok(Element::Sequence(dp_elements))
     }
 }
@@ -302,7 +303,12 @@ impl Encoder<DistributionPoint, Element> for DistributionPoint {
 
     fn encode(&self) -> Result<Element, Self::Error> {
         let dp_elem = if let Some(dp) = &self.distribution_point {
-            Some(dp.encode()?)
+            let inner = dp.encode()?;
+            Some(Element::ContextSpecific {
+                constructed: true,
+                slot: 0,
+                element: Box::new(inner),
+            })
         } else {
             None
         };
@@ -321,7 +327,8 @@ impl Encoder<DistributionPoint, Element> for DistributionPoint {
 
         let issuer_elem = match &self.crl_issuer {
             Some(issuers) => {
-                let encoded = issuers.iter()
+                let encoded = issuers
+                    .iter()
                     .map(|i| i.encode())
                     .collect::<Result<Vec<_>, _>>()?;
                 Some(Element::ContextSpecific {
@@ -333,7 +340,8 @@ impl Encoder<DistributionPoint, Element> for DistributionPoint {
             None => None,
         };
 
-        let elements = dp_elem.into_iter()
+        let elements = dp_elem
+            .into_iter()
             .chain(reasons_elem)
             .chain(issuer_elem)
             .collect();
@@ -391,7 +399,8 @@ impl Encoder<DistributionPointName, Element> for DistributionPointName {
     fn encode(&self) -> Result<Element, Self::Error> {
         match self {
             DistributionPointName::FullName(names) => {
-                let encoded_names = names.iter()
+                let encoded_names = names
+                    .iter()
                     .map(|n| n.encode())
                     .collect::<Result<Vec<_>, _>>()?;
                 Ok(Element::ContextSpecific {
@@ -606,7 +615,7 @@ mod tests {
         input: Element,
         expected: CRLDistributionPoints,
     ) {
-        let result: Result<CRLDistributionPoints, Error> = input.decode();
+        let result: Result<CRLDistributionPoints, _> = input.decode();
         assert!(result.is_ok(), "Failed to decode: {:?}", result);
         let actual = result.unwrap();
         assert_eq!(expected, actual);
@@ -758,5 +767,61 @@ mod tests {
     fn test_reason_flags_from_bit_string(input: asn1::BitString, expected: ReasonFlags) {
         let result: ReasonFlags = input.into();
         assert_eq!(expected, result);
+    }
+
+    #[rstest]
+    #[case(CRLDistributionPoints {
+        distribution_points: vec![
+            DistributionPoint {
+                distribution_point: Some(DistributionPointName::FullName(vec![
+                    GeneralName::Uri("http://crl.example.com/crl.pem".to_string()),
+                ])),
+                reasons: None,
+                crl_issuer: None,
+            },
+        ],
+    })]
+    #[case(CRLDistributionPoints {
+        distribution_points: vec![
+            DistributionPoint {
+                distribution_point: Some(DistributionPointName::FullName(vec![
+                    GeneralName::Uri("http://crl1.example.com/crl.pem".to_string()),
+                    GeneralName::Uri("http://crl2.example.com/crl.pem".to_string()),
+                ])),
+                reasons: None,
+                crl_issuer: None,
+            },
+        ],
+    })]
+    #[case(CRLDistributionPoints {
+        distribution_points: vec![
+            DistributionPoint {
+                distribution_point: Some(DistributionPointName::FullName(vec![
+                    GeneralName::Uri("http://crl.example.com/crl.pem".to_string()),
+                ])),
+                reasons: Some(ReasonFlags {
+                    key_compromise: true,
+                    ca_compromise: false,
+                    affiliation_changed: false,
+                    superseded: false,
+                    cessation_of_operation: false,
+                    certificate_hold: false,
+                    privilege_withdrawn: false,
+                    aa_compromise: false,
+                }),
+                crl_issuer: None,
+            },
+        ],
+    })]
+    fn test_crl_distribution_points_encode_decode(#[case] original: CRLDistributionPoints) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<CRLDistributionPoints, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original, roundtrip);
     }
 }

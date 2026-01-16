@@ -455,7 +455,7 @@ mod tests {
         ),
     )]
     fn test_extensions_decode_success(input: Element) {
-        let result: Result<Extensions, Error> = input.decode();
+        let result: Result<Extensions, _> = input.decode();
         assert!(result.is_ok());
         let extensions = result.unwrap();
         assert!(!extensions.extensions.is_empty());
@@ -499,7 +499,7 @@ mod tests {
         ),
     )]
     fn test_extensions_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<Extensions, Error> = input.decode();
+        let result: Result<Extensions, _> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);

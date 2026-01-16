@@ -238,7 +238,7 @@ mod tests {
         }
 
         let elem = Element::Sequence(elements);
-        let result: Result<PolicyConstraints, Error> = elem.decode();
+        let result: Result<PolicyConstraints, _> = elem.decode();
 
         assert!(result.is_ok(), "Failed to decode: {:?}", result);
         let pc = result.unwrap();
@@ -375,5 +375,34 @@ mod tests {
         let pc = result.unwrap();
         assert_eq!(pc.require_explicit_policy, Some(0));
         assert_eq!(pc.inhibit_policy_mapping, Some(0));
+    }
+
+    #[rstest]
+    #[case(PolicyConstraints {
+        require_explicit_policy: Some(5),
+        inhibit_policy_mapping: None,
+    })]
+    #[case(PolicyConstraints {
+        require_explicit_policy: None,
+        inhibit_policy_mapping: Some(3),
+    })]
+    #[case(PolicyConstraints {
+        require_explicit_policy: Some(10),
+        inhibit_policy_mapping: Some(20),
+    })]
+    #[case(PolicyConstraints {
+        require_explicit_policy: Some(0),
+        inhibit_policy_mapping: Some(0),
+    })]
+    fn test_policy_constraints_encode_decode(#[case] original: PolicyConstraints) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<PolicyConstraints, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original, roundtrip);
     }
 }

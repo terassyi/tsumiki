@@ -540,44 +540,44 @@ mod tests {
         assert_eq!(expected, actual);
     }
 
-    #[rstest(
-        input,
-        expected_error_msg,
-        // Test case: Empty sequence (neither permitted nor excluded)
-        case(
-            Element::Sequence(vec![]),
-            "at least one of permittedSubtrees or excludedSubtrees must be present"
-        ),
-        // Test case: Not a Sequence
-        case(
-            Element::OctetString(OctetString::from(vec![0x01, 0x02])),
-            "expected Sequence"
-        ),
-        // Test case: permittedSubtrees with empty sequence
-        case(
-            Element::Sequence(vec![
-                Element::ContextSpecific {
-                    constructed: true,
-            slot: 0,
-                    element: Box::new(Element::Sequence(vec![])),
-                },
-            ]),
-            "permittedSubtrees must contain at least one GeneralSubtree"
-        ),
-        // Test case: excludedSubtrees with empty sequence
-        case(
-            Element::Sequence(vec![
-                Element::ContextSpecific {
-                    constructed: false,
-            slot: 1,
-                    element: Box::new(Element::Sequence(vec![])),
-                },
-            ]),
-            "excludedSubtrees must contain at least one GeneralSubtree"
-        ),
+    #[rstest]
+    // Test case: Empty sequence (neither permitted nor excluded)
+    #[case(
+        Element::Sequence(vec![]),
+        "at least one of permittedSubtrees or excludedSubtrees must be present"
     )]
-    fn test_name_constraints_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<NameConstraints, Error> = input.decode();
+    // Test case: Not a Sequence
+    #[case(
+        Element::OctetString(OctetString::from(vec![0x01, 0x02])),
+        "expected Sequence"
+    )]
+    // Test case: permittedSubtrees with empty sequence
+    #[case(
+        Element::Sequence(vec![
+            Element::ContextSpecific {
+                constructed: true,
+        slot: 0,
+                element: Box::new(Element::Sequence(vec![])),
+            },
+        ]),
+        "permittedSubtrees must contain at least one GeneralSubtree"
+    )]
+    // Test case: excludedSubtrees with empty sequence
+    #[case(
+        Element::Sequence(vec![
+            Element::ContextSpecific {
+                constructed: false,
+        slot: 1,
+                element: Box::new(Element::Sequence(vec![])),
+            },
+        ]),
+        "excludedSubtrees must contain at least one GeneralSubtree"
+    )]
+    fn test_name_constraints_decode_failure(
+        #[case] input: Element,
+        #[case] expected_error_msg: &str,
+    ) {
+        let result: Result<NameConstraints, _> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);
@@ -686,5 +686,54 @@ mod tests {
         let nc = result.unwrap();
         assert!(nc.permitted_subtrees.is_some());
         assert_eq!(nc.permitted_subtrees.as_ref().unwrap().len(), 1);
+    }
+
+    #[rstest]
+    #[case(NameConstraints {
+        permitted_subtrees: Some(vec![
+            GeneralSubtree {
+                base: GeneralName::DnsName(".example.com".to_string()),
+                minimum: 0,
+                maximum: None,
+            },
+        ]),
+        excluded_subtrees: None,
+    })]
+    #[case(NameConstraints {
+        permitted_subtrees: None,
+        excluded_subtrees: Some(vec![
+            GeneralSubtree {
+                base: GeneralName::DnsName(".badsite.com".to_string()),
+                minimum: 0,
+                maximum: None,
+            },
+        ]),
+    })]
+    #[case(NameConstraints {
+        permitted_subtrees: Some(vec![
+            GeneralSubtree {
+                base: GeneralName::DnsName(".example.com".to_string()),
+                minimum: 0,
+                maximum: Some(3),
+            },
+        ]),
+        excluded_subtrees: Some(vec![
+            GeneralSubtree {
+                base: GeneralName::DnsName(".test.example.com".to_string()),
+                minimum: 0,
+                maximum: None,
+            },
+        ]),
+    })]
+    fn test_name_constraints_encode_decode(#[case] original: NameConstraints) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<NameConstraints, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original, roundtrip);
     }
 }

@@ -175,11 +175,14 @@ impl Encoder<AuthorityKeyIdentifier, Element> for AuthorityKeyIdentifier {
     type Error = Error;
 
     fn encode(&self) -> Result<Element, Self::Error> {
-        let key_id_elem = self.key_identifier.as_ref().map(|key_id| Element::ContextSpecific {
-            constructed: false,
-            slot: 0,
-            element: Box::new(Element::OctetString(key_id.clone())),
-        });
+        let key_id_elem = self
+            .key_identifier
+            .as_ref()
+            .map(|key_id| Element::ContextSpecific {
+                constructed: false,
+                slot: 0,
+                element: Box::new(Element::OctetString(key_id.clone())),
+            });
 
         let issuer_elem = match &self.authority_cert_issuer {
             Some(issuers) => {
@@ -205,7 +208,8 @@ impl Encoder<AuthorityKeyIdentifier, Element> for AuthorityKeyIdentifier {
             }
         });
 
-        let elements = key_id_elem.into_iter()
+        let elements = key_id_elem
+            .into_iter()
             .chain(issuer_elem)
             .chain(serial_elem)
             .collect();
@@ -331,7 +335,7 @@ mod tests {
         ),
     )]
     fn test_authority_key_identifier_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<AuthorityKeyIdentifier, Error> = input.decode();
+        let result: Result<AuthorityKeyIdentifier, _> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);
@@ -396,5 +400,33 @@ mod tests {
         assert_eq!(aki.key_identifier, Some(expected_key_id));
         assert_eq!(aki.authority_cert_issuer, None);
         assert_eq!(aki.authority_cert_serial_number, None);
+    }
+
+    #[rstest]
+    #[case(AuthorityKeyIdentifier {
+        key_identifier: Some(OctetString::from(vec![0x01, 0x02, 0x03])),
+        authority_cert_issuer: None,
+        authority_cert_serial_number: None,
+    })]
+    #[case(AuthorityKeyIdentifier {
+        key_identifier: Some(OctetString::from(vec![0xAA, 0xBB])),
+        authority_cert_issuer: Some(vec![GeneralName::DnsName("ca.example.com".to_string())]),
+        authority_cert_serial_number: Some(CertificateSerialNumber::from_bytes(vec![123u8])),
+    })]
+    #[case(AuthorityKeyIdentifier {
+        key_identifier: None,
+        authority_cert_issuer: Some(vec![GeneralName::DnsName("issuer.example.com".to_string())]),
+        authority_cert_serial_number: Some(CertificateSerialNumber::from_bytes(vec![0x01, 0xC8])),
+    })]
+    fn test_authority_key_identifier_encode_decode(#[case] original: AuthorityKeyIdentifier) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<AuthorityKeyIdentifier, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original, roundtrip);
     }
 }

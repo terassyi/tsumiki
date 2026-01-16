@@ -201,7 +201,7 @@ mod tests {
         ),
     )]
     fn test_basic_constraints_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<BasicConstraints, Error> = input.decode();
+        let result: Result<BasicConstraints, _> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);
@@ -211,5 +211,23 @@ mod tests {
             expected_error_msg,
             err_str
         );
+    }
+
+    #[rstest]
+    #[case(BasicConstraints { ca: false, path_len_constraint: None })]
+    #[case(BasicConstraints { ca: true, path_len_constraint: None })]
+    #[case(BasicConstraints { ca: true, path_len_constraint: Some(0) })]
+    #[case(BasicConstraints { ca: true, path_len_constraint: Some(5) })]
+    #[case(BasicConstraints { ca: false, path_len_constraint: Some(10) })]
+    fn test_basic_constraints_encode_decode(#[case] original: BasicConstraints) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<BasicConstraints, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original, roundtrip);
     }
 }

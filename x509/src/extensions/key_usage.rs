@@ -113,7 +113,7 @@ impl Encoder<KeyUsage, Element> for KeyUsage {
         ];
 
         let last_bit = bits.iter().rposition(|&b| b).map_or(0, |p| p + 1);
-        let num_bytes = (last_bit + 7) / 8;
+        let num_bytes = last_bit.div_ceil(8);
 
         let bytes = (0..num_bytes)
             .map(|byte_idx| {
@@ -234,7 +234,7 @@ mod tests {
         ),
     )]
     fn test_key_usage_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<KeyUsage, Error> = input.decode();
+        let result: Result<KeyUsage, _> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);
@@ -244,5 +244,51 @@ mod tests {
             expected_error_msg,
             err_str
         );
+    }
+
+    #[rstest]
+    #[case(KeyUsage {
+        digital_signature: true,
+        content_commitment: false,
+        key_encipherment: false,
+        data_encipherment: false,
+        key_agreement: false,
+        key_cert_sign: false,
+        crl_sign: false,
+        encipher_only: false,
+        decipher_only: false,
+    })]
+    #[case(KeyUsage {
+        digital_signature: true,
+        content_commitment: true,
+        key_encipherment: true,
+        data_encipherment: false,
+        key_agreement: false,
+        key_cert_sign: false,
+        crl_sign: false,
+        encipher_only: false,
+        decipher_only: false,
+    })]
+    #[case(KeyUsage {
+        digital_signature: false,
+        content_commitment: false,
+        key_encipherment: false,
+        data_encipherment: false,
+        key_agreement: false,
+        key_cert_sign: true,
+        crl_sign: true,
+        encipher_only: false,
+        decipher_only: false,
+    })]
+    fn test_key_usage_encode_decode(#[case] original: KeyUsage) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<KeyUsage, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original, roundtrip);
     }
 }

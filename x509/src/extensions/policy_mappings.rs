@@ -109,7 +109,8 @@ impl Encoder<PolicyMappings, Element> for PolicyMappings {
             ));
         }
 
-        let mapping_elements = self.mappings
+        let mapping_elements = self
+            .mappings
             .iter()
             .map(|m| m.encode())
             .collect::<Result<Vec<_>, _>>()?;
@@ -205,103 +206,92 @@ impl Encoder<PolicyMapping, Element> for PolicyMapping {
 mod tests {
     use super::*;
     use asn1::ObjectIdentifier;
+    use rstest::rstest;
     use std::str::FromStr;
 
     /// Test successful parsing with single mapping
-    #[test]
-    fn test_policy_mappings_single_mapping() {
-        // SEQUENCE { SEQUENCE { OID "1.2.3.4", OID "5.6.7.8" } }
-        let oid1 = ObjectIdentifier::from_str("1.2.3.4").unwrap();
-        let oid2 = ObjectIdentifier::from_str("5.6.7.8").unwrap();
-
-        let elem = Element::Sequence(vec![Element::Sequence(vec![
-            Element::ObjectIdentifier(oid1.clone()),
-            Element::ObjectIdentifier(oid2.clone()),
-        ])]);
-
-        let result: Result<PolicyMappings, Error> = elem.decode();
-        assert!(result.is_ok());
-
-        let mappings = result.unwrap();
-        assert_eq!(mappings.mappings.len(), 1);
-        assert_eq!(mappings.mappings[0].issuer_domain_policy, oid1);
-        assert_eq!(mappings.mappings[0].subject_domain_policy, oid2);
-    }
-
-    /// Test parsing failure with empty sequence
-    #[test]
-    fn test_policy_mappings_empty_sequence() {
-        let elem = Element::Sequence(vec![]);
-        let result: Result<PolicyMappings, Error> = elem.decode();
-        assert!(result.is_err());
-    }
-
-    /// Test parsing failure with wrong type
-    #[test]
-    fn test_policy_mappings_wrong_type() {
-        let elem = Element::Integer(asn1::Integer::from(vec![42]));
-        let result: Result<PolicyMappings, Error> = elem.decode();
-        assert!(result.is_err());
-    }
-
-    /// Test parsing failure with non-OID elements
-    #[test]
-    fn test_policy_mappings_non_oid_issuer() {
-        let elem = Element::Sequence(vec![Element::Sequence(vec![
+    #[rstest]
+    #[case::single_mapping(
+        Element::Sequence(vec![Element::Sequence(vec![
+            Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.3.4").unwrap()),
+            Element::ObjectIdentifier(ObjectIdentifier::from_str("5.6.7.8").unwrap()),
+        ])]),
+        true,
+        Some(1)
+    )]
+    #[case::empty_sequence(
+        Element::Sequence(vec![]),
+        false,
+        None
+    )]
+    #[case::wrong_type(
+        Element::Integer(asn1::Integer::from(vec![42])),
+        false,
+        None
+    )]
+    #[case::non_oid_issuer(
+        Element::Sequence(vec![Element::Sequence(vec![
             Element::Integer(asn1::Integer::from(vec![1])),
             Element::ObjectIdentifier(ObjectIdentifier::from_str("5.6.7.8").unwrap()),
-        ])]);
-        let result: Result<PolicyMappings, Error> = elem.decode();
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_policy_mappings_non_oid_subject() {
-        let elem = Element::Sequence(vec![Element::Sequence(vec![
+        ])]),
+        false,
+        None
+    )]
+    #[case::non_oid_subject(
+        Element::Sequence(vec![Element::Sequence(vec![
             Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.3.4").unwrap()),
             Element::Integer(asn1::Integer::from(vec![1])),
-        ])]);
-        let result: Result<PolicyMappings, Error> = elem.decode();
-        assert!(result.is_err());
+        ])]),
+        false,
+        None
+    )]
+    fn test_policy_mappings_decode(
+        #[case] elem: Element,
+        #[case] should_succeed: bool,
+        #[case] expected_count: Option<usize>,
+    ) {
+        let result: Result<PolicyMappings, _> = elem.decode();
+
+        if should_succeed {
+            assert!(
+                result.is_ok(),
+                "Expected success but got error: {:?}",
+                result
+            );
+            if let Some(count) = expected_count {
+                let mappings = result.unwrap();
+                assert_eq!(mappings.mappings.len(), count);
+            }
+        } else {
+            assert!(result.is_err(), "Expected error but got success");
+        }
     }
 
     /// Test parsing failure with anyPolicy OID (2.5.29.32.0)
-    #[test]
-    fn test_policy_mappings_any_policy_issuer() {
-        let any_policy = ObjectIdentifier::from_str(CertificatePolicies::ANY_POLICY).unwrap();
-        let normal_policy = ObjectIdentifier::from_str("1.2.3.4").unwrap();
-
-        let elem = Element::Sequence(vec![Element::Sequence(vec![
-            Element::ObjectIdentifier(any_policy),
-            Element::ObjectIdentifier(normal_policy),
-        ])]);
-
-        let result: Result<PolicyMappings, Error> = elem.decode();
+    #[rstest]
+    #[case::any_policy_issuer(
+        Element::Sequence(vec![Element::Sequence(vec![
+            Element::ObjectIdentifier(ObjectIdentifier::from_str(CertificatePolicies::ANY_POLICY).unwrap()),
+            Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.3.4").unwrap()),
+        ])])
+    )]
+    #[case::any_policy_subject(
+        Element::Sequence(vec![Element::Sequence(vec![
+            Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.3.4").unwrap()),
+            Element::ObjectIdentifier(ObjectIdentifier::from_str(CertificatePolicies::ANY_POLICY).unwrap()),
+        ])])
+    )]
+    fn test_policy_mappings_any_policy_rejected(#[case] elem: Element) {
+        let result: Result<PolicyMappings, _> = elem.decode();
         assert!(result.is_err());
         let err_msg = format!("{:?}", result.unwrap_err());
         assert!(err_msg.contains("anyPolicy"));
     }
 
-    #[test]
-    fn test_policy_mappings_any_policy_subject() {
-        let normal_policy = ObjectIdentifier::from_str("1.2.3.4").unwrap();
-        let any_policy = ObjectIdentifier::from_str(CertificatePolicies::ANY_POLICY).unwrap();
-
-        let elem = Element::Sequence(vec![Element::Sequence(vec![
-            Element::ObjectIdentifier(normal_policy),
-            Element::ObjectIdentifier(any_policy),
-        ])]);
-
-        let result: Result<PolicyMappings, Error> = elem.decode();
-        assert!(result.is_err());
-        let err_msg = format!("{:?}", result.unwrap_err());
-        assert!(err_msg.contains("anyPolicy"));
-    }
-
-    /// Test full parse through StandardExtension::parse
-    #[test]
+    /// Test full parse through Extension::parse
+    #[rstest]
     fn test_policy_mappings_parse() {
-        // Test parsing through StandardExtension::parse
+        // Test parsing through Extension::parse
         // DER: OCTET STRING containing SEQUENCE { SEQUENCE { OID, OID } }
         let oid1_bytes = vec![0x06, 0x03, 0x2A, 0x03, 0x04]; // 1.2.3.4
         let oid2_bytes = vec![0x06, 0x03, 0x55, 0x04, 0x06]; // 2.5.4.6
@@ -321,5 +311,38 @@ mod tests {
 
         let mappings = result.unwrap();
         assert_eq!(mappings.mappings.len(), 1);
+    }
+
+    #[rstest]
+    #[case(PolicyMappings {
+        mappings: vec![
+            PolicyMapping {
+                issuer_domain_policy: ObjectIdentifier::from_str("1.2.3.4").unwrap(),
+                subject_domain_policy: ObjectIdentifier::from_str("5.6.7.8").unwrap(),
+            },
+        ],
+    })]
+    #[case(PolicyMappings {
+        mappings: vec![
+            PolicyMapping {
+                issuer_domain_policy: ObjectIdentifier::from_str("1.2.3.4").unwrap(),
+                subject_domain_policy: ObjectIdentifier::from_str("5.6.7.8").unwrap(),
+            },
+            PolicyMapping {
+                issuer_domain_policy: ObjectIdentifier::from_str("9.10.11.12").unwrap(),
+                subject_domain_policy: ObjectIdentifier::from_str("13.14.15.16").unwrap(),
+            },
+        ],
+    })]
+    fn test_policy_mappings_encode_decode(#[case] original: PolicyMappings) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<PolicyMappings, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original, roundtrip);
     }
 }

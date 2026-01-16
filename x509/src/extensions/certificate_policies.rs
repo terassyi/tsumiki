@@ -632,22 +632,19 @@ mod tests {
         assert_eq!(expected, actual);
     }
 
-    #[rstest(
-        input,
-        expected_error_msg,
-        // Test case: Empty sequence
-        case(
-            Element::Sequence(vec![]),
-            "empty sequence"
-        ),
-        // Test case: Not a Sequence
-        case(
-            Element::Boolean(true),
-            "expected Sequence"
-        ),
+    #[rstest]
+    // Test case: Empty sequence
+    #[case(
+        Element::Sequence(vec![]),
+        "empty sequence"
     )]
-    fn test_certificate_policies_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<CertificatePolicies, Error> = input.decode();
+    // Test case: Not a Sequence
+    #[case(Element::Boolean(true), "expected Sequence")]
+    fn test_certificate_policies_decode_failure(
+        #[case] input: Element,
+        #[case] expected_error_msg: &str,
+    ) {
+        let result: Result<CertificatePolicies, _> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);
@@ -715,5 +712,50 @@ mod tests {
             CertificatePolicies::ANY_POLICY
         );
         assert_eq!(cert_policies.policies[2].policy_identifier, "1.2.3.4.6");
+    }
+
+    #[rstest]
+    #[case(CertificatePolicies {
+        policies: vec![
+            PolicyInformation {
+                policy_identifier: ObjectIdentifier::from_str("1.2.3.4").unwrap(),
+                policy_qualifiers: None,
+            },
+        ],
+    })]
+    #[case(CertificatePolicies {
+        policies: vec![
+            PolicyInformation {
+                policy_identifier: ObjectIdentifier::from_str(CertificatePolicies::ANY_POLICY).unwrap(),
+                policy_qualifiers: None,
+            },
+        ],
+    })]
+    #[case(CertificatePolicies {
+        policies: vec![
+            PolicyInformation {
+                policy_identifier: ObjectIdentifier::from_str("1.2.3.4").unwrap(),
+                policy_qualifiers: Some(vec![
+                    PolicyQualifierInfo {
+                        policy_qualifier_id: ObjectIdentifier::from_str(PolicyQualifierInfo::ID_QT_CPS).unwrap(),
+                        qualifier: Qualifier::CpsUri("http://example.com/cps".to_string()),
+                    },
+                ]),
+            },
+        ],
+    })]
+    fn test_certificate_policies_encode_decode(#[case] original: CertificatePolicies) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<CertificatePolicies, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original.policies.len(), roundtrip.policies.len());
+        for (orig, rt) in original.policies.iter().zip(roundtrip.policies.iter()) {
+            assert_eq!(orig.policy_identifier, rt.policy_identifier);
+        }
     }
 }

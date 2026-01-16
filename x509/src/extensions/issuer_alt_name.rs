@@ -237,7 +237,7 @@ mod tests {
         ),
     )]
     fn test_issuer_alt_name_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<IssuerAltName, Error> = input.decode();
+        let result: Result<IssuerAltName, _> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);
@@ -247,5 +247,29 @@ mod tests {
             expected_error_msg,
             err_str
         );
+    }
+
+    #[rstest]
+    #[case(IssuerAltName {
+        names: vec![
+            GeneralName::DnsName("ca.example.com".to_string()),
+        ],
+    })]
+    #[case(IssuerAltName {
+        names: vec![
+            GeneralName::Uri("http://ca.example.com".to_string()),
+            GeneralName::DnsName("issuer.example.com".to_string()),
+        ],
+    })]
+    fn test_issuer_alt_name_encode_decode(#[case] original: IssuerAltName) {
+        let encoded = original.encode();
+        assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
+
+        let element = encoded.unwrap();
+        let decoded: Result<IssuerAltName, _> = element.decode();
+        assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
+
+        let roundtrip = decoded.unwrap();
+        assert_eq!(original, roundtrip);
     }
 }
