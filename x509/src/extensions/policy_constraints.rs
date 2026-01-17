@@ -1,5 +1,7 @@
 use asn1::{ASN1Object, Element, Integer, OctetString};
+use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
@@ -195,6 +197,26 @@ impl Encoder<PolicyConstraints, Element> for PolicyConstraints {
         let elements = require_elem.into_iter().chain(inhibit_elem).collect();
 
         Ok(Element::Sequence(elements))
+    }
+}
+
+impl OidName for PolicyConstraints {
+    fn oid_name(&self) -> Option<&'static str> {
+        Some("policyConstraints")
+    }
+}
+
+impl fmt::Display for PolicyConstraints {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ext_name = self.oid_name().unwrap_or("policyConstraints");
+        writeln!(f, "            X509v3 {}:", ext_name)?;
+        if let Some(require) = self.require_explicit_policy {
+            writeln!(f, "                Require Explicit Policy: {}", require)?;
+        }
+        if let Some(inhibit) = self.inhibit_policy_mapping {
+            writeln!(f, "                Inhibit Policy Mapping: {}", inhibit)?;
+        }
+        Ok(())
     }
 }
 

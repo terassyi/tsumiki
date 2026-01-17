@@ -30,6 +30,7 @@
 use asn1::{ASN1Object, Element, OctetString};
 use pkix_types::DirectoryString;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
+use std::fmt;
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -68,6 +69,12 @@ impl ChallengePassword {
     /// Get the challenge password as a string
     pub fn password(&self) -> &str {
         self.password.as_str()
+    }
+}
+
+impl fmt::Display for ChallengePassword {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.password.as_str())
     }
 }
 

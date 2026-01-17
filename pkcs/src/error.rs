@@ -7,6 +7,9 @@ pub enum Error {
 
     #[error("PKCS#1 error: {0}")]
     Pkcs1(#[from] crate::pkcs1::Error),
+
+    #[error(transparent)]
+    PKIXTypes(#[from] pkix_types::Error),
     // PKCS#8 and SEC1 will be added later
 }
 

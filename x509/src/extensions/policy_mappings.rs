@@ -1,5 +1,7 @@
 use asn1::{ASN1Object, Element, OctetString};
+use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
@@ -199,6 +201,27 @@ impl Encoder<PolicyMapping, Element> for PolicyMapping {
             Element::ObjectIdentifier(self.issuer_domain_policy.clone()),
             Element::ObjectIdentifier(self.subject_domain_policy.clone()),
         ]))
+    }
+}
+
+impl OidName for PolicyMappings {
+    fn oid_name(&self) -> Option<&'static str> {
+        Some("policyMappings")
+    }
+}
+
+impl fmt::Display for PolicyMappings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ext_name = self.oid_name().unwrap_or("policyMappings");
+        writeln!(f, "            X509v3 {}:", ext_name)?;
+        for mapping in &self.mappings {
+            writeln!(
+                f,
+                "                {}: {}",
+                mapping.issuer_domain_policy, mapping.subject_domain_policy
+            )?;
+        }
+        Ok(())
     }
 }
 

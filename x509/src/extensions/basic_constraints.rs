@@ -1,5 +1,7 @@
 use asn1::{ASN1Object, Element, Integer, OctetString};
+use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
@@ -92,6 +94,29 @@ impl Decoder<Element, BasicConstraints> for Element {
             _ => Err(Error::InvalidBasicConstraints(
                 "expected Sequence".to_string(),
             )),
+        }
+    }
+}
+
+impl OidName for BasicConstraints {
+    fn oid_name(&self) -> Option<&'static str> {
+        Some("basicConstraints")
+    }
+}
+
+impl fmt::Display for BasicConstraints {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ext_name = self.oid_name().unwrap_or("basicConstraints");
+        writeln!(f, "            X509v3 {}: critical", ext_name)?;
+        if self.ca {
+            write!(f, "                CA:TRUE")?;
+            if let Some(pathlen) = self.path_len_constraint {
+                writeln!(f, ", pathlen:{}", pathlen)
+            } else {
+                writeln!(f)
+            }
+        } else {
+            writeln!(f, "                CA:FALSE")
         }
     }
 }

@@ -1,5 +1,7 @@
 use asn1::{ASN1Object, Element, OctetString};
+use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
@@ -99,6 +101,23 @@ impl Extension for SubjectAltName {
 
     fn parse(value: &OctetString) -> Result<Self, Error> {
         value.decode()
+    }
+}
+
+impl OidName for SubjectAltName {
+    fn oid_name(&self) -> Option<&'static str> {
+        Some("subjectAltName")
+    }
+}
+
+impl fmt::Display for SubjectAltName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ext_name = self.oid_name().unwrap_or("subjectAltName");
+        writeln!(f, "            X509v3 {}:", ext_name)?;
+        for name in &self.names {
+            writeln!(f, "                {}", name)?;
+        }
+        Ok(())
     }
 }
 

@@ -1,6 +1,7 @@
 use crate::error::Result;
 use crate::output::OutputFormat;
 use pkcs::pkcs9::ParsedAttributes;
+use pkix_types::OidName;
 
 fn print_algorithm_parameters(elem: &asn1::Element, indent: usize) {
     let prefix = " ".repeat(indent);
@@ -50,15 +51,20 @@ pub(crate) fn output_private_key_info(
         OutputFormat::Text => {
             println!("PKCS#8 Private Key (OneAsymmetricKey)");
             println!("Version: {:?}", key.version);
-            println!("Algorithm: {}", key.private_key_algorithm.algorithm);
+            let alg_oid_str = key.private_key_algorithm.algorithm.to_string();
+            let alg_name = key.private_key_algorithm.oid_name().unwrap_or(&alg_oid_str);
+            println!(
+                "Algorithm: {} ({})",
+                alg_name, key.private_key_algorithm.algorithm
+            );
             if let Some(params) = &key.private_key_algorithm.parameters {
                 match params {
                     pkcs::pkcs8::AlgorithmParameters::Null => {
                         println!("Algorithm Parameters: NULL");
                     }
-                    pkcs::pkcs8::AlgorithmParameters::Elm(elem) => {
+                    pkcs::pkcs8::AlgorithmParameters::Other(raw) => {
                         println!("Algorithm Parameters:");
-                        print_algorithm_parameters(elem, 2);
+                        print_algorithm_parameters(raw.element(), 2);
                     }
                 }
             }
@@ -90,16 +96,21 @@ pub(crate) fn output_encrypted_private_key_info(
         }
         OutputFormat::Text => {
             println!("PKCS#8 Encrypted Private Key");
+            let enc_alg_oid_str = key.encryption_algorithm.algorithm.to_string();
+            let alg_name = key
+                .encryption_algorithm
+                .oid_name()
+                .unwrap_or(&enc_alg_oid_str);
             println!(
-                "Encryption Algorithm: {}",
-                key.encryption_algorithm.algorithm
+                "Encryption Algorithm: {} ({})",
+                alg_name, key.encryption_algorithm.algorithm
             );
             if let Some(params) = &key.encryption_algorithm.parameters {
                 match params {
                     pkcs::pkcs8::AlgorithmParameters::Null => {
                         println!("Encryption Parameters: NULL");
                     }
-                    pkcs::pkcs8::AlgorithmParameters::Elm(_) => {
+                    pkcs::pkcs8::AlgorithmParameters::Other(_) => {
                         println!("Encryption Parameters: Present (PBES2 scheme)");
                     }
                 }

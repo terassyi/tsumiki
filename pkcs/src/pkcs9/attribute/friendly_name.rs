@@ -17,6 +17,7 @@
 
 use asn1::{ASN1Object, Element, OctetString};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
+use std::fmt;
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -53,6 +54,12 @@ impl FriendlyName {
     /// Get the friendly name
     pub fn name(&self) -> &str {
         &self.name
+    }
+}
+
+impl fmt::Display for FriendlyName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
     }
 }
 

@@ -189,6 +189,7 @@ dependencies = [
  "der",
  "pem",
  "pkcs",
+ "pkix-types",
  "serde_json",
  "serde_yml",
  "thiserror",

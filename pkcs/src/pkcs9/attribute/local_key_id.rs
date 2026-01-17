@@ -17,6 +17,7 @@
 
 use asn1::{ASN1Object, Element, OctetString};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
+use std::fmt;
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -44,6 +45,18 @@ impl LocalKeyId {
     /// Get the key identifier
     pub fn key_id(&self) -> &OctetString {
         &self.key_id
+    }
+}
+
+impl fmt::Display for LocalKeyId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let hex: Vec<String> = self
+            .key_id
+            .as_bytes()
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect();
+        write!(f, "{}", hex.join(":"))
     }
 }
 

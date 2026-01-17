@@ -75,9 +75,7 @@ impl Decoder<Element, SubjectPublicKeyInfo> for Element {
         let algorithm_elm = iter
             .next()
             .ok_or_else(|| Error::InvalidSubjectPublicKeyInfo("missing algorithm".to_string()))?;
-        let algorithm = algorithm_elm.decode().map_err(|e: Error| {
-            Error::InvalidSubjectPublicKeyInfo(format!("failed to decode algorithm: {}", e))
-        })?;
+        let algorithm = algorithm_elm.decode()?;
 
         let public_key_elm = iter.next().ok_or_else(|| {
             Error::InvalidSubjectPublicKeyInfo("missing subject public key".to_string())

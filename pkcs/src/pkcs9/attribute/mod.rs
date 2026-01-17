@@ -392,22 +392,13 @@ impl From<&[RawAttribute]> for ParsedAttributes {
 impl fmt::Display for ParsedAttributes {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(ct) = &self.content_type {
-            writeln!(f, "    Content Type:")?;
-            writeln!(f, "        {}", ct.content_type())?;
+            writeln!(f, "    Content Type: {}", ct)?;
         }
         if let Some(md) = &self.message_digest {
-            writeln!(f, "    Message Digest:")?;
-            let hex: Vec<String> = md
-                .digest()
-                .as_bytes()
-                .iter()
-                .map(|b| format!("{:02x}", b))
-                .collect();
-            writeln!(f, "        {}", hex.join(":"))?;
+            writeln!(f, "    Message Digest: {}", md)?;
         }
         if let Some(st) = &self.signing_time {
-            writeln!(f, "    Signing Time:")?;
-            writeln!(f, "        {}", st.time().format("%b %d %H:%M:%S %Y GMT"))?;
+            writeln!(f, "    Signing Time: {}", st)?;
         }
         if let Some(cs) = &self.countersignature {
             writeln!(f, "    Countersignature:")?;
@@ -425,16 +416,13 @@ impl fmt::Display for ParsedAttributes {
             )?;
         }
         if let Some(cp) = &self.challenge_password {
-            writeln!(f, "    Challenge Password:")?;
-            writeln!(f, "        {}", cp.password())?;
+            writeln!(f, "    Challenge Password: {}", cp)?;
         }
         if let Some(un) = &self.unstructured_name {
-            writeln!(f, "    Unstructured Name:")?;
-            writeln!(f, "        {}", un.name())?;
+            writeln!(f, "    Unstructured Name: {}", un)?;
         }
         if let Some(ua) = &self.unstructured_address {
-            writeln!(f, "    Unstructured Address:")?;
-            writeln!(f, "        {}", ua.address())?;
+            writeln!(f, "    Unstructured Address: {}", ua)?;
         }
         if let Some(er) = &self.extension_request {
             writeln!(f, "    Extension Request:")?;
@@ -452,18 +440,10 @@ impl fmt::Display for ParsedAttributes {
             }
         }
         if let Some(fn_attr) = &self.friendly_name {
-            writeln!(f, "    Friendly Name:")?;
-            writeln!(f, "        {}", fn_attr.name())?;
+            writeln!(f, "    Friendly Name: {}", fn_attr)?;
         }
         if let Some(lk) = &self.local_key_id {
-            writeln!(f, "    Local Key ID:")?;
-            let hex: Vec<String> = lk
-                .key_id()
-                .as_bytes()
-                .iter()
-                .map(|b| format!("{:02x}", b))
-                .collect();
-            writeln!(f, "        {}", hex.join(":"))?;
+            writeln!(f, "    Local Key ID: {}", lk)?;
         }
         Ok(())
     }

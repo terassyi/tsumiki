@@ -1,3 +1,4 @@
+use std::fmt;
 use std::net::IpAddr;
 
 use asn1::{Element, ObjectIdentifier, OctetString};
@@ -397,6 +398,22 @@ impl Encoder<IpAddressOrRange, Element> for IpAddressOrRange {
             }
         };
         Ok(Element::OctetString(OctetString::from(bytes)))
+    }
+}
+
+impl fmt::Display for GeneralName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            GeneralName::DnsName(dns) => write!(f, "DNS:{}", dns),
+            GeneralName::IpAddress(ip) => write!(f, "IP Address:{}", ip),
+            GeneralName::Rfc822Name(email) => write!(f, "email:{}", email),
+            GeneralName::Uri(uri) => write!(f, "URI:{}", uri),
+            GeneralName::DirectoryName(name) => write!(f, "DirName:{}", name),
+            GeneralName::RegisteredId(oid) => write!(f, "Registered ID:{:?}", oid),
+            GeneralName::OtherName(other) => write!(f, "othername:{:?}", other.type_id),
+            GeneralName::X400Address(_) => write!(f, "X400Address"),
+            GeneralName::EdiPartyName(_) => write!(f, "EdiPartyName"),
+        }
     }
 }
 

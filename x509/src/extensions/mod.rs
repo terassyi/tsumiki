@@ -105,6 +105,35 @@ impl RawExtension {
     }
 }
 
+// Implement OidName for RawExtension
+impl pkix_types::OidName for RawExtension {
+    fn oid_name(&self) -> Option<&'static str> {
+        // Map OID to standard extension names using constants from each extension type
+        match self.oid().to_string().as_str() {
+            SubjectKeyIdentifier::OID => Some("subjectKeyIdentifier"),
+            KeyUsage::OID => Some("keyUsage"),
+            SubjectAltName::OID => Some("subjectAltName"),
+            IssuerAltName::OID => Some("issuerAltName"),
+            BasicConstraints::OID => Some("basicConstraints"),
+            NameConstraints::OID => Some("nameConstraints"),
+            CRLDistributionPoints::OID => Some("cRLDistributionPoints"),
+            CertificatePolicies::OID => Some("certificatePolicies"),
+            PolicyMappings::OID => Some("policyMappings"),
+            AuthorityKeyIdentifier::OID => Some("authorityKeyIdentifier"),
+            PolicyConstraints::OID => Some("policyConstraints"),
+            ExtendedKeyUsage::OID => Some("extKeyUsage"),
+            FreshestCRL::OID => Some("freshestCRL"),
+            InhibitAnyPolicy::OID => Some("inhibitAnyPolicy"),
+            AuthorityInfoAccess::OID => Some("authorityInfoAccess"),
+            // Additional common extensions not yet implemented
+            "2.5.29.9" => Some("subjectDirectoryAttributes"),
+            "2.5.29.16" => Some("privateKeyUsagePeriod"),
+            "1.3.6.1.5.5.7.1.11" => Some("subjectInfoAccess"),
+            _ => None,
+        }
+    }
+}
+
 impl From<pkix_types::Extension> for RawExtension {
     fn from(ext: pkix_types::Extension) -> Self {
         Self(ext)
