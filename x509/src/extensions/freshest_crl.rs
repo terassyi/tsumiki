@@ -1,5 +1,7 @@
 use asn1::{Element, OctetString};
+use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::Error;
@@ -80,6 +82,21 @@ impl Encoder<FreshestCRL, Element> for FreshestCRL {
 
     fn encode(&self) -> Result<Element, Self::Error> {
         self.distribution_points.encode()
+    }
+}
+
+impl OidName for FreshestCRL {
+    fn oid_name(&self) -> Option<&'static str> {
+        Some("freshestCRL")
+    }
+}
+
+impl fmt::Display for FreshestCRL {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ext_name = self.oid_name().unwrap_or("freshestCRL");
+        writeln!(f, "            X509v3 {}:", ext_name)?;
+        write!(f, "                {}", self.distribution_points)?;
+        Ok(())
     }
 }
 

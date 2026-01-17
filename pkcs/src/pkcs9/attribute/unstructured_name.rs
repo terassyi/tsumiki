@@ -34,6 +34,7 @@
 use asn1::{ASN1Object, Element, OctetString};
 use pkix_types::DirectoryString;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeStruct};
+use std::fmt;
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -59,6 +60,12 @@ impl UnstructuredName {
     /// Get the name as a string reference
     pub fn name(&self) -> &PKCS9String {
         &self.name
+    }
+}
+
+impl fmt::Display for UnstructuredName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.name)
     }
 }
 

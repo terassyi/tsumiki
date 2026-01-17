@@ -38,6 +38,7 @@
 use asn1::{ASN1Object, Element, OctetString};
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
+use std::fmt;
 
 use super::Attribute;
 use crate::pkcs9::error::{Error, Result};
@@ -73,6 +74,12 @@ impl SigningTime {
             .map_err(|e| Error::InvalidSigningTime(format!("Invalid RFC3339: {}", e)))?
             .with_timezone(&Utc);
         Ok(Self { time })
+    }
+}
+
+impl fmt::Display for SigningTime {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.time.format("%b %d %H:%M:%S %Y GMT"))
     }
 }
 

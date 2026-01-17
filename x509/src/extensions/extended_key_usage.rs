@@ -1,5 +1,7 @@
 use asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
+use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
@@ -7,11 +9,19 @@ use crate::error::Error;
 use crate::extensions::Extension;
 
 /*
-RFC 5280 Section 4.2.1.12
+RFC 5280 Section 4.2.1.12: Extended Key Usage
+https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.12
+
 ExtendedKeyUsage ::= SEQUENCE SIZE (1..MAX) OF KeyPurposeId
 KeyPurposeId ::= OBJECT IDENTIFIER
 */
 
+/// Extended Key Usage extension
+///
+/// Indicates one or more purposes for which the certified public key may be used.
+///
+/// RFC 5280 Section 4.2.1.12: Extended Key Usage
+/// See: <https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.12>
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtendedKeyUsage {
     pub purposes: Vec<ObjectIdentifier>,
@@ -19,17 +29,29 @@ pub struct ExtendedKeyUsage {
 
 impl ExtendedKeyUsage {
     // Common KeyPurposeId OIDs (RFC 5280)
-    /// TLS WWW server authentication (1.3.6.1.5.5.7.3.1)
+
+    /// TLS WWW server authentication (id-kp-serverAuth)
+    /// OID: 1.3.6.1.5.5.7.3.1
     pub const SERVER_AUTH: &'static str = "1.3.6.1.5.5.7.3.1";
-    /// TLS WWW client authentication (1.3.6.1.5.5.7.3.2)
+
+    /// TLS WWW client authentication (id-kp-clientAuth)
+    /// OID: 1.3.6.1.5.5.7.3.2
     pub const CLIENT_AUTH: &'static str = "1.3.6.1.5.5.7.3.2";
-    /// Code signing (1.3.6.1.5.5.7.3.3)
+
+    /// Code signing (id-kp-codeSigning)
+    /// OID: 1.3.6.1.5.5.7.3.3
     pub const CODE_SIGNING: &'static str = "1.3.6.1.5.5.7.3.3";
-    /// Email protection (1.3.6.1.5.5.7.3.4)
+
+    /// Email protection (id-kp-emailProtection)
+    /// OID: 1.3.6.1.5.5.7.3.4
     pub const EMAIL_PROTECTION: &'static str = "1.3.6.1.5.5.7.3.4";
-    /// Time stamping (1.3.6.1.5.5.7.3.8)
+
+    /// Time stamping (id-kp-timeStamping)
+    /// OID: 1.3.6.1.5.5.7.3.8
     pub const TIME_STAMPING: &'static str = "1.3.6.1.5.5.7.3.8";
-    /// OCSP signing (1.3.6.1.5.5.7.3.9)
+
+    /// OCSP signing (id-kp-OCSPSigning)
+    /// OID: 1.3.6.1.5.5.7.3.9
     pub const OCSP_SIGNING: &'static str = "1.3.6.1.5.5.7.3.9";
 }
 
@@ -117,6 +139,34 @@ impl Extension for ExtendedKeyUsage {
 
     fn parse(value: &OctetString) -> Result<Self, Error> {
         value.decode()
+    }
+}
+
+impl OidName for ExtendedKeyUsage {
+    fn oid_name(&self) -> Option<&'static str> {
+        Some("extendedKeyUsage")
+    }
+}
+
+impl fmt::Display for ExtendedKeyUsage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ext_name = self.oid_name().unwrap_or("extendedKeyUsage");
+        writeln!(f, "            X509v3 {}:", ext_name)?;
+        let purposes = self
+            .purposes
+            .iter()
+            .map(|oid| match oid.to_string().as_str() {
+                Self::SERVER_AUTH => "TLS Web Server Authentication",
+                Self::CLIENT_AUTH => "TLS Web Client Authentication",
+                Self::CODE_SIGNING => "Code Signing",
+                Self::EMAIL_PROTECTION => "E-mail Protection",
+                Self::TIME_STAMPING => "Time Stamping",
+                Self::OCSP_SIGNING => "OCSP Signing",
+                _ => "Unknown",
+            })
+            .collect::<Vec<_>>();
+        writeln!(f, "                {}", purposes.join(", "))?;
+        Ok(())
     }
 }
 

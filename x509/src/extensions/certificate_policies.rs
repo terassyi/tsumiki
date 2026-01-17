@@ -1,5 +1,7 @@
 use asn1::{ASN1Object, Element, Integer, ObjectIdentifier, OctetString};
+use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
@@ -513,6 +515,28 @@ impl Extension for CertificatePolicies {
 
     fn parse(value: &OctetString) -> Result<Self, Error> {
         value.decode()
+    }
+}
+
+impl OidName for CertificatePolicies {
+    fn oid_name(&self) -> Option<&'static str> {
+        Some("certificatePolicies")
+    }
+}
+
+impl fmt::Display for CertificatePolicies {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ext_name = self.oid_name().unwrap_or("certificatePolicies");
+        writeln!(f, "            X509v3 {}:", ext_name)?;
+        for policy in &self.policies {
+            writeln!(f, "                Policy: {}", policy.policy_identifier)?;
+            if let Some(ref qualifiers) = policy.policy_qualifiers {
+                for qualifier in qualifiers {
+                    writeln!(f, "                  {}", qualifier.policy_qualifier_id)?;
+                }
+            }
+        }
+        Ok(())
     }
 }
 

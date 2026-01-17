@@ -4,6 +4,7 @@ use asn1::ASN1Object;
 use clap::Args;
 use der::Der;
 use pem::Pem;
+use pkix_types::OidName;
 use tsumiki::decoder::Decoder;
 
 use crate::error::Result;
@@ -34,11 +35,28 @@ pub(crate) struct Config {
     /// Show only serial number
     #[arg(long)]
     show_serial: bool,
+
+    /// List all extensions
+    #[arg(long)]
+    list_extensions: bool,
+
+    /// Show algorithm information
+    #[arg(long)]
+    show_algorithms: bool,
+
+    /// Show OID values instead of human-readable names
+    #[arg(long)]
+    show_oid: bool,
 }
 
 impl Config {
     fn should_show_specific_fields(&self) -> bool {
-        self.show_subject || self.show_issuer || self.show_dates || self.show_serial
+        self.show_subject
+            || self.show_issuer
+            || self.show_dates
+            || self.show_serial
+            || self.list_extensions
+            || self.show_algorithms
     }
 }
 
@@ -90,10 +108,40 @@ pub(crate) fn execute(config: Config) -> Result<()> {
         if config.show_serial {
             println!("Serial Number: {}", tbs.serial_number().format_hex());
         }
+        if config.list_extensions {
+            if let Some(exts) = tbs.extensions() {
+                println!("Extensions:");
+                for ext in exts.extensions() {
+                    let oid_str = ext.oid().to_string();
+                    let name = ext.oid_name().unwrap_or(&oid_str);
+                    let critical = if ext.critical() { " (critical)" } else { "" };
+                    println!("  {} [{}]{}", name, ext.oid(), critical);
+                }
+            } else {
+                println!("No extensions");
+            }
+        }
+        if config.show_algorithms {
+            let sig_alg = &tbs.signature();
+            let sig_oid_str = sig_alg.algorithm.to_string();
+            let sig_name = sig_alg.oid_name().unwrap_or(&sig_oid_str);
+            println!("Signature Algorithm: {} ({})", sig_name, sig_alg.algorithm);
+
+            let pubkey_alg = tbs.subject_public_key_info().algorithm();
+            let pubkey_oid_str = pubkey_alg.algorithm.to_string();
+            let pubkey_name = pubkey_alg.oid_name().unwrap_or(&pubkey_oid_str);
+            println!(
+                "Public Key Algorithm: {} ({})",
+                pubkey_name, pubkey_alg.algorithm
+            );
+        }
         return Ok(());
     }
 
     // Full output
+
+    // Set the OID display mode
+    pkix_types::set_use_oid_values(config.show_oid);
     match config.output {
         OutputFormat::Text => {
             println!("{}", cert);

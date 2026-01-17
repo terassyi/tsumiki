@@ -1,5 +1,7 @@
 use asn1::{ASN1Object, BitString, Element, OctetString};
+use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
@@ -91,6 +93,49 @@ impl Decoder<Element, KeyUsage> for Element {
             }
             _ => Err(Error::InvalidKeyUsage("expected BitString".to_string())),
         }
+    }
+}
+
+impl OidName for KeyUsage {
+    fn oid_name(&self) -> Option<&'static str> {
+        Some("keyUsage")
+    }
+}
+
+impl fmt::Display for KeyUsage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ext_name = self.oid_name().unwrap_or("keyUsage");
+        writeln!(f, "            X509v3 {}: critical", ext_name)?;
+        let mut usages = Vec::new();
+        if self.digital_signature {
+            usages.push("Digital Signature");
+        }
+        if self.content_commitment {
+            usages.push("Content Commitment");
+        }
+        if self.key_encipherment {
+            usages.push("Key Encipherment");
+        }
+        if self.data_encipherment {
+            usages.push("Data Encipherment");
+        }
+        if self.key_agreement {
+            usages.push("Key Agreement");
+        }
+        if self.key_cert_sign {
+            usages.push("Certificate Sign");
+        }
+        if self.crl_sign {
+            usages.push("CRL Sign");
+        }
+        if self.encipher_only {
+            usages.push("Encipher Only");
+        }
+        if self.decipher_only {
+            usages.push("Decipher Only");
+        }
+        writeln!(f, "                {}", usages.join(", "))?;
+        Ok(())
     }
 }
 

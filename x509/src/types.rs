@@ -3,26 +3,19 @@
 //! These types have been moved to pkix-types crate for reuse across
 //! X.509, PKCS, CMS, and other PKI standards.
 
-use asn1::ObjectIdentifier;
-
 // Re-export types that are now in pkix-types for backward compatibility
 #[allow(unused_imports)]
 pub use pkix_types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
 
-// OID mapping function - delegate to pkix-types implementation
-/// Map common X.509 attribute OIDs to human-readable names
-#[allow(dead_code)]
-pub(crate) fn oid_to_name(oid: &ObjectIdentifier) -> Option<&'static str> {
-    pkix_types::name::oid_to_name(oid)
-}
-
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
-    use asn1::{Element, Integer};
+    use asn1::{Element, Integer, ObjectIdentifier};
     use pkix_types::DirectoryString;
     use rstest::rstest;
-    use std::str::FromStr;
+
     use tsumiki::decoder::Decoder;
 
     // DirectoryString tests

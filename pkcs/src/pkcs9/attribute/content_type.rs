@@ -19,7 +19,9 @@
 //! required if there are any PKCS #7 authenticated attributes.
 
 use asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
+use pkix_types::OidName;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
+use std::fmt;
 use std::str::FromStr;
 
 use crate::pkcs9::error::{Error, Result};
@@ -73,13 +75,46 @@ impl ContentType {
     }
 }
 
+impl OidName for ContentType {
+    fn oid_name(&self) -> Option<&'static str> {
+        match self.content_type.to_string().as_str() {
+            Self::DATA_OID => Some("data"),
+            Self::SIGNED_DATA_OID => Some("signedData"),
+            Self::ENVELOPED_DATA_OID => Some("envelopedData"),
+            Self::DIGESTED_DATA_OID => Some("digestedData"),
+            Self::ENCRYPTED_DATA_OID => Some("encryptedData"),
+            Self::AUTHENTICATED_DATA_OID => Some("authData"),
+            _ => None,
+        }
+    }
+}
+
+impl fmt::Display for ContentType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(name) = self.oid_name() {
+            write!(f, "{} ({})", name, self.content_type)
+        } else {
+            write!(f, "{}", self.content_type)
+        }
+    }
+}
+
 impl Serialize for ContentType {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
+        let use_oid = pkix_types::get_use_oid_values();
+        let display_value = if use_oid {
+            self.content_type.to_string()
+        } else {
+            self.oid_name()
+                .unwrap_or(&self.content_type.to_string())
+                .to_string()
+        };
+
         let mut state = serializer.serialize_struct("ContentType", 1)?;
-        state.serialize_field("contentType", &self.content_type.to_string())?;
+        state.serialize_field("contentType", &display_value)?;
         state.end()
     }
 }
@@ -233,15 +268,22 @@ mod tests {
     }
 
     #[rstest]
-    #[case(ContentType::new(ObjectIdentifier::from_str(ContentType::DATA_OID).unwrap()).unwrap(), ContentType::DATA_OID)]
-    #[case(ContentType::new(ObjectIdentifier::from_str(ContentType::SIGNED_DATA_OID).unwrap()).unwrap(), ContentType::SIGNED_DATA_OID)]
-    #[case(ContentType::new(ObjectIdentifier::from_str(ContentType::ENVELOPED_DATA_OID).unwrap()).unwrap(), ContentType::ENVELOPED_DATA_OID)]
-    fn test_content_type_serde_roundtrip(#[case] input: ContentType, #[case] expected: &str) {
+    #[case(ContentType::new(ObjectIdentifier::from_str(ContentType::DATA_OID).unwrap()).unwrap(), "data", ContentType::DATA_OID)]
+    #[case(ContentType::new(ObjectIdentifier::from_str(ContentType::SIGNED_DATA_OID).unwrap()).unwrap(), "signedData", ContentType::SIGNED_DATA_OID)]
+    #[case(ContentType::new(ObjectIdentifier::from_str(ContentType::ENVELOPED_DATA_OID).unwrap()).unwrap(), "envelopedData", ContentType::ENVELOPED_DATA_OID)]
+    fn test_content_type_serde_roundtrip(
+        #[case] input: ContentType,
+        #[case] expected_name: &str,
+        #[case] expected_oid: &str,
+    ) {
+        // Test default behavior (conventional name)
         let json = serde_json::to_string(&input).unwrap();
         assert!(json.contains("contentType"));
-        assert!(json.contains(expected));
+        assert!(json.contains(expected_name));
 
-        let decoded: ContentType = serde_json::from_str(&json).unwrap();
-        assert_eq!(decoded.content_type().to_string(), expected);
+        // Deserialization expects OID format
+        let json_with_oid = format!(r#"{{"contentType":"{}"}}"#, expected_oid);
+        let decoded: ContentType = serde_json::from_str(&json_with_oid).unwrap();
+        assert_eq!(decoded.content_type().to_string(), expected_oid);
     }
 }

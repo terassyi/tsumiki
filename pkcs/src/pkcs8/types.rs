@@ -425,10 +425,14 @@ AwQF
 
     #[test]
     fn test_algorithm_identifier_with_sequence_params() {
+        use pkix_types::RawAlgorithmParameter;
+
         // EC algorithm with SEQUENCE parameters
         let oid = EC_PUBLIC_KEY_OID.parse().unwrap();
         let curve_oid = PRIME256V1_OID.parse().unwrap();
-        let params = AlgorithmParameters::Elm(Element::ObjectIdentifier(curve_oid));
+        let params = AlgorithmParameters::Other(RawAlgorithmParameter::new(
+            Element::ObjectIdentifier(curve_oid),
+        ));
         let alg_id = AlgorithmIdentifier::new_with_params(oid, params);
 
         // Test encoding
@@ -446,7 +450,7 @@ AwQF
         assert_eq!(decoded.algorithm, alg_id.algorithm);
         assert!(matches!(
             decoded.parameters,
-            Some(AlgorithmParameters::Elm(Element::ObjectIdentifier(_)))
+            Some(AlgorithmParameters::Other(_))
         ));
     }
 
@@ -494,7 +498,7 @@ AwQF
             assert!(
                 matches!(
                     key.private_key_algorithm.parameters,
-                    Some(AlgorithmParameters::Elm(Element::Sequence(_)))
+                    Some(AlgorithmParameters::Other(_))
                 ),
                 "Expected SEQUENCE parameters"
             );

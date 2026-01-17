@@ -1,5 +1,6 @@
 use asn1::{ASN1Object, BitString, Element, Integer, ObjectIdentifier};
 use chrono::{Datelike, NaiveDateTime};
+use pkix_types::OidName;
 use serde::{Deserialize, Serialize, ser::SerializeStruct};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
@@ -15,7 +16,7 @@ mod types;
 // Re-export public types from pkix-types
 pub use pkix_types::{
     AlgorithmIdentifier, AlgorithmParameters, CertificateSerialNumber, DirectoryString, Name,
-    SubjectPublicKeyInfo,
+    RawAlgorithmParameter, SubjectPublicKeyInfo,
 };
 
 /*
@@ -134,7 +135,12 @@ impl fmt::Display for Certificate {
         writeln!(f, "        Serial Number: {}", serial_hex.join(":"))?;
 
         // Signature Algorithm
-        let sig_alg = algorithm_oid_to_name(&self.tbs_certificate.signature.algorithm);
+        let sig_alg = self
+            .tbs_certificate
+            .signature
+            .oid_name()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| self.tbs_certificate.signature.algorithm.to_string());
         writeln!(f, "        Signature Algorithm: {}", sig_alg)?;
 
         // Issuer
@@ -164,13 +170,19 @@ impl fmt::Display for Certificate {
 
         // Subject Public Key Info
         writeln!(f, "        Subject Public Key Info:")?;
-        let pubkey_alg = algorithm_oid_to_name(
-            &self
-                .tbs_certificate
-                .subject_public_key_info
-                .algorithm()
-                .algorithm,
-        );
+        let pubkey_alg = self
+            .tbs_certificate
+            .subject_public_key_info
+            .algorithm()
+            .oid_name()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| {
+                self.tbs_certificate
+                    .subject_public_key_info
+                    .algorithm()
+                    .algorithm
+                    .to_string()
+            });
         writeln!(f, "            Public Key Algorithm: {}", pubkey_alg)?;
 
         // Public Key (hex dump)
@@ -195,116 +207,113 @@ impl fmt::Display for Certificate {
 
             // Subject Key Identifier
             if let Ok(Some(ski)) = self.extension::<extensions::SubjectKeyIdentifier>() {
-                writeln!(f, "            X509v3 Subject Key Identifier:")?;
-                let hex_str: Vec<String> = ski
-                    .key_identifier
-                    .as_bytes()
-                    .iter()
-                    .map(|b| format!("{:02X}", b))
-                    .collect();
-                writeln!(f, "                {}", hex_str.join(":"))?;
+                write!(f, "{}", ski)?;
             }
 
             // Authority Key Identifier
             if let Ok(Some(aki)) = self.extension::<extensions::AuthorityKeyIdentifier>() {
-                writeln!(f, "            X509v3 Authority Key Identifier:")?;
-                if let Some(ref key_id) = aki.key_identifier {
-                    let hex_str: Vec<String> = key_id
-                        .as_bytes()
-                        .iter()
-                        .map(|b| format!("{:02X}", b))
-                        .collect();
-                    writeln!(f, "                keyid:{}", hex_str.join(":"))?;
-                }
+                write!(f, "{}", aki)?;
             }
 
             // Basic Constraints
             if let Ok(Some(bc)) = self.extension::<extensions::BasicConstraints>() {
-                writeln!(f, "            X509v3 Basic Constraints: critical")?;
-                if bc.ca {
-                    write!(f, "                CA:TRUE")?;
-                    if let Some(pathlen) = bc.path_len_constraint {
-                        writeln!(f, ", pathlen:{}", pathlen)?;
-                    } else {
-                        writeln!(f)?;
-                    }
-                } else {
-                    writeln!(f, "                CA:FALSE")?;
-                }
+                write!(f, "{}", bc)?;
             }
 
             // Key Usage
             if let Ok(Some(ku)) = self.extension::<extensions::KeyUsage>() {
-                writeln!(f, "            X509v3 Key Usage: critical")?;
-                let mut usages = Vec::new();
-                if ku.digital_signature {
-                    usages.push("Digital Signature");
-                }
-                if ku.content_commitment {
-                    usages.push("Non Repudiation");
-                }
-                if ku.key_encipherment {
-                    usages.push("Key Encipherment");
-                }
-                if ku.data_encipherment {
-                    usages.push("Data Encipherment");
-                }
-                if ku.key_agreement {
-                    usages.push("Key Agreement");
-                }
-                if ku.key_cert_sign {
-                    usages.push("Certificate Sign");
-                }
-                if ku.crl_sign {
-                    usages.push("CRL Sign");
-                }
-                if ku.encipher_only {
-                    usages.push("Encipher Only");
-                }
-                if ku.decipher_only {
-                    usages.push("Decipher Only");
-                }
-                writeln!(f, "                {}", usages.join(", "))?;
+                write!(f, "{}", ku)?;
             }
 
             // Extended Key Usage
             if let Ok(Some(eku)) = self.extension::<extensions::ExtendedKeyUsage>() {
-                writeln!(f, "            X509v3 Extended Key Usage:")?;
-                let purposes: Vec<String> = eku
-                    .purposes
-                    .iter()
-                    .map(|oid| match oid.to_string().as_str() {
-                        "1.3.6.1.5.5.7.3.1" => "TLS Web Server Authentication".to_string(),
-                        "1.3.6.1.5.5.7.3.2" => "TLS Web Client Authentication".to_string(),
-                        "1.3.6.1.5.5.7.3.3" => "Code Signing".to_string(),
-                        "1.3.6.1.5.5.7.3.4" => "E-mail Protection".to_string(),
-                        "1.3.6.1.5.5.7.3.8" => "Time Stamping".to_string(),
-                        "1.3.6.1.5.5.7.3.9" => "OCSP Signing".to_string(),
-                        _ => oid.to_string(),
-                    })
-                    .collect();
-                writeln!(f, "                {}", purposes.join(", "))?;
+                write!(f, "{}", eku)?;
             }
 
             // Subject Alternative Name
             if let Ok(Some(san)) = self.extension::<extensions::SubjectAltName>() {
-                writeln!(f, "            X509v3 Subject Alternative Name:")?;
-                for name in &san.names {
-                    match name {
-                        extensions::GeneralName::DnsName(dns) => {
-                            writeln!(f, "                DNS:{}", dns)?;
-                        }
-                        extensions::GeneralName::IpAddress(ip) => {
-                            writeln!(f, "                IP Address:{:?}", ip)?;
-                        }
-                        extensions::GeneralName::Rfc822Name(email) => {
-                            writeln!(f, "                email:{}", email)?;
-                        }
-                        extensions::GeneralName::Uri(uri) => {
-                            writeln!(f, "                URI:{}", uri)?;
-                        }
-                        _ => {
-                            writeln!(f, "                Other")?;
+                write!(f, "{}", san)?;
+            }
+
+            // Issuer Alternative Name
+            if let Ok(Some(ian)) = self.extension::<extensions::IssuerAltName>() {
+                write!(f, "{}", ian)?;
+            }
+
+            // Name Constraints
+            if let Ok(Some(nc)) = self.extension::<extensions::NameConstraints>() {
+                write!(f, "{}", nc)?;
+            }
+
+            // CRL Distribution Points
+            if let Ok(Some(cdp)) = self.extension::<extensions::CRLDistributionPoints>() {
+                write!(f, "{}", cdp)?;
+            }
+
+            // Certificate Policies
+            if let Ok(Some(cp)) = self.extension::<extensions::CertificatePolicies>() {
+                write!(f, "{}", cp)?;
+            }
+
+            // Policy Mappings
+            if let Ok(Some(pm)) = self.extension::<extensions::PolicyMappings>() {
+                write!(f, "{}", pm)?;
+            }
+
+            // Policy Constraints
+            if let Ok(Some(pc)) = self.extension::<extensions::PolicyConstraints>() {
+                write!(f, "{}", pc)?;
+            }
+
+            // Freshest CRL
+            if let Ok(Some(fcrl)) = self.extension::<extensions::FreshestCRL>() {
+                write!(f, "{}", fcrl)?;
+            }
+
+            // Inhibit Any Policy
+            if let Ok(Some(iap)) = self.extension::<extensions::InhibitAnyPolicy>() {
+                write!(f, "{}", iap)?;
+            }
+
+            // Authority Info Access
+            if let Ok(Some(aia)) = self.extension::<extensions::AuthorityInfoAccess>() {
+                write!(f, "{}", aia)?;
+            }
+
+            // Display any other extensions not explicitly handled above
+            let handled_oids = vec![
+                "2.5.29.14",         // SubjectKeyIdentifier
+                "2.5.29.35",         // AuthorityKeyIdentifier
+                "2.5.29.19",         // BasicConstraints
+                "2.5.29.15",         // KeyUsage
+                "2.5.29.37",         // ExtendedKeyUsage
+                "2.5.29.17",         // SubjectAltName
+                "2.5.29.18",         // IssuerAltName
+                "2.5.29.30",         // NameConstraints
+                "2.5.29.31",         // CRLDistributionPoints
+                "2.5.29.32",         // CertificatePolicies
+                "2.5.29.33",         // PolicyMappings
+                "2.5.29.36",         // PolicyConstraints
+                "2.5.29.46",         // FreshestCRL
+                "2.5.29.54",         // InhibitAnyPolicy
+                "1.3.6.1.5.5.7.1.1", // AuthorityInfoAccess
+            ];
+
+            if let Some(ref exts) = self.tbs_certificate.extensions {
+                for raw_ext in exts.extensions() {
+                    let oid_str = raw_ext.oid().to_string();
+                    if !handled_oids.contains(&oid_str.as_str()) {
+                        let ext_name = raw_ext.oid_name().unwrap_or(&oid_str);
+                        let critical = if raw_ext.critical() { " critical" } else { "" };
+                        writeln!(f, "            X509v3 {}:{}", ext_name, critical)?;
+                        // Display raw value as hex
+                        let value_bytes = raw_ext.value().as_bytes();
+                        if value_bytes.len() <= 32 {
+                            let hex_str: Vec<String> =
+                                value_bytes.iter().map(|b| format!("{:02x}", b)).collect();
+                            writeln!(f, "                {}", hex_str.join(":"))?;
+                        } else {
+                            writeln!(f, "                <{} bytes>", value_bytes.len())?;
                         }
                     }
                 }
@@ -312,7 +321,11 @@ impl fmt::Display for Certificate {
         }
 
         // Signature Algorithm (outer)
-        let sig_alg_outer = algorithm_oid_to_name(&self.signature_algorithm.algorithm);
+        let sig_alg_outer = self
+            .signature_algorithm
+            .oid_name()
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| self.signature_algorithm.algorithm.to_string());
         writeln!(f, "    Signature Algorithm: {}", sig_alg_outer)?;
 
         // Signature Value
@@ -1012,25 +1025,10 @@ impl TryFrom<&TBSCertificate> for SerializableTBSCertificate {
 
 // Helper functions for Display implementation
 
-fn algorithm_oid_to_name(oid: &ObjectIdentifier) -> String {
-    match oid.to_string().as_str() {
-        "1.2.840.113549.1.1.1" => "rsaEncryption".to_string(),
-        "1.2.840.113549.1.1.5" => "sha1WithRSAEncryption".to_string(),
-        "1.2.840.113549.1.1.11" => "sha256WithRSAEncryption".to_string(),
-        "1.2.840.113549.1.1.12" => "sha384WithRSAEncryption".to_string(),
-        "1.2.840.113549.1.1.13" => "sha512WithRSAEncryption".to_string(),
-        "1.2.840.10045.2.1" => "id-ecPublicKey".to_string(),
-        "1.2.840.10045.4.3.2" => "ecdsa-with-SHA256".to_string(),
-        "1.2.840.10045.4.3.3" => "ecdsa-with-SHA384".to_string(),
-        "1.2.840.10045.4.3.4" => "ecdsa-with-SHA512".to_string(),
-        _ => oid.to_string(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::extensions::{Extensions, RawExtension};
+    use crate::extensions::{Extension, Extensions, RawExtension};
     use crate::types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
     use asn1::{BitString, OctetString};
     use chrono::NaiveDate;
@@ -1046,47 +1044,47 @@ mod tests {
         // Test case: Algorithm without parameters (None = Absent)
         case(
             Element::Sequence(vec![
-                Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.113549.1.1.11").unwrap()), // sha256WithRSAEncryption
+                Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap()), // sha256WithRSAEncryption
             ]),
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.11").unwrap(),
+                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap(),
                 parameters: None,
             }
         ),
         // Test case: Algorithm with NULL parameters
         case(
             Element::Sequence(vec![
-                Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.113549.1.1.11").unwrap()),
+                Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap()),
                 Element::Null,
             ]),
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.11").unwrap(),
+                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap(),
                 parameters: Some(AlgorithmParameters::Null),
             }
         ),
         // Test case: Algorithm with OctetString parameters
         case(
             Element::Sequence(vec![
-                Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.10045.4.3.2").unwrap()), // ecdsa-with-SHA256
+                Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_ECDSA_WITH_SHA256).unwrap()), // ecdsa-with-SHA256
                 Element::OctetString(asn1::OctetString::from(vec![0x01, 0x02, 0x03])),
             ]),
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str("1.2.840.10045.4.3.2").unwrap(),
-                parameters: Some(AlgorithmParameters::Elm(
-                    Element::OctetString(asn1::OctetString::from(vec![0x01, 0x02, 0x03]))
+                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_ECDSA_WITH_SHA256).unwrap(),
+                parameters: Some(AlgorithmParameters::Other(
+                    RawAlgorithmParameter::new(Element::OctetString(asn1::OctetString::from(vec![0x01, 0x02, 0x03])))
                 )),
             }
         ),
         // Test case: Algorithm with OID parameters - ECDSA curve
         case(
             Element::Sequence(vec![
-                Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.10045.2.1").unwrap()), // ecPublicKey
-                Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.10045.3.1.7").unwrap()), // secp256r1 (prime256v1)
+                Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap()), // ecPublicKey
+                Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()), // secp256r1 (prime256v1)
             ]),
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str("1.2.840.10045.2.1").unwrap(),
-                parameters: Some(AlgorithmParameters::Elm(
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.10045.3.1.7").unwrap())
+                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(),
+                parameters: Some(AlgorithmParameters::Other(
+                    RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()))
                 )),
             }
         )
@@ -1127,7 +1125,7 @@ mod tests {
         )
     )]
     fn test_algorithm_identifier_decode_failure(input: Element, expected_error_variant: &str) {
-        let result: Result<AlgorithmIdentifier, pkix_types::Error> = input.decode();
+        let result: Result<AlgorithmIdentifier, _> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);
@@ -1392,7 +1390,7 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap()), // rsaEncryption
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()), // rsaEncryption
                     Element::Null,
                 ]),
                 Element::BitString(BitString::new(0, vec![
@@ -1403,7 +1401,7 @@ mod tests {
             ]),
             SubjectPublicKeyInfo::new(
                 AlgorithmIdentifier::new_with_params(
-                    ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
+                    ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap(),
                     AlgorithmParameters::Null,
                 ),
                 BitString::new(0, vec![
@@ -1417,8 +1415,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.10045.2.1").unwrap()), // ecPublicKey
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.10045.3.1.7").unwrap()), // secp256r1
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap()), // ecPublicKey
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()), // secp256r1
                 ]),
                 Element::BitString(BitString::new(0, vec![
                     0x04, // Uncompressed point
@@ -1428,9 +1426,9 @@ mod tests {
             ]),
             SubjectPublicKeyInfo::new(
                 AlgorithmIdentifier::new_with_params(
-                    ObjectIdentifier::from_str("1.2.840.10045.2.1").unwrap(),
-                    AlgorithmParameters::Elm(
-                        Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.10045.3.1.7").unwrap())
+                    ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(),
+                    AlgorithmParameters::Other(
+                        RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()))
                     ),
                 ),
                 BitString::new(0, vec![
@@ -1469,14 +1467,14 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap()),
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()),
                     Element::Null,
                 ]),
                 Element::BitString(BitString::new(3, vec![0xFF, 0xE0])), // 13 bits (3 unused in last byte)
             ]),
             SubjectPublicKeyInfo::new(
                 AlgorithmIdentifier::new_with_params(
-                    ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(),
+                    ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap(),
                     AlgorithmParameters::Null,
                 ),
                 BitString::new(3, vec![0xFF, 0xE0]),
@@ -1507,7 +1505,7 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap()),
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()),
                 ]),
             ]),
             "expected 2 elements in sequence, got 1"
@@ -1516,7 +1514,7 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap()),
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()),
                 ]),
                 Element::BitString(BitString::new(0, vec![0x00])),
                 Element::Null,
@@ -1529,13 +1527,13 @@ mod tests {
                 Element::Integer(Integer::from(vec![0x01])),
                 Element::BitString(BitString::new(0, vec![0x00])),
             ]),
-            "failed to decode algorithm"
+            "Invalid algorithm identifier"
         ),
         // Test case: Second element is not BitString
         case(
             Element::Sequence(vec![
                 Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap()),
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()),
                 ]),
                 Element::OctetString(OctetString::from(vec![0x00])),
             ]),
@@ -1547,7 +1545,7 @@ mod tests {
                 Element::Sequence(vec![]),
                 Element::BitString(BitString::new(0, vec![0x00])),
             ]),
-            "failed to decode algorithm"
+            "Invalid algorithm identifier"
         ),
     )]
     fn test_subject_public_key_info_decode_failure(input: Element, expected_error_msg: &str) {
@@ -1863,24 +1861,24 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         expected_len,
         case(
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.11").unwrap(),
+                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap(),
                 parameters: None,
             },
             1
         ),
         case(
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.11").unwrap(),
+                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap(),
                 parameters: Some(AlgorithmParameters::Null),
             },
             2
         ),
         case(
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str("1.2.840.10045.4.3.2").unwrap(),
-                parameters: Some(AlgorithmParameters::Elm(Element::OctetString(
-                    OctetString::from(vec![0x01, 0x02, 0x03])
-                ))),
+                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_ECDSA_WITH_SHA256).unwrap(),
+                parameters: Some(AlgorithmParameters::Other(
+                    RawAlgorithmParameter::new(Element::OctetString(OctetString::from(vec![0x01, 0x02, 0x03])))
+                )),
             },
             2
         )
@@ -2020,23 +2018,23 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         public_key_bytes,
         case(
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.1").unwrap(), // RSA
+                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap(), // RSA
                 parameters: None,
             },
             vec![0x30, 0x0d, 0x06, 0x09] // Sample RSA public key bytes
         ),
         case(
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str("1.2.840.10045.2.1").unwrap(), // EC public key
-                parameters: Some(AlgorithmParameters::Elm(
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.840.10045.3.1.7").unwrap()) // prime256v1
+                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(), // EC public key
+                parameters: Some(AlgorithmParameters::Other(
+                    RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap())) // prime256v1
                 )),
             },
             vec![0x04, 0x41] // Sample EC public key bytes
         ),
         case(
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str("1.2.840.10045.2.1").unwrap(), // EC public key
+                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(), // EC public key
                 parameters: Some(AlgorithmParameters::Null),
             },
             vec![0xff, 0xee, 0xdd] // Different key bytes
@@ -2083,7 +2081,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             rdn_sequence: vec![
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
                         attribute_value: "Example CA".to_string(),
                     }],
                 },
@@ -2093,19 +2091,19 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             rdn_sequence: vec![
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COUNTRY_NAME).unwrap(),
                         attribute_value: "US".to_string(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.8").unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_STATE_OR_PROVINCE_NAME).unwrap(),
                         attribute_value: "California".to_string(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.10").unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_ORGANIZATION_NAME).unwrap(),
                         attribute_value: "Example Corp".to_string(),
                     }],
                 },
@@ -2115,31 +2113,31 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             rdn_sequence: vec![
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COUNTRY_NAME).unwrap(),
                         attribute_value: "JP".to_string(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.8").unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_STATE_OR_PROVINCE_NAME).unwrap(),
                         attribute_value: "Tokyo".to_string(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![
                         AttributeTypeAndValue {
-                            attribute_type: ObjectIdentifier::from_str("2.5.4.10").unwrap(),
+                            attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_ORGANIZATION_NAME).unwrap(),
                             attribute_value: "ACME Inc".to_string(),
                         },
                         AttributeTypeAndValue {
-                            attribute_type: ObjectIdentifier::from_str("2.5.4.11").unwrap(),
+                            attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_ORGANIZATIONAL_UNIT_NAME).unwrap(),
                             attribute_value: "Engineering".to_string(),
                         },
                     ],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
                         attribute_value: "www.example.com".to_string(),
                     }],
                 },
@@ -2149,7 +2147,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             rdn_sequence: vec![
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
                         attribute_value: "日本語ドメイン.jp".to_string(),
                     }],
                 },
@@ -2223,7 +2221,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         case(Extensions {
             extensions: vec![
                 RawExtension::new(
-                    ObjectIdentifier::from_str("2.5.29.19").unwrap(),
+                    ObjectIdentifier::from_str(crate::extensions::BasicConstraints::OID).unwrap(),
                     false,
                     OctetString::from(vec![0x30, 0x00]),
                 ),
@@ -2232,7 +2230,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         case(Extensions {
             extensions: vec![
                 RawExtension::new(
-                    ObjectIdentifier::from_str("2.5.29.15").unwrap(),
+                    ObjectIdentifier::from_str(crate::extensions::KeyUsage::OID).unwrap(),
                     true,
                     OctetString::from(vec![0x03, 0x02, 0x05, 0xa0]),
                 ),
@@ -2241,12 +2239,12 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         case(Extensions {
             extensions: vec![
                 RawExtension::new(
-                    ObjectIdentifier::from_str("2.5.29.19").unwrap(),
+                    ObjectIdentifier::from_str(crate::extensions::BasicConstraints::OID).unwrap(),
                     true,
                     OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xff]),
                 ),
                 RawExtension::new(
-                    ObjectIdentifier::from_str("2.5.29.14").unwrap(),
+                    ObjectIdentifier::from_str(crate::extensions::SubjectKeyIdentifier::OID).unwrap(),
                     false,
                     OctetString::from(vec![0x04, 0x14, 0x01, 0x02, 0x03]),
                 ),
@@ -2319,13 +2317,19 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             version: Version::V3,
             serial_number: CertificateSerialNumber::from_bytes(vec![0x01, 0x02, 0x03]),
             signature: AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str("1.2.840.113549.1.1.11").unwrap(),
+                algorithm: ObjectIdentifier::from_str(
+                    pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION,
+                )
+                .unwrap(),
                 parameters: Some(AlgorithmParameters::Null),
             },
             issuer: Name {
                 rdn_sequence: vec![RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(
+                            pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
+                        )
+                        .unwrap(),
                         attribute_value: "Test CA".to_string(),
                     }],
                 }],
@@ -2343,7 +2347,10 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             subject: Name {
                 rdn_sequence: vec![RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(
+                            pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
+                        )
+                        .unwrap(),
                         attribute_value: "Test Subject".to_string(),
                     }],
                 }],
@@ -2359,7 +2366,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             subject_unique_id: None,
             extensions: Some(Extensions {
                 extensions: vec![RawExtension::new(
-                    ObjectIdentifier::from_str("2.5.29.19").unwrap(),
+                    ObjectIdentifier::from_str(crate::extensions::BasicConstraints::OID).unwrap(),
                     true,
                     OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xff]),
                 )],
@@ -2378,7 +2385,10 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             issuer: Name {
                 rdn_sequence: vec![RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(
+                            pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
+                        )
+                        .unwrap(),
                         attribute_value: "CA".to_string(),
                     }],
                 }],
@@ -2396,7 +2406,10 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             subject: Name {
                 rdn_sequence: vec![RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(
+                            pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
+                        )
+                        .unwrap(),
                         attribute_value: "Subject".to_string(),
                     }],
                 }],

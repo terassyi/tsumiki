@@ -48,6 +48,10 @@ pub enum Error {
     #[error("Invalid encoding: {0}")]
     InvalidEncoding(String),
 
+    /// Algorithm error
+    #[error(transparent)]
+    AlgorithmError(#[from] crate::algorithm::Error),
+
     /// ASN.1 encoding/decoding error
     #[error("ASN.1 error: {0}")]
     ASN1Error(#[from] asn1::error::Error),

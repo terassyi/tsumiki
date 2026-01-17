@@ -1,5 +1,7 @@
 use asn1::{ASN1Object, Element, Integer, OctetString};
+use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
@@ -373,6 +375,32 @@ impl Extension for NameConstraints {
 
     fn parse(value: &OctetString) -> Result<Self, Error> {
         value.decode()
+    }
+}
+
+impl OidName for NameConstraints {
+    fn oid_name(&self) -> Option<&'static str> {
+        Some("nameConstraints")
+    }
+}
+
+impl fmt::Display for NameConstraints {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ext_name = self.oid_name().unwrap_or("nameConstraints");
+        writeln!(f, "            X509v3 {}:", ext_name)?;
+        if let Some(ref permitted) = self.permitted_subtrees {
+            writeln!(f, "                Permitted:")?;
+            for subtree in permitted {
+                writeln!(f, "                  {}", subtree.base)?;
+            }
+        }
+        if let Some(ref excluded) = self.excluded_subtrees {
+            writeln!(f, "                Excluded:")?;
+            for subtree in excluded {
+                writeln!(f, "                  {}", subtree.base)?;
+            }
+        }
+        Ok(())
     }
 }
 

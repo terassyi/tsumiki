@@ -1,5 +1,7 @@
 use asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
+use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
@@ -8,7 +10,8 @@ use crate::extensions::Extension;
 use crate::extensions::general_name::GeneralName;
 
 /*
-RFC 5280 Section 4.2.2.1
+RFC 5280 Section 4.2.2.1: Authority Information Access
+https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.2.1
 
 id-pe-authorityInfoAccess OBJECT IDENTIFIER ::= { id-pe 1 }
 AuthorityInfoAccessSyntax  ::= SEQUENCE SIZE (1..MAX) OF AccessDescription
@@ -24,11 +27,24 @@ id-ad-ocsp OBJECT IDENTIFIER ::= { id-ad 1 }
 */
 
 /// AccessDescription represents a single access method and location
+///
 /// RFC 5280: AccessDescription ::= SEQUENCE { accessMethod, accessLocation }
+///
+/// See: <https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.2.1>
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AccessDescription {
     pub access_method: ObjectIdentifier,
     pub access_location: GeneralName,
+}
+
+impl AccessDescription {
+    /// OCSP responder access method (id-ad-ocsp)
+    /// OID: 1.3.6.1.5.5.7.48.1
+    pub const OCSP: &'static str = "1.3.6.1.5.5.7.48.1";
+
+    /// CA Issuers access method (id-ad-caIssuers)
+    /// OID: 1.3.6.1.5.5.7.48.2
+    pub const CA_ISSUERS: &'static str = "1.3.6.1.5.5.7.48.2";
 }
 
 impl DecodableFrom<Element> for AccessDescription {}
@@ -84,18 +100,25 @@ impl Encoder<AccessDescription, Element> for AccessDescription {
     }
 }
 
-/// AuthorityInfoAccess extension (RFC 5280 Section 4.2.2.1)
-/// Contains information about OCSP responders and CA certificate issuers
+/// AuthorityInfoAccess extension
+///
+/// Contains information about how to access CA information and services,
+/// such as OCSP responders and CA certificate issuers.
+///
+/// RFC 5280 Section 4.2.2.1: Authority Information Access
+/// See: <https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.2.1>
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthorityInfoAccess {
     pub descriptors: Vec<AccessDescription>,
 }
 
 impl AuthorityInfoAccess {
-    // Access method OIDs
-    /// OCSP responder access method (1.3.6.1.5.5.7.48.1)
+    /// OCSP responder access method (id-ad-ocsp)
+    /// OID: 1.3.6.1.5.5.7.48.1
     pub const OCSP: &'static str = "1.3.6.1.5.5.7.48.1";
-    /// CA Issuers access method (1.3.6.1.5.5.7.48.2)
+
+    /// CA Issuers access method (id-ad-caIssuers)
+    /// OID: 1.3.6.1.5.5.7.48.2
     pub const CA_ISSUERS: &'static str = "1.3.6.1.5.5.7.48.2";
 }
 
@@ -175,6 +198,28 @@ impl Extension for AuthorityInfoAccess {
 
     fn parse(value: &OctetString) -> Result<Self, Error> {
         value.decode()
+    }
+}
+
+impl OidName for AuthorityInfoAccess {
+    fn oid_name(&self) -> Option<&'static str> {
+        Some("authorityInfoAccess")
+    }
+}
+
+impl fmt::Display for AuthorityInfoAccess {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ext_name = self.oid_name().unwrap_or("authorityInfoAccess");
+        writeln!(f, "            X509v3 {}:", ext_name)?;
+        for desc in &self.descriptors {
+            let method = match desc.access_method.to_string().as_str() {
+                Self::OCSP => "OCSP",
+                Self::CA_ISSUERS => "CA Issuers",
+                _ => "Unknown",
+            };
+            writeln!(f, "                {} - {}", method, desc.access_location)?;
+        }
+        Ok(())
     }
 }
 

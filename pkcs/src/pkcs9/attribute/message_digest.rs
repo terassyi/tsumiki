@@ -21,6 +21,7 @@
 
 use asn1::{ASN1Object, Element, OctetString};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
+use std::fmt;
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -47,6 +48,18 @@ impl MessageDigest {
     /// Get the message digest as OctetString
     pub fn digest(&self) -> &OctetString {
         &self.digest
+    }
+}
+
+impl fmt::Display for MessageDigest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let hex: Vec<String> = self
+            .digest
+            .as_bytes()
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect();
+        write!(f, "{}", hex.join(":"))
     }
 }
 

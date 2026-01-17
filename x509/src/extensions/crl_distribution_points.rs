@@ -1,5 +1,7 @@
 use asn1::{ASN1Object, BitString, Element, OctetString};
+use pkix_types::{OidName, RelativeDistinguishedName};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
@@ -49,11 +51,17 @@ pub struct DistributionPoint {
 }
 
 /// DistributionPointName is a CHOICE between fullName and nameRelativeToCRLIssuer
+///
+/// RFC 5280 Section 4.2.1.13:
+/// DistributionPointName ::= CHOICE {
+///     fullName                [0]     GeneralNames,
+///     nameRelativeToCRLIssuer [1]     RelativeDistinguishedName }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DistributionPointName {
+    /// Full name as a sequence of GeneralNames
     FullName(Vec<GeneralName>),
-    // NameRelativeToCRLIssuer is RelativeDistinguishedName, which we'll skip for now
-    // since it's rarely used in practice
+    /// Name relative to the CRL issuer
+    NameRelativeToCRLIssuer(RelativeDistinguishedName),
 }
 
 /// ReasonFlags represents the reasons for certificate revocation
@@ -357,27 +365,49 @@ impl Decoder<Element, DistributionPointName> for Element {
 
     fn decode(&self) -> Result<DistributionPointName, Self::Error> {
         match self {
-            Element::ContextSpecific { slot, element, .. } => match slot {
+            Element::ContextSpecific {
+                slot,
+                element,
+                constructed,
+            } => match slot {
                 0 => {
                     // fullName [0] GeneralNames
-                    if let Element::Sequence(names) = element.as_ref() {
-                        let mut general_names = Vec::new();
-                        for name_elem in names {
-                            general_names.push(name_elem.decode()?);
+                    // RFC 5280: fullName [0] IMPLICIT GeneralNames
+                    // GeneralNames ::= SEQUENCE OF GeneralName
+                    //
+                    // With IMPLICIT tagging, the SEQUENCE tag is replaced by [0]
+                    // The element field contains what would be inside the SEQUENCE
+                    if *constructed {
+                        // For IMPLICIT SEQUENCE, the element contains the sequence contents
+                        // which could be:
+                        // 1. A Sequence element (if explicitly parsed)
+                        // 2. Individual GeneralName elements (if parsed as contents)
+                        match element.as_ref() {
+                            Element::Sequence(names) => {
+                                // Case 1: Parser created an explicit Sequence
+                                let mut general_names = Vec::new();
+                                for name_elem in names {
+                                    general_names.push(name_elem.decode()?);
+                                }
+                                Ok(DistributionPointName::FullName(general_names))
+                            }
+                            // Case 2: element is a single GeneralName (single element sequence)
+                            other => {
+                                // Treat it as a single-element sequence
+                                let general_name: GeneralName = other.decode()?;
+                                Ok(DistributionPointName::FullName(vec![general_name]))
+                            }
                         }
-                        Ok(DistributionPointName::FullName(general_names))
                     } else {
                         Err(Error::InvalidCRLDistributionPoints(
-                            "fullName must be Sequence of GeneralName".to_string(),
+                            "fullName must be constructed (contain Sequence)".to_string(),
                         ))
                     }
                 }
                 1 => {
                     // nameRelativeToCRLIssuer [1] RelativeDistinguishedName
-                    // Not implemented yet
-                    Err(Error::InvalidCRLDistributionPoints(
-                        "nameRelativeToCRLIssuer not yet implemented".to_string(),
-                    ))
+                    let rdn: RelativeDistinguishedName = element.decode()?;
+                    Ok(DistributionPointName::NameRelativeToCRLIssuer(rdn))
                 }
                 _ => Err(Error::InvalidCRLDistributionPoints(format!(
                     "unexpected context-specific tag for DistributionPointName: {}",
@@ -409,6 +439,31 @@ impl Encoder<DistributionPointName, Element> for DistributionPointName {
                     element: Box::new(Element::Sequence(encoded_names)),
                 })
             }
+            DistributionPointName::NameRelativeToCRLIssuer(rdn) => {
+                let rdn_element = rdn.encode()?;
+                Ok(Element::ContextSpecific {
+                    constructed: true,
+                    slot: 1,
+                    element: Box::new(rdn_element),
+                })
+            }
+        }
+    }
+}
+
+impl fmt::Display for DistributionPointName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DistributionPointName::FullName(names) => {
+                writeln!(f, "Full Name:")?;
+                for name in names {
+                    writeln!(f, "  {}", name)?;
+                }
+                Ok(())
+            }
+            DistributionPointName::NameRelativeToCRLIssuer(rdn) => {
+                writeln!(f, "Relative Name: {:?}", rdn)
+            }
         }
     }
 }
@@ -421,11 +476,43 @@ impl Extension for CRLDistributionPoints {
     }
 }
 
+impl OidName for CRLDistributionPoints {
+    fn oid_name(&self) -> Option<&'static str> {
+        Some("CRLDistributionPoints")
+    }
+}
+
+impl fmt::Display for CRLDistributionPoints {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ext_name = self.oid_name().unwrap_or("CRLDistributionPoints");
+        writeln!(f, "            X509v3 {}:", ext_name)?;
+        for point in &self.distribution_points {
+            if let Some(ref dist_point) = point.distribution_point {
+                match dist_point {
+                    DistributionPointName::FullName(full_name) => {
+                        writeln!(f, "                Full Name:")?;
+                        for name in full_name {
+                            writeln!(f, "                  {}", name)?;
+                        }
+                    }
+                    DistributionPointName::NameRelativeToCRLIssuer(rdn) => {
+                        writeln!(f, "                Relative Name:")?;
+                        writeln!(f, "                  {:?}", rdn)?;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::{Element, OctetString};
+    use asn1::{Element, ObjectIdentifier, OctetString};
+    use pkix_types::AttributeTypeAndValue;
     use rstest::rstest;
+    use std::str::FromStr;
 
     #[rstest(
         input,
@@ -813,6 +900,55 @@ mod tests {
             },
         ],
     })]
+    #[case(CRLDistributionPoints {
+        distribution_points: vec![
+            DistributionPoint {
+                distribution_point: Some(DistributionPointName::NameRelativeToCRLIssuer(
+                    RelativeDistinguishedName {
+                        attributes: vec![
+                            AttributeTypeAndValue {
+                                attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(), // CN
+                                attribute_value: "CRL1".to_string(),
+                            },
+                        ],
+                    },
+                )),
+                reasons: None,
+                crl_issuer: None,
+            },
+        ],
+    })]
+    #[case(CRLDistributionPoints {
+        distribution_points: vec![
+            DistributionPoint {
+                distribution_point: Some(DistributionPointName::NameRelativeToCRLIssuer(
+                    RelativeDistinguishedName {
+                        attributes: vec![
+                            AttributeTypeAndValue {
+                                attribute_type: ObjectIdentifier::from_str("2.5.4.10").unwrap(), // O
+                                attribute_value: "Example Org".to_string(),
+                            },
+                            AttributeTypeAndValue {
+                                attribute_type: ObjectIdentifier::from_str("2.5.4.11").unwrap(), // OU
+                                attribute_value: "CRL Department".to_string(),
+                            },
+                        ],
+                    },
+                )),
+                reasons: Some(ReasonFlags {
+                    key_compromise: true,
+                    ca_compromise: false,
+                    affiliation_changed: false,
+                    superseded: false,
+                    cessation_of_operation: false,
+                    certificate_hold: false,
+                    privilege_withdrawn: false,
+                    aa_compromise: false,
+                }),
+                crl_issuer: None,
+            },
+        ],
+    })]
     fn test_crl_distribution_points_encode_decode(#[case] original: CRLDistributionPoints) {
         let encoded = original.encode();
         assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
@@ -823,5 +959,53 @@ mod tests {
 
         let roundtrip = decoded.unwrap();
         assert_eq!(original, roundtrip);
+    }
+
+    #[rstest]
+    #[case(
+        RelativeDistinguishedName {
+            attributes: vec![AttributeTypeAndValue {
+                attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                attribute_value: "CRL1".to_string(),
+            }],
+        }
+    )]
+    #[case(
+        RelativeDistinguishedName {
+            attributes: vec![
+                AttributeTypeAndValue {
+                    attribute_type: ObjectIdentifier::from_str("2.5.4.10").unwrap(),
+                    attribute_value: "Example Org".to_string(),
+                },
+                AttributeTypeAndValue {
+                    attribute_type: ObjectIdentifier::from_str("2.5.4.11").unwrap(),
+                    attribute_value: "Engineering".to_string(),
+                },
+            ],
+        }
+    )]
+    #[case(
+        RelativeDistinguishedName {
+            attributes: vec![
+                AttributeTypeAndValue {
+                    attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
+                    attribute_value: "US".to_string(),
+                },
+                AttributeTypeAndValue {
+                    attribute_type: ObjectIdentifier::from_str("2.5.4.8").unwrap(),
+                    attribute_value: "California".to_string(),
+                },
+                AttributeTypeAndValue {
+                    attribute_type: ObjectIdentifier::from_str("2.5.4.7").unwrap(),
+                    attribute_value: "San Francisco".to_string(),
+                },
+            ],
+        }
+    )]
+    fn test_distribution_point_name_relative_display(#[case] rdn: RelativeDistinguishedName) {
+        let name = DistributionPointName::NameRelativeToCRLIssuer(rdn.clone());
+        let output = format!("{}", name);
+        assert!(output.contains("Relative Name:"));
+        assert!(output.contains(&format!("{:?}", rdn)));
     }
 }

@@ -1,6 +1,8 @@
 use asn1::OctetString;
 use asn1::{ASN1Object, Element, Integer};
+use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
+use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
@@ -87,6 +89,21 @@ impl Encoder<InhibitAnyPolicy, Element> for InhibitAnyPolicy {
             .unwrap_or(bytes.len() - 1);
         let slice = bytes.get(start..).unwrap_or(&bytes);
         Ok(Element::Integer(Integer::from(slice)))
+    }
+}
+
+impl OidName for InhibitAnyPolicy {
+    fn oid_name(&self) -> Option<&'static str> {
+        Some("inhibitAnyPolicy")
+    }
+}
+
+impl fmt::Display for InhibitAnyPolicy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ext_name = self.oid_name().unwrap_or("inhibitAnyPolicy");
+        writeln!(f, "            X509v3 {}:", ext_name)?;
+        writeln!(f, "                {}", self.skip_certs)?;
+        Ok(())
     }
 }
 

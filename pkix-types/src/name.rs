@@ -30,6 +30,7 @@ use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::directory_string::DirectoryString;
 use crate::error::{Error, Result};
+use crate::OidName;
 
 /// X.509 Distinguished Name
 ///
@@ -61,7 +62,7 @@ impl fmt::Display for Name {
                 rdn.attributes
                     .iter()
                     .map(|attr| {
-                        let key = if let Some(name) = oid_to_name(&attr.attribute_type) {
+                        let key = if let Some(name) = attr.oid_name() {
                             name.to_string()
                         } else {
                             attr.attribute_type.to_string()
@@ -176,11 +177,68 @@ pub struct AttributeTypeAndValue {
 }
 
 impl AttributeTypeAndValue {
+    /// OID for commonName (CN)
+    pub const OID_COMMON_NAME: &'static str = "2.5.4.3";
+    /// OID for countryName (C)
+    pub const OID_COUNTRY_NAME: &'static str = "2.5.4.6";
+    /// OID for localityName (L)
+    pub const OID_LOCALITY_NAME: &'static str = "2.5.4.7";
+    /// OID for stateOrProvinceName (ST)
+    pub const OID_STATE_OR_PROVINCE_NAME: &'static str = "2.5.4.8";
+    /// OID for organizationName (O)
+    pub const OID_ORGANIZATION_NAME: &'static str = "2.5.4.10";
+    /// OID for organizationalUnitName (OU)
+    pub const OID_ORGANIZATIONAL_UNIT_NAME: &'static str = "2.5.4.11";
+    /// OID for serialNumber
+    pub const OID_SERIAL_NUMBER: &'static str = "2.5.4.5";
+    /// OID for surname (SN)
+    pub const OID_SURNAME: &'static str = "2.5.4.4";
+    /// OID for givenName (GN)
+    pub const OID_GIVEN_NAME: &'static str = "2.5.4.42";
+    /// OID for initials
+    pub const OID_INITIALS: &'static str = "2.5.4.43";
+    /// OID for generationQualifier
+    pub const OID_GENERATION_QUALIFIER: &'static str = "2.5.4.44";
+    /// OID for title
+    pub const OID_TITLE: &'static str = "2.5.4.12";
+    /// OID for dnQualifier
+    pub const OID_DN_QUALIFIER: &'static str = "2.5.4.46";
+    /// OID for pseudonym
+    pub const OID_PSEUDONYM: &'static str = "2.5.4.65";
+    /// OID for domainComponent (DC)
+    pub const OID_DOMAIN_COMPONENT: &'static str = "0.9.2342.19200300.100.1.25";
+    /// OID for emailAddress
+    pub const OID_EMAIL_ADDRESS: &'static str = "1.2.840.113549.1.9.1";
+
     /// Create a new AttributeTypeAndValue
     pub fn new(attribute_type: ObjectIdentifier, attribute_value: String) -> Self {
         Self {
             attribute_type,
             attribute_value,
+        }
+    }
+}
+
+impl OidName for AttributeTypeAndValue {
+    fn oid_name(&self) -> Option<&'static str> {
+        match self.attribute_type.to_string().as_str() {
+            Self::OID_COMMON_NAME => Some("CN"),
+            Self::OID_COUNTRY_NAME => Some("C"),
+            Self::OID_LOCALITY_NAME => Some("L"),
+            Self::OID_STATE_OR_PROVINCE_NAME => Some("ST"),
+            Self::OID_ORGANIZATION_NAME => Some("O"),
+            Self::OID_ORGANIZATIONAL_UNIT_NAME => Some("OU"),
+            Self::OID_SERIAL_NUMBER => Some("serialNumber"),
+            Self::OID_SURNAME => Some("SN"),
+            Self::OID_GIVEN_NAME => Some("GN"),
+            Self::OID_INITIALS => Some("initials"),
+            Self::OID_GENERATION_QUALIFIER => Some("generationQualifier"),
+            Self::OID_TITLE => Some("title"),
+            Self::OID_DN_QUALIFIER => Some("dnQualifier"),
+            Self::OID_PSEUDONYM => Some("pseudonym"),
+            Self::OID_DOMAIN_COMPONENT => Some("DC"),
+            Self::OID_EMAIL_ADDRESS => Some("emailAddress"),
+            _ => None,
         }
     }
 }
@@ -191,10 +249,20 @@ impl Serialize for AttributeTypeAndValue {
         S: serde::Serializer,
     {
         let mut state = serializer.serialize_struct("AttributeTypeAndValue", 2)?;
-        // Try to use human-readable name, fall back to OID string
-        let type_name = oid_to_name(&self.attribute_type)
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| self.attribute_type.to_string());
+
+        // Check if we should use OID values
+        let use_oid = crate::get_use_oid_values();
+
+        let type_name = if use_oid {
+            // Use OID value directly
+            self.attribute_type.to_string()
+        } else {
+            // Try to use human-readable name, fall back to OID string
+            self.oid_name()
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| self.attribute_type.to_string())
+        };
+
         state.serialize_field("attribute_type", &type_name)?;
         state.serialize_field("attribute_value", &self.attribute_value)?;
         state.end()
@@ -252,29 +320,6 @@ impl Encoder<AttributeTypeAndValue, Element> for AttributeTypeAndValue {
     }
 }
 
-/// Map common X.509 attribute OIDs to human-readable names
-pub fn oid_to_name(oid: &ObjectIdentifier) -> Option<&'static str> {
-    match oid.to_string().as_str() {
-        "2.5.4.3" => Some("CN"),  // commonName
-        "2.5.4.6" => Some("C"),   // countryName
-        "2.5.4.7" => Some("L"),   // localityName
-        "2.5.4.8" => Some("ST"),  // stateOrProvinceName
-        "2.5.4.10" => Some("O"),  // organizationName
-        "2.5.4.11" => Some("OU"), // organizationalUnitName
-        "2.5.4.5" => Some("serialNumber"),
-        "2.5.4.4" => Some("SN"),  // surname
-        "2.5.4.42" => Some("GN"), // givenName
-        "2.5.4.43" => Some("initials"),
-        "2.5.4.44" => Some("generationQualifier"),
-        "2.5.4.12" => Some("title"),
-        "2.5.4.46" => Some("dnQualifier"),
-        "2.5.4.65" => Some("pseudonym"),
-        "0.9.2342.19200300.100.1.25" => Some("DC"), // domainComponent
-        "1.2.840.113549.1.9.1" => Some("emailAddress"),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -314,9 +359,10 @@ mod tests {
     #[case("2.5.4.10", Some("O"))]
     #[case("2.5.4.11", Some("OU"))]
     #[case("1.2.3.4", None)]
-    fn test_oid_to_name(#[case] oid_str: &str, #[case] expected: Option<&str>) {
+    fn test_oid_name(#[case] oid_str: &str, #[case] expected: Option<&str>) {
         let oid = ObjectIdentifier::from_str(oid_str).unwrap();
-        assert_eq!(oid_to_name(&oid), expected);
+        let attr = AttributeTypeAndValue::new(oid, "value".to_string());
+        assert_eq!(attr.oid_name(), expected);
     }
 
     #[test]

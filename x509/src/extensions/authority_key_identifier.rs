@@ -1,6 +1,7 @@
 use asn1::{ASN1Object, Element, OctetString};
-use pkix_types::{CertificateSerialNumber, KeyIdentifier};
+use pkix_types::{CertificateSerialNumber, KeyIdentifier, OidName};
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
+use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
@@ -215,6 +216,28 @@ impl Encoder<AuthorityKeyIdentifier, Element> for AuthorityKeyIdentifier {
             .collect();
 
         Ok(Element::Sequence(elements))
+    }
+}
+
+impl OidName for AuthorityKeyIdentifier {
+    fn oid_name(&self) -> Option<&'static str> {
+        Some("authorityKeyIdentifier")
+    }
+}
+
+impl fmt::Display for AuthorityKeyIdentifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ext_name = self.oid_name().unwrap_or("authorityKeyIdentifier");
+        writeln!(f, "            X509v3 {}:", ext_name)?;
+        if let Some(ref key_id) = self.key_identifier {
+            let hex_str = key_id
+                .as_bytes()
+                .iter()
+                .map(|b| format!("{:02X}", b))
+                .collect::<Vec<_>>();
+            writeln!(f, "                keyid:{}", hex_str.join(":"))?;
+        }
+        Ok(())
     }
 }
 
