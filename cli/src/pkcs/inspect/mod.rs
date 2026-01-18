@@ -5,8 +5,8 @@ use clap::Args;
 use pem::Pem;
 use std::str::FromStr;
 
-use crate::decode::decode;
 use crate::error::Result;
+use crate::inspect::decode;
 use crate::output::OutputFormat;
 use crate::utils::read_input;
 

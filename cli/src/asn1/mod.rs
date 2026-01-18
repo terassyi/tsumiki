@@ -1,13 +1,13 @@
-pub(crate) mod decode;
 mod format;
+pub(crate) mod inspect;
 
 use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub(crate) enum Asn1Commands {
-    /// Decode DER to ASN.1 structure
-    Decode {
+    /// Inspect DER to ASN.1 structure
+    Inspect {
         #[command(flatten)]
-        config: decode::Config,
+        config: inspect::Config,
     },
 }

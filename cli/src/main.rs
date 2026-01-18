@@ -2,9 +2,9 @@ use clap::{Parser, Subcommand};
 
 mod asn1;
 mod cert;
-mod decode;
 mod der;
 mod error;
+mod inspect;
 mod output;
 mod pkcs;
 mod utils;
@@ -53,13 +53,13 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Cert { command } => match command {
-            CertCommands::Decode { config } => {
-                cert::decode::execute(config)?;
+            CertCommands::Inspect { config } => {
+                cert::inspect::execute(config)?;
             }
         },
         Commands::Der { command } => match command {
-            DerCommands::Decode { config } => {
-                der::decode::execute(config)?;
+            DerCommands::Inspect { config } => {
+                der::inspect::execute(config)?;
             }
             DerCommands::Dump { config } => {
                 der::dump::execute(config)?;
@@ -69,13 +69,13 @@ fn main() -> Result<()> {
             }
         },
         Commands::Asn1 { command } => match command {
-            Asn1Commands::Decode { config } => {
-                asn1::decode::execute(config)?;
+            Asn1Commands::Inspect { config } => {
+                asn1::inspect::execute(config)?;
             }
         },
         Commands::Pkcs { command } => match command {
-            PkcsCommands::Decode { config } => {
-                pkcs::decode::execute(config)?;
+            PkcsCommands::Inspect { config } => {
+                pkcs::inspect::execute(config)?;
             }
         },
     }
