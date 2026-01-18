@@ -1,15 +1,15 @@
-pub(crate) mod decode;
 pub(crate) mod dump;
 pub(crate) mod encode;
+pub(crate) mod inspect;
 
 use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub(crate) enum DerCommands {
-    /// Decode PEM to DER format (output binary)
-    Decode {
+    /// Inspect PEM to DER format (output binary)
+    Inspect {
         #[command(flatten)]
-        config: decode::Config,
+        config: inspect::Config,
     },
     /// Display hexadecimal dump of DER file
     Dump {

@@ -1,12 +1,12 @@
-pub(crate) mod decode;
+pub(crate) mod inspect;
 
 use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub(crate) enum PkcsCommands {
-    /// Decode PKCS key from PEM file
-    Decode {
+    /// Inspect PKCS key from PEM file
+    Inspect {
         #[command(flatten)]
-        config: decode::Config,
+        config: inspect::Config,
     },
 }

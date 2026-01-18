@@ -1,12 +1,12 @@
-pub(crate) mod decode;
+pub(crate) mod inspect;
 
 use clap::Subcommand;
 
 #[derive(Subcommand)]
 pub(crate) enum CertCommands {
-    /// Decode and display a certificate
-    Decode {
+    /// Inspect and display a certificate
+    Inspect {
         #[command(flatten)]
-        config: decode::Config,
+        config: inspect::Config,
     },
 }
