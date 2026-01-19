@@ -140,6 +140,23 @@ impl AlgorithmIdentifier {
     pub const OID_ECDSA_WITH_SHA384: &'static str = "1.2.840.10045.4.3.3";
     pub const OID_ECDSA_WITH_SHA512: &'static str = "1.2.840.10045.4.3.4";
 
+    // PKCS#5 Password-Based Encryption Scheme (PBES) OIDs
+    // See RFC 2898 and RFC 8018 for details
+    pub const OID_PBES1: &'static str = "1.2.840.113549.1.5.1"; // pbeWithMD2AndDES-CBC
+    pub const OID_PBES2: &'static str = "1.2.840.113549.1.5.13"; // id-PBES2
+    pub const OID_PBES1_MD5_DES: &'static str = "1.2.840.113549.1.5.3"; // pbeWithMD5AndDES-CBC
+    pub const OID_PBES1_MD2_RC2: &'static str = "1.2.840.113549.1.5.4"; // pbeWithMD2AndRC2-CBC
+    pub const OID_PBES1_MD5_RC2: &'static str = "1.2.840.113549.1.5.6"; // pbeWithMD5AndRC2-CBC
+    pub const OID_PBES1_SHA1_DES: &'static str = "1.2.840.113549.1.5.10"; // pbeWithSHA1AndDES-CBC
+
+    // PKCS#12 PBE OIDs (RFC 7292)
+    pub const OID_PKCS12_PBE_SHA1_RC4_128: &'static str = "1.2.840.113549.1.12.1.1"; // pbeWithSHA1And128BitRC4
+    pub const OID_PKCS12_PBE_SHA1_RC4_40: &'static str = "1.2.840.113549.1.12.1.2"; // pbeWithSHA1And40BitRC4
+    pub const OID_PKCS12_PBE_SHA1_3DES: &'static str = "1.2.840.113549.1.12.1.3"; // pbeWithSHA1And3KeyTripleDES-CBC
+    pub const OID_PKCS12_PBE_SHA1_2DES: &'static str = "1.2.840.113549.1.12.1.4"; // pbeWithSHA1And2KeyTripleDES-CBC
+    pub const OID_PKCS12_PBE_SHA1_RC2_128: &'static str = "1.2.840.113549.1.12.1.5"; // pbeWithSHA1And128BitRC2-CBC
+    pub const OID_PKCS12_PBE_SHA1_RC2_40: &'static str = "1.2.840.113549.1.12.1.6"; // pbeWithSHA1And40BitRC2-CBC
+
     /// Create a new AlgorithmIdentifier with algorithm OID only
     pub fn new(algorithm: ObjectIdentifier) -> Self {
         Self {
@@ -195,6 +212,22 @@ impl OidName for AlgorithmIdentifier {
             AlgorithmIdentifier::OID_ECDSA_WITH_SHA256 => Some("ecdsa-with-SHA256"),
             AlgorithmIdentifier::OID_ECDSA_WITH_SHA384 => Some("ecdsa-with-SHA384"),
             AlgorithmIdentifier::OID_ECDSA_WITH_SHA512 => Some("ecdsa-with-SHA512"),
+            AlgorithmIdentifier::OID_PBES1 => Some("pbeWithMD2AndDES-CBC"),
+            AlgorithmIdentifier::OID_PBES2 => Some("id-PBES2"),
+            AlgorithmIdentifier::OID_PBES1_MD5_DES => Some("pbeWithMD5AndDES-CBC"),
+            AlgorithmIdentifier::OID_PBES1_MD2_RC2 => Some("pbeWithMD2AndRC2-CBC"),
+            AlgorithmIdentifier::OID_PBES1_MD5_RC2 => Some("pbeWithMD5AndRC2-CBC"),
+            AlgorithmIdentifier::OID_PBES1_SHA1_DES => Some("pbeWithSHA1AndDES-CBC"),
+            AlgorithmIdentifier::OID_PKCS12_PBE_SHA1_RC4_128 => Some("pbeWithSHA1And128BitRC4"),
+            AlgorithmIdentifier::OID_PKCS12_PBE_SHA1_RC4_40 => Some("pbeWithSHA1And40BitRC4"),
+            AlgorithmIdentifier::OID_PKCS12_PBE_SHA1_3DES => {
+                Some("pbeWithSHA1And3KeyTripleDES-CBC")
+            }
+            AlgorithmIdentifier::OID_PKCS12_PBE_SHA1_2DES => {
+                Some("pbeWithSHA1And2KeyTripleDES-CBC")
+            }
+            AlgorithmIdentifier::OID_PKCS12_PBE_SHA1_RC2_128 => Some("pbeWithSHA1And128BitRC2-CBC"),
+            AlgorithmIdentifier::OID_PKCS12_PBE_SHA1_RC2_40 => Some("pbeWithSHA1And40BitRC2-CBC"),
             _ => None,
         }
     }

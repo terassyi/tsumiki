@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::str::FromStr;
 
 use asn1::ASN1Object;
@@ -149,25 +150,30 @@ fn get_purpose_name(oid_str: &str) -> &'static str {
     }
 }
 
-fn show_certificate_purposes(tbs: &x509::TBSCertificate) {
+fn show_certificate_purposes(tbs: &x509::TBSCertificate) -> Result<()> {
+    let mut output = String::new();
+
     if let Some(extensions) = tbs.extensions() {
         for ext in extensions.extensions() {
             if *ext.oid() == x509::extensions::ExtendedKeyUsage::OID {
                 if let Ok(eku) = ext.parse::<x509::extensions::ExtendedKeyUsage>() {
-                    println!("Certificate Purposes:");
+                    writeln!(output, "Certificate Purposes:")?;
                     for purpose_oid in &eku.purposes {
                         let oid_str = purpose_oid.to_string();
                         let purpose_name = get_purpose_name(&oid_str);
-                        println!("  - {}", purpose_name);
+                        writeln!(output, "  - {}", purpose_name)?;
                     }
-                    return;
+                    print!("{}", output);
+                    return Ok(());
                 }
             }
         }
-        println!("No Extended Key Usage extension found");
+        writeln!(output, "No Extended Key Usage extension found")?;
     } else {
-        println!("No extensions in certificate");
+        writeln!(output, "No extensions in certificate")?;
     }
+    print!("{}", output);
+    Ok(())
 }
 
 pub(crate) fn execute(config: Config) -> Result<()> {
@@ -197,53 +203,65 @@ pub(crate) fn execute(config: Config) -> Result<()> {
     // Show specific fields if requested
     if config.should_show_specific_fields() {
         let tbs = cert.tbs_certificate();
+        let mut output = String::new();
 
         if config.show_subject {
-            println!("Subject: {}", tbs.subject());
+            writeln!(output, "Subject: {}", tbs.subject())?;
         }
         if config.show_issuer {
-            println!("Issuer: {}", tbs.issuer());
+            writeln!(output, "Issuer: {}", tbs.issuer())?;
         }
         if config.show_dates {
             let validity = tbs.validity();
-            println!(
+            writeln!(
+                output,
                 "Not Before: {}",
                 validity.not_before().format("%b %d %H:%M:%S %Y GMT")
-            );
-            println!(
-                "Not After:  {}",
+            )?;
+            writeln!(
+                output,
+                "Not After: {}",
                 validity.not_after().format("%b %d %H:%M:%S %Y GMT")
-            );
+            )?;
         }
         if config.show_serial {
-            println!("Serial Number: {}", tbs.serial_number().format_hex());
+            writeln!(
+                output,
+                "Serial Number: {}",
+                tbs.serial_number().format_hex()
+            )?;
         }
         if config.list_extensions {
             if let Some(exts) = tbs.extensions() {
-                println!("Extensions:");
+                writeln!(output, "Extensions:")?;
                 for ext in exts.extensions() {
                     let oid_str = ext.oid().to_string();
                     let name = ext.oid_name().unwrap_or(&oid_str);
                     let critical = if ext.critical() { " (critical)" } else { "" };
-                    println!("  {} [{}]{}", name, ext.oid(), critical);
+                    writeln!(output, "  {} [{}]{}", name, ext.oid(), critical)?;
                 }
             } else {
-                println!("No extensions");
+                writeln!(output, "No extensions")?;
             }
         }
         if config.show_algorithms {
             let sig_alg = &tbs.signature();
             let sig_oid_str = sig_alg.algorithm.to_string();
             let sig_name = sig_alg.oid_name().unwrap_or(&sig_oid_str);
-            println!("Signature Algorithm: {} ({})", sig_name, sig_alg.algorithm);
+            writeln!(
+                output,
+                "Signature Algorithm: {} ({})",
+                sig_name, sig_alg.algorithm
+            )?;
 
             let pubkey_alg = tbs.subject_public_key_info().algorithm();
             let pubkey_oid_str = pubkey_alg.algorithm.to_string();
             let pubkey_name = pubkey_alg.oid_name().unwrap_or(&pubkey_oid_str);
-            println!(
+            writeln!(
+                output,
                 "Public Key Algorithm: {} ({})",
                 pubkey_name, pubkey_alg.algorithm
-            );
+            )?;
         }
         if config.show_fingerprint {
             // Get the original DER bytes and calculate fingerprint
@@ -251,7 +269,11 @@ pub(crate) fn execute(config: Config) -> Result<()> {
             let der: Der = asn1_obj.encode()?;
             let cert_der = der.encode()?;
             let fingerprint = calculate_fingerprint(&cert_der, config.fingerprint_alg);
-            println!("{} Fingerprint: {}", config.fingerprint_alg, fingerprint);
+            writeln!(
+                output,
+                "{} Fingerprint: {}",
+                config.fingerprint_alg, fingerprint
+            )?;
         }
         if config.check_expiry {
             let validity = tbs.validity();
@@ -259,16 +281,19 @@ pub(crate) fn execute(config: Config) -> Result<()> {
             let now = Utc::now().naive_utc();
 
             if now > *not_after {
-                println!(
+                writeln!(
+                    output,
                     "Certificate is EXPIRED (expired on {})",
                     not_after.format("%Y-%m-%d %H:%M:%S UTC")
-                );
+                )?;
+                print!("{}", output);
                 std::process::exit(1);
             } else {
-                println!(
+                writeln!(
+                    output,
                     "Certificate is VALID (expires on {})",
                     not_after.format("%Y-%m-%d %H:%M:%S UTC")
-                );
+                )?;
             }
         }
         if config.show_pubkey {
@@ -278,12 +303,14 @@ pub(crate) fn execute(config: Config) -> Result<()> {
 
             // Create PEM from public key bytes
             let pem = Pem::from_bytes(pem::Label::PublicKey, pubkey_bytes);
-            print!("{}", pem);
+            write!(output, "{}", pem)?;
         }
         if config.show_purposes {
-            show_certificate_purposes(tbs);
+            print!("{}", output);
+            show_certificate_purposes(tbs)?;
             return Ok(());
         }
+        print!("{}", output);
         return Ok(());
     }
 
