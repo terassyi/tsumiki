@@ -4,6 +4,7 @@ use crate::output::OutputFormat;
 pub(crate) fn output_rsa_private_key(
     private_key: &pkcs::pkcs1::RSAPrivateKey,
     format: OutputFormat,
+    show_oid: bool,
 ) -> Result<()> {
     // Output based on format
     match format {
@@ -56,6 +57,7 @@ pub(crate) fn output_rsa_private_key(
 pub(crate) fn output_rsa_public_key(
     public_key: &pkcs::pkcs1::RSAPublicKey,
     format: OutputFormat,
+    show_oid: bool,
 ) -> Result<()> {
     // Output based on format
     match format {

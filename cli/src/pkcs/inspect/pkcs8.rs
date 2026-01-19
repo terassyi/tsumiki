@@ -1,6 +1,8 @@
 use crate::error::Result;
 use crate::output::OutputFormat;
+use pkcs::pkcs8::{OID_ED25519, OID_ED448};
 use pkcs::pkcs9::ParsedAttributes;
+use pkix_types::algorithm::parameters::DsaParameters;
 use pkix_types::OidName;
 
 fn print_algorithm_parameters(elem: &asn1::Element, indent: usize) {
@@ -40,6 +42,7 @@ fn print_algorithm_parameters(elem: &asn1::Element, indent: usize) {
 pub(crate) fn output_private_key_info(
     key: &pkcs::pkcs8::OneAsymmetricKey,
     format: OutputFormat,
+    show_oid: bool,
 ) -> Result<()> {
     match format {
         OutputFormat::Json => {
@@ -92,6 +95,7 @@ pub(crate) fn output_private_key_info(
 pub(crate) fn output_encrypted_private_key_info(
     key: &pkcs::pkcs8::EncryptedPrivateKeyInfo,
     format: OutputFormat,
+    show_oid: bool,
 ) -> Result<()> {
     match format {
         OutputFormat::Json => {
@@ -136,3 +140,98 @@ pub(crate) fn output_encrypted_private_key_info(
 
     Ok(())
 }
+
+fn output_algorithm_details(key: &pkcs::pkcs8::PublicKey, algorithm_oid: &str) -> Result<()> {
+    match algorithm_oid {
+        pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION => {
+            println!("Algorithm Details:");
+            println!("  Type: RSA");
+            println!("  Key Size: {} bits", key.key_bits());
+        }
+        pkix_types::AlgorithmIdentifier::OID_ID_DSA => {
+            println!("Algorithm Details:");
+            println!("  Type: DSA");
+            output_dsa_parameters(key)?;
+        }
+        pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY => {
+            println!("Algorithm Details:");
+            println!("  Type: EC");
+            if let Ok(Some(curve_name)) = key.ec_curve_name() {
+                println!("  Curve: {}", curve_name);
+            }
+        }
+        OID_ED25519 => {
+            println!("Algorithm Details:");
+            println!("  Type: Ed25519");
+        }
+        OID_ED448 => {
+            println!("Algorithm Details:");
+            println!("  Type: Ed448");
+        }
+        _ => {
+            println!("Algorithm Details: Unknown algorithm");
+        }
+    }
+    Ok(())
+}
+
+fn output_dsa_parameters(key: &pkcs::pkcs8::PublicKey) -> Result<()> {
+    if let Some(params) = key.algorithm().parameters.as_ref() {
+        if let pkcs::pkcs8::AlgorithmParameters::Other(raw) = params {
+            if let Ok(dsa_params) = DsaParameters::try_from(raw) {
+                println!("  Prime (p): {} bits", dsa_params.p.bits());
+                println!("  Subprime (q): {} bits", dsa_params.q.bits());
+                println!("  Generator (g): {} bits", dsa_params.g.bits());
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn output_public_key(
+    key: &pkcs::pkcs8::PublicKey,
+    format: OutputFormat,
+    show_oid: bool,
+) -> Result<()> {
+    let algorithm_oid = key.algorithm_oid().to_string();
+    let algorithm_name = key.oid_name().unwrap_or("Unknown");
+    let key_bits = key.key_bits();
+    let algorithm_display = if show_oid { &algorithm_oid } else { algorithm_name };
+
+    match format {
+        OutputFormat::Json => {
+            let json_obj = serde_json::json!({
+                "algorithm": algorithm_display,
+                "key_bits": key_bits,
+            });
+            println!("{}", serde_json::to_string_pretty(&json_obj)?);
+        }
+        OutputFormat::Yaml => {
+            if show_oid {
+                println!("algorithm: {}", algorithm_oid);
+            } else {
+                println!("algorithm: {}", algorithm_name);
+                println!("algorithm_oid: {}", algorithm_oid);
+            }
+            println!("key_bits: {}", key_bits);
+        }
+        OutputFormat::Text => {
+            println!("Public Key Information");
+            println!("======================");
+            println!("Algorithm: {}", algorithm_display);
+            println!("Key Size: {} bits", key_bits);
+            println!();
+
+            output_algorithm_details(key, &algorithm_oid)?;
+
+            println!();
+            println!("Raw Key Data: {} bytes", key.subject_public_key().as_ref().len());
+        }
+        OutputFormat::Brief => {
+            println!("Subject Public Key | {} | {} bits", algorithm_display, key_bits);
+        }
+    }
+
+    Ok(())
+}
+

@@ -11,4 +11,4 @@ pub mod types;
 pub use encrypted::EncryptedPrivateKeyInfo;
 pub use error::{Error, Result};
 pub use pkix_types::{AlgorithmIdentifier, AlgorithmParameters};
-pub use types::{OneAsymmetricKey, OneAsymmetricKeyAttributes, PrivateKeyInfo, Version};
+pub use types::{OneAsymmetricKey, OneAsymmetricKeyAttributes, PrivateKeyInfo, PublicKey, Version, OID_ED25519, OID_ED448};

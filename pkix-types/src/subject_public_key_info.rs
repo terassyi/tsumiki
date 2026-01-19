@@ -21,6 +21,7 @@ use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::algorithm::AlgorithmIdentifier;
 use crate::error::{Error, Result};
+use crate::OidName;
 
 /// Subject Public Key Info
 ///
@@ -102,6 +103,12 @@ impl Encoder<SubjectPublicKeyInfo, Element> for SubjectPublicKeyInfo {
         let algorithm_elm = self.algorithm.encode()?;
         let public_key_elm = Element::BitString(self.subject_public_key.clone());
         Ok(Element::Sequence(vec![algorithm_elm, public_key_elm]))
+    }
+}
+
+impl OidName for SubjectPublicKeyInfo {
+    fn oid_name(&self) -> Option<&'static str> {
+        self.algorithm.oid_name()
     }
 }
 

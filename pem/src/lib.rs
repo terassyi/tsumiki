@@ -127,6 +127,18 @@ impl Display for Pem {
     }
 }
 
+/// Trait for types that can be converted to PEM format
+pub trait ToPem {
+    /// The error type returned by to_pem
+    type Error;
+
+    /// Get the PEM label for this type
+    fn pem_label(&self) -> Label;
+
+    /// Convert to PEM format
+    fn to_pem(&self) -> Result<Pem, Self::Error>;
+}
+
 impl DecodableFrom<Pem> for Vec<u8> {}
 
 impl Decoder<Pem, Vec<u8>> for Pem {

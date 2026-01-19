@@ -18,6 +18,10 @@ pub(crate) struct Config {
     /// Output format (json, yaml, text)
     #[arg(short, long, default_value = "text")]
     output: OutputFormat,
+
+    /// Show OID instead of name
+    #[arg(long)]
+    show_oid: bool,
 }
 
 pub(crate) fn execute(config: Config) -> Result<()> {
@@ -32,22 +36,24 @@ pub(crate) fn execute(config: Config) -> Result<()> {
     match pem.label() {
         pem::Label::RSAPrivateKey => {
             let key = decode(pem)?;
-            pkcs1::output_rsa_private_key(&key, config.output)
+            pkcs1::output_rsa_private_key(&key, config.output, config.show_oid)
         }
         pem::Label::RSAPublicKey => {
             let key = decode(pem)?;
-            pkcs1::output_rsa_public_key(&key, config.output)
+            pkcs1::output_rsa_public_key(&key, config.output, config.show_oid)
         }
         pem::Label::PrivateKey => {
             let key = decode(pem)?;
-            pkcs8::output_private_key_info(&key, config.output)
+            pkcs8::output_private_key_info(&key, config.output, config.show_oid)
         }
         pem::Label::EncryptedPrivateKey => {
             let key = decode(pem)?;
-            pkcs8::output_encrypted_private_key_info(&key, config.output)
+            pkcs8::output_encrypted_private_key_info(&key, config.output, config.show_oid)
         }
-        // TODO: Implement PublicKey support
-        pem::Label::PublicKey => Err("PublicKey support not yet implemented".into()),
+        pem::Label::PublicKey => {
+            let key: pkcs::pkcs8::PublicKey = decode(pem)?;
+            pkcs8::output_public_key(&key, config.output, config.show_oid)
+        }
         _ => Err(format!("Unsupported PEM label: {}", pem.label()).into()),
     }
 }

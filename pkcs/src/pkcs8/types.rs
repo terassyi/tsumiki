@@ -9,7 +9,12 @@ use tsumiki::encoder::{EncodableTo, Encoder};
 use super::Result;
 use super::error::Error;
 use crate::pkcs9::Attributes;
-use pkix_types::AlgorithmIdentifier;
+use pkix_types::algorithm::parameters::ec::NamedCurve;
+use pkix_types::{AlgorithmIdentifier, OidName};
+
+// PKCS#8 specific algorithm OID constants (RFC 8410)
+pub const OID_ED25519: &str = "1.3.101.112";
+pub const OID_ED448: &str = "1.3.101.113";
 
 /*
 RFC 5958 - Asymmetric Key Packages
@@ -681,5 +686,164 @@ AwQF
             .map(|l| l.trim())
             .collect::<Vec<_>>()
             .join("\n")
+    }
+}
+
+/// PublicKey - Wrapper around SubjectPublicKeyInfo (X.509)
+///
+/// This is a newtype wrapper around SubjectPublicKeyInfo from pkix_types.
+/// It provides convenient trait implementations and helper methods.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PublicKey(pkix_types::SubjectPublicKeyInfo);
+
+impl PublicKey {
+    /// Create a new PublicKey from SubjectPublicKeyInfo
+    pub fn new(key_info: pkix_types::SubjectPublicKeyInfo) -> Self {
+        PublicKey(key_info)
+    }
+
+    /// Get algorithm OID
+    pub fn algorithm_oid(&self) -> &asn1::ObjectIdentifier {
+        self.0.algorithm().algorithm()
+    }
+
+    /// Get public key size in bits
+    pub fn key_bits(&self) -> usize {
+        self.0.subject_public_key().as_ref().len() * 8
+    }
+
+    /// Get EC curve name from parameters (if applicable)
+    pub fn ec_curve_name(&self) -> Result<Option<&'static str>> {
+        // Check if this is an EC key
+        let oid_str = self.algorithm_oid().to_string();
+        if oid_str != AlgorithmIdentifier::OID_EC_PUBLIC_KEY {
+            return Ok(None);
+        }
+
+        Ok(self
+            .0
+            .algorithm()
+            .parameters
+            .as_ref()
+            .and_then(|params| match params {
+                pkix_types::algorithm::AlgorithmParameters::Other(raw) => {
+                    if let Element::ObjectIdentifier(curve_oid) = raw.element() {
+                        NamedCurve::try_from(curve_oid).ok()?.oid_name()
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            }))
+    }
+}
+
+// Standard trait implementations
+impl AsRef<pkix_types::SubjectPublicKeyInfo> for PublicKey {
+    fn as_ref(&self) -> &pkix_types::SubjectPublicKeyInfo {
+        &self.0
+    }
+}
+
+impl std::ops::Deref for PublicKey {
+    type Target = pkix_types::SubjectPublicKeyInfo;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::ops::DerefMut for PublicKey {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl From<pkix_types::SubjectPublicKeyInfo> for PublicKey {
+    fn from(key_info: pkix_types::SubjectPublicKeyInfo) -> Self {
+        PublicKey(key_info)
+    }
+}
+
+impl From<PublicKey> for pkix_types::SubjectPublicKeyInfo {
+    fn from(key: PublicKey) -> Self {
+        key.0
+    }
+}
+
+impl OidName for PublicKey {
+    fn oid_name(&self) -> Option<&'static str> {
+        self.0.oid_name()
+    }
+}
+
+impl DecodableFrom<Element> for PublicKey {}
+
+// Decoder implementation for PublicKey from Element
+impl Decoder<Element, PublicKey> for Element {
+    type Error = Error;
+
+    fn decode(&self) -> Result<PublicKey> {
+        // Decode to SubjectPublicKeyInfo
+        let key_info: pkix_types::SubjectPublicKeyInfo = self.decode()?;
+        Ok(PublicKey(key_info))
+    }
+}
+
+impl EncodableTo<PublicKey> for Element {}
+
+// Encoder implementation for PublicKey to Element
+impl Encoder<PublicKey, Element> for PublicKey {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element> {
+        self.0.encode().map_err(|e| {
+            Error::InvalidStructure(format!("Failed to encode SubjectPublicKeyInfo: {:?}", e))
+        })
+    }
+}
+
+impl DecodableFrom<Pem> for PublicKey {}
+
+// Decoder implementation for PublicKey from Pem
+impl Decoder<Pem, PublicKey> for Pem {
+    type Error = Error;
+
+    fn decode(&self) -> Result<PublicKey> {
+        // Decode PEM to Der
+        let der: Der = Decoder::<Pem, Der>::decode(self)?;
+
+        // Decode Der to ASN1Object
+        let asn1_obj: asn1::ASN1Object = der.decode()?;
+
+        // Decode from the first element of ASN1Object
+        if asn1_obj.elements().is_empty() {
+            return Err(Error::InvalidStructure("ASN1Object has no elements".into()));
+        }
+
+        asn1_obj.elements()[0].decode()
+    }
+}
+
+impl pem::ToPem for PublicKey {
+    type Error = Error;
+
+    fn pem_label(&self) -> pem::Label {
+        pem::Label::PublicKey
+    }
+
+    fn to_pem(&self) -> Result<Pem> {
+        // Encode to Element
+        let element: Element = self.encode()?;
+
+        // Convert Element to ASN1Object and then to Der
+        let asn1_obj = asn1::ASN1Object::new(vec![element.clone()]);
+        let der: Der = asn1_obj.encode().map_err(Error::Asn1)?;
+
+        // Encode Der to bytes
+        let der_bytes: Vec<u8> = Encoder::<Der, Vec<u8>>::encode(&der)?;
+
+        // Create PEM from DER bytes
+        Ok(Pem::from_bytes(self.pem_label(), &der_bytes))
     }
 }
