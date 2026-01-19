@@ -35,6 +35,9 @@ pub(crate) enum Error {
     #[error("UTF-8 conversion error: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
 
+    #[error("Formatting error: {0}")]
+    Fmt(#[from] std::fmt::Error),
+
     #[error("{0}")]
     Message(String),
 }

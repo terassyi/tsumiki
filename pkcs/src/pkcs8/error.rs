@@ -30,4 +30,7 @@ pub enum Error {
 
     #[error("PKCS#9 attribute error: {0}")]
     Pkcs9(#[from] crate::pkcs9::error::Error),
+
+    #[error("Invalid public key: {0}")]
+    InvalidPublicKey(String),
 }

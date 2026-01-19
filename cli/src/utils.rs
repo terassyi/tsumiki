@@ -1,7 +1,61 @@
 use std::fs;
 use std::io::{self, Read};
 
+use sha1::Sha1;
+use sha2::{Digest, Sha256, Sha512};
+
 use crate::error::Result;
+
+/// Fingerprint algorithm
+#[derive(Clone, Copy, clap::ValueEnum, Debug, Default)]
+pub(crate) enum FingerprintAlgorithm {
+    /// SHA1 fingerprint
+    Sha1,
+    /// SHA256 fingerprint (default)
+    #[default]
+    Sha256,
+    /// SHA512 fingerprint
+    Sha512,
+}
+
+impl std::fmt::Display for FingerprintAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            FingerprintAlgorithm::Sha1 => write!(f, "SHA1"),
+            FingerprintAlgorithm::Sha256 => write!(f, "SHA256"),
+            FingerprintAlgorithm::Sha512 => write!(f, "SHA512"),
+        }
+    }
+}
+
+/// Calculate fingerprint of data
+pub(crate) fn calculate_fingerprint(data: &[u8], alg: FingerprintAlgorithm) -> String {
+    let format_digest = |digest: &[u8]| {
+        digest
+            .iter()
+            .map(|b| format!("{:02X}", b))
+            .collect::<Vec<_>>()
+            .join(":")
+    };
+
+    match alg {
+        FingerprintAlgorithm::Sha1 => {
+            let mut hasher = Sha1::new();
+            hasher.update(data);
+            format_digest(&hasher.finalize())
+        }
+        FingerprintAlgorithm::Sha256 => {
+            let mut hasher = Sha256::new();
+            hasher.update(data);
+            format_digest(&hasher.finalize())
+        }
+        FingerprintAlgorithm::Sha512 => {
+            let mut hasher = Sha512::new();
+            hasher.update(data);
+            format_digest(&hasher.finalize())
+        }
+    }
+}
 
 /// Read input from a file or stdin
 ///
