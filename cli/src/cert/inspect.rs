@@ -12,7 +12,7 @@ use sha1::Sha1;
 use sha2::{Digest, Sha256, Sha512};
 use tsumiki::decoder::Decoder;
 use tsumiki::encoder::Encoder;
-use x509::extensions::Extension;
+use x509::extensions::{Extension, GeneralName, IpAddressOrRange, SubjectAltName};
 
 use crate::error::Result;
 use crate::output::OutputFormat;
@@ -94,6 +94,14 @@ pub(crate) struct Config {
     /// Show certificate purposes (from Extended Key Usage extension)
     #[arg(long)]
     show_purposes: bool,
+
+    /// Show Subject Alternative Names (SAN)
+    #[arg(long)]
+    show_san: bool,
+
+    /// Check if certificate is self-signed
+    #[arg(long)]
+    check_self_signed: bool,
 }
 
 impl Config {
@@ -108,6 +116,8 @@ impl Config {
             || self.check_expiry
             || self.show_pubkey
             || self.show_purposes
+            || self.show_san
+            || self.check_self_signed
     }
 }
 
@@ -149,6 +159,50 @@ fn get_purpose_name(oid_str: &str) -> &'static str {
         x509::extensions::ExtendedKeyUsage::OCSP_SIGNING => "OCSP Signing",
         _ => "Unknown",
     }
+}
+
+fn extract_san(tbs: &x509::TBSCertificate) -> Result<Vec<String>> {
+    let mut san_list = Vec::new();
+
+    if let Some(exts) = tbs.extensions() {
+        for raw_ext in exts.extensions() {
+            // Parse to SubjectAltName first to check if it's the right extension
+            if let Ok(san) = raw_ext.parse::<SubjectAltName>() {
+                for name in &san.names {
+                    match name {
+                        GeneralName::DnsName(dns) => {
+                            san_list.push(format!("DNS:{}", dns));
+                        }
+                        GeneralName::Rfc822Name(email) => {
+                            san_list.push(format!("Email:{}", email));
+                        }
+                        GeneralName::Uri(uri) => {
+                            san_list.push(format!("URI:{}", uri));
+                        }
+                        GeneralName::IpAddress(ip_range) => match ip_range {
+                            IpAddressOrRange::Address(addr) => {
+                                san_list.push(format!("IP:{}", addr));
+                            }
+                            _ => {
+                                san_list.push("IP:Other".to_string());
+                            }
+                        },
+                        _ => {
+                            // Skip other types
+                        }
+                    }
+                }
+                // Found SAN, no need to check other extensions
+                break;
+            }
+        }
+    }
+
+    Ok(san_list)
+}
+
+fn check_self_signed(tbs: &x509::TBSCertificate) -> bool {
+    tbs.subject() == tbs.issuer()
 }
 
 fn show_certificate_purposes(tbs: &x509::TBSCertificate) -> Result<()> {
@@ -308,6 +362,25 @@ pub(crate) fn execute(config: Config) -> Result<()> {
             print!("{}", output);
             show_certificate_purposes(tbs)?;
             return Ok(());
+        }
+        if config.show_san {
+            let san_list = extract_san(tbs)?;
+            if san_list.is_empty() {
+                writeln!(output, "Subject Alternative Names: (none)")?;
+            } else {
+                writeln!(output, "Subject Alternative Names:")?;
+                for san in san_list {
+                    writeln!(output, "  {}", san)?;
+                }
+            }
+        }
+        if config.check_self_signed {
+            let is_self_signed = check_self_signed(tbs);
+            if is_self_signed {
+                writeln!(output, "Self-Signed: Yes")?;
+            } else {
+                writeln!(output, "Self-Signed: No")?;
+            }
         }
         print!("{}", output);
         return Ok(());
