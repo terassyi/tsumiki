@@ -44,6 +44,10 @@ pub(crate) fn output_rsa_private_key(
                 private_key.coefficient.bits()
             );
         }
+        OutputFormat::Brief => {
+            // Brief format for RSA private key
+            println!("RSA Private Key | {} bits", private_key.modulus.bits());
+        }
     }
 
     Ok(())
@@ -72,6 +76,10 @@ pub(crate) fn output_rsa_public_key(
                     .map(|v| v.to_string())
                     .unwrap_or_else(|| format!("{} bits", public_key.public_exponent.bits()))
             );
+        }
+        OutputFormat::Brief => {
+            // Brief format for RSA public key
+            println!("RSA Public Key | {} bits", public_key.modulus.bits());
         }
     }
 

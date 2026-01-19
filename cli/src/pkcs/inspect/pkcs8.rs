@@ -78,6 +78,12 @@ pub(crate) fn output_private_key_info(
                 println!("Public Key: {} bits", public_key.as_ref().len() * 8);
             }
         }
+        OutputFormat::Brief => {
+            // Brief format for PKCS#8 private key
+            let alg_oid_str = key.private_key_algorithm.algorithm.to_string();
+            let alg_name = key.private_key_algorithm.oid_name().unwrap_or(&alg_oid_str);
+            println!("PKCS#8 Private Key | {}", alg_name);
+        }
     }
 
     Ok(())
@@ -121,6 +127,10 @@ pub(crate) fn output_encrypted_private_key_info(
             );
             println!("\nNote: Decryption is not yet implemented. Use OpenSSL to decrypt:");
             println!("  openssl pkcs8 -in key.pem -out decrypted.pem");
+        }
+        OutputFormat::Brief => {
+            // Brief format for encrypted PKCS#8 key
+            println!("PKCS#8 Encrypted Private Key");
         }
     }
 

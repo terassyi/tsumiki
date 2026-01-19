@@ -46,6 +46,8 @@ pub(crate) fn execute(config: Config) -> Result<()> {
             let key = decode(pem)?;
             pkcs8::output_encrypted_private_key_info(&key, config.output)
         }
+        // TODO: Implement PublicKey support
+        pem::Label::PublicKey => Err("PublicKey support not yet implemented".into()),
         _ => Err(format!("Unsupported PEM label: {}", pem.label()).into()),
     }
 }
