@@ -16,6 +16,12 @@ pub enum Error {
 
     #[error("Invalid integer value: {0}")]
     InvalidInteger(String),
+
+    #[error("Invalid PEM: {0}")]
+    InvalidPem(#[from] pem::error::Error),
+
+    #[error("Invalid DER: {0}")]
+    InvalidDer(#[from] der::error::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

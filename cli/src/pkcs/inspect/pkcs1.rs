@@ -208,6 +208,13 @@ pub(crate) fn output_rsa_private_key_fingerprint(
     Ok(())
 }
 
+pub(crate) fn output_rsa_key_size(private_key: &pkcs::pkcs1::RSAPrivateKey) -> String {
+    format!("RSA Key Size: {} bits", private_key.key_size())
+}
+
+pub(crate) fn output_rsa_public_key_size(public_key: &pkcs::pkcs1::RSAPublicKey) -> String {
+    format!("RSA Key Size: {} bits", public_key.key_size())
+}
 pub(crate) fn output_rsa_public_key_fingerprint(
     public_key: &pkcs::pkcs1::RSAPublicKey,
     config: &Config,

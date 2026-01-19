@@ -9,8 +9,9 @@ use tsumiki::encoder::{EncodableTo, Encoder};
 use super::Result;
 use super::error::Error;
 use crate::pkcs9::Attributes;
+use pkix_types::OidName;
+use pkix_types::algorithm::AlgorithmIdentifier;
 use pkix_types::algorithm::parameters::ec::NamedCurve;
-use pkix_types::{AlgorithmIdentifier, OidName};
 
 // PKCS#8 specific algorithm OID constants (RFC 8410)
 pub const OID_ED25519: &str = "1.3.101.112";
@@ -319,6 +320,49 @@ impl Decoder<Pem, OneAsymmetricKey> for Pem {
         let der: Der = Decoder::<Pem, Der>::decode(self)?;
         let asn1_obj: ASN1Object = der.decode()?;
         Decoder::<ASN1Object, OneAsymmetricKey>::decode(&asn1_obj)
+    }
+}
+
+impl OneAsymmetricKey {
+    /// Extract the public key from this private key
+    ///
+    /// Returns `Some(PublicKey)` if the public_key field is present (v2 keys).
+    /// Returns `None` if the public_key field is not present (v1 keys).
+    pub fn public_key(&self) -> Option<PublicKey> {
+        self.public_key.as_ref().map(|public_key_bits| {
+            let spki = pkix_types::SubjectPublicKeyInfo::new(
+                self.private_key_algorithm.clone(),
+                public_key_bits.clone(),
+            );
+            PublicKey::new(spki)
+        })
+    }
+
+    /// Get the key size in bits
+    pub fn key_size(&self) -> u32 {
+        let alg_oid_str = self.private_key_algorithm.algorithm().to_string();
+
+        if alg_oid_str == AlgorithmIdentifier::OID_RSA_ENCRYPTION {
+            // RSA - size from public key field if available
+            if let Some(pub_key) = self.public_key() {
+                pub_key.as_ref().subject_public_key().as_ref().len() as u32 * 8
+            } else {
+                0 // v1 key - size not available
+            }
+        } else if alg_oid_str == AlgorithmIdentifier::OID_EC_PUBLIC_KEY {
+            // EC - size from public key field if available
+            if let Some(pub_key) = self.public_key() {
+                pub_key.as_ref().subject_public_key().as_ref().len() as u32 * 8
+            } else {
+                0 // v1 key - size not available
+            }
+        } else if alg_oid_str == crate::pkcs8::OID_ED25519 {
+            256
+        } else if alg_oid_str == crate::pkcs8::OID_ED448 {
+            456
+        } else {
+            0
+        }
     }
 }
 
@@ -710,6 +754,25 @@ impl PublicKey {
     /// Get public key size in bits
     pub fn key_bits(&self) -> usize {
         self.0.subject_public_key().as_ref().len() * 8
+    }
+
+    /// Get key size in bits (unified API with other key types)
+    pub fn key_size(&self) -> u32 {
+        let alg_oid_str = self.algorithm_oid().to_string();
+
+        if alg_oid_str == AlgorithmIdentifier::OID_RSA_ENCRYPTION {
+            // RSA
+            self.0.subject_public_key().as_ref().len() as u32 * 8
+        } else if alg_oid_str == AlgorithmIdentifier::OID_EC_PUBLIC_KEY {
+            // EC
+            self.0.subject_public_key().as_ref().len() as u32 * 8
+        } else if alg_oid_str == crate::pkcs8::OID_ED25519 {
+            256
+        } else if alg_oid_str == crate::pkcs8::OID_ED448 {
+            456
+        } else {
+            0
+        }
     }
 
     /// Get EC curve name from parameters (if applicable)
