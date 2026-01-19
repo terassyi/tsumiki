@@ -170,6 +170,11 @@ impl RSAPrivateKey {
             public_exponent: self.public_exponent.clone(),
         }
     }
+
+    /// Get the key size in bits (RSA modulus bit length)
+    pub fn key_size(&self) -> u32 {
+        self.modulus.bits() as u32
+    }
 }
 
 /*
@@ -284,6 +289,13 @@ impl Decoder<Pem, RSAPublicKey> for Pem {
 
         // Decode to RSAPublicKey
         element.decode()
+    }
+}
+
+impl RSAPublicKey {
+    /// Get the key size in bits (RSA modulus bit length)
+    pub fn key_size(&self) -> u32 {
+        self.modulus.bits() as u32
     }
 }
 
@@ -528,6 +540,27 @@ EB7VTM4mzawmSqcOq3/aYDSYqcRBlk5lfWc43qcPVNoKZ9x993MFIgkCAwEAAQ==
             .decode()
             .expect("Failed to decode encoded RSAPublicKey");
         assert_eq!(decoded_again, pubkey);
+    }
+
+    #[rstest]
+    #[case(RSA_1024_PRIVATE_KEY, 1024)]
+    #[case(RSA_2048_PRIVATE_KEY, 2048)]
+    #[case(RSA_4096_PRIVATE_KEY, 4096)]
+    fn test_rsa_private_key_size(#[case] pem_str: &str, #[case] expected_bits: u32) {
+        let pem = pem::Pem::from_str(pem_str).expect("Failed to parse PEM");
+        let privkey: RSAPrivateKey = pem.decode().expect("Failed to decode RSAPrivateKey");
+        assert_eq!(privkey.key_size(), expected_bits);
+    }
+
+    #[rstest]
+    #[case(RSA_1024_PRIVATE_KEY, 1024)]
+    #[case(RSA_2048_PRIVATE_KEY, 2048)]
+    #[case(RSA_4096_PRIVATE_KEY, 4096)]
+    fn test_rsa_public_key_size(#[case] pem_str: &str, #[case] expected_bits: u32) {
+        let pem = pem::Pem::from_str(pem_str).expect("Failed to parse PEM");
+        let privkey: RSAPrivateKey = pem.decode().expect("Failed to decode RSAPrivateKey");
+        let pubkey = privkey.public_key();
+        assert_eq!(pubkey.key_size(), expected_bits);
     }
 
     #[rstest]

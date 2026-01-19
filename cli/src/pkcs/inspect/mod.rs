@@ -111,6 +111,37 @@ pub(crate) fn execute(config: Config) -> Result<()> {
         };
     }
 
+    // If show_key_size is set, display key size information
+    if config.show_key_size {
+        return match pem.label() {
+            Label::RSAPrivateKey => {
+                let key: RSAPrivateKey = decode(pem)?;
+                let output = pkcs1::output_rsa_key_size(&key);
+                println!("{}", output);
+                Ok(())
+            }
+            Label::RSAPublicKey => {
+                let key: pkcs::pkcs1::RSAPublicKey = decode(pem)?;
+                let output = pkcs1::output_rsa_public_key_size(&key);
+                println!("{}", output);
+                Ok(())
+            }
+            Label::PrivateKey => {
+                let key: OneAsymmetricKey = decode(pem)?;
+                let output = pkcs8::output_private_key_size(&key);
+                println!("{}", output);
+                Ok(())
+            }
+            Label::PublicKey => {
+                let key: PublicKey = decode(pem)?;
+                let output = pkcs8::output_public_key_size(&key);
+                println!("{}", output);
+                Ok(())
+            }
+            _ => Err(format!("Cannot determine key size for: {}", pem.label()).into()),
+        };
+    }
+
     // Dispatch based on PEM label
     match pem.label() {
         Label::RSAPrivateKey => {
