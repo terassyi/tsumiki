@@ -1,5 +1,7 @@
-use asn1::{Element, Integer};
+use asn1::{ASN1Object, Element, Integer};
+use der::Der;
 use num_bigint::BigInt;
+use pem::{Label, Pem, ToPem};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
@@ -160,6 +162,16 @@ impl Encoder<RSAPrivateKey, Element> for RSAPrivateKey {
     }
 }
 
+impl RSAPrivateKey {
+    /// Extract the public key from this private key
+    pub fn public_key(&self) -> RSAPublicKey {
+        RSAPublicKey {
+            modulus: self.modulus.clone(),
+            public_exponent: self.public_exponent.clone(),
+        }
+    }
+}
+
 /*
 RFC 8017 - RSA Public Key
 
@@ -235,20 +247,14 @@ impl Decoder<pem::Pem, RSAPrivateKey> for pem::Pem {
 
     fn decode(&self) -> Result<RSAPrivateKey> {
         // Decode PEM to DER
-        let der: der::Der = self
-            .decode()
-            .map_err(|_| Error::InvalidStructure("Failed to decode PEM to DER".to_string()))?;
+        let der: Der = self.decode()?;
 
         // Decode DER to ASN1Object
-        let asn1_obj: asn1::ASN1Object = der.decode().map_err(|_| {
-            Error::InvalidStructure("Failed to decode DER to ASN1Object".to_string())
-        })?;
+        let asn1_obj = der.decode()?;
 
         // Get first element
         if asn1_obj.elements().is_empty() {
-            return Err(Error::InvalidStructure(
-                "No elements in ASN1Object".to_string(),
-            ));
+            return Err(Error::InvalidStructure("No elements in ASN1Object".into()));
         }
         let element = &asn1_obj.elements()[0];
 
@@ -258,32 +264,52 @@ impl Decoder<pem::Pem, RSAPrivateKey> for pem::Pem {
 }
 
 // Pem -> RSAPublicKey decoder
-impl DecodableFrom<pem::Pem> for RSAPublicKey {}
+impl DecodableFrom<Pem> for RSAPublicKey {}
 
-impl Decoder<pem::Pem, RSAPublicKey> for pem::Pem {
+impl Decoder<Pem, RSAPublicKey> for Pem {
     type Error = Error;
 
     fn decode(&self) -> Result<RSAPublicKey> {
         // Decode PEM to DER
-        let der: der::Der = self
-            .decode()
-            .map_err(|_| Error::InvalidStructure("Failed to decode PEM to DER".to_string()))?;
+        let der: Der = self.decode()?;
 
         // Decode DER to ASN1Object
-        let asn1_obj: asn1::ASN1Object = der.decode().map_err(|_| {
-            Error::InvalidStructure("Failed to decode DER to ASN1Object".to_string())
-        })?;
+        let asn1_obj = der.decode()?;
 
         // Get first element
         if asn1_obj.elements().is_empty() {
-            return Err(Error::InvalidStructure(
-                "No elements in ASN1Object".to_string(),
-            ));
+            return Err(Error::InvalidStructure("No elements in ASN1Object".into()));
         }
         let element = &asn1_obj.elements()[0];
 
         // Decode to RSAPublicKey
         element.decode()
+    }
+}
+
+// RSAPublicKey -> PEM encoder
+impl ToPem for RSAPublicKey {
+    type Error = Error;
+
+    fn pem_label(&self) -> Label {
+        Label::RSAPublicKey
+    }
+
+    fn to_pem(&self) -> Result<Pem> {
+        // Encode RSAPublicKey to Element
+        let element = self.encode()?;
+
+        // Wrap Element in ASN1Object
+        let asn1_obj = ASN1Object::new(vec![element]);
+
+        // Encode ASN1Object to DER
+        let der = asn1_obj.encode()?;
+
+        // Get DER bytes
+        let der_bytes = der.encode()?;
+
+        // Create PEM from DER bytes
+        Ok(Pem::from_bytes(self.pem_label(), &der_bytes))
     }
 }
 

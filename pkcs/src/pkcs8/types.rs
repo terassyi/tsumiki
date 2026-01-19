@@ -322,6 +322,22 @@ impl Decoder<Pem, OneAsymmetricKey> for Pem {
     }
 }
 
+impl OneAsymmetricKey {
+    /// Extract the public key from this private key
+    ///
+    /// Returns `Some(PublicKey)` if the public_key field is present (v2 keys).
+    /// Returns `None` if the public_key field is not present (v1 keys).
+    pub fn public_key(&self) -> Option<PublicKey> {
+        self.public_key.as_ref().map(|public_key_bits| {
+            let spki = pkix_types::SubjectPublicKeyInfo::new(
+                self.private_key_algorithm.clone(),
+                public_key_bits.clone(),
+            );
+            PublicKey::new(spki)
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
