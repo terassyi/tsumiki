@@ -6,4 +6,6 @@ pub(crate) enum OutputFormat {
     Json,
     /// YAML format
     Yaml,
+    /// Brief single-line format
+    Brief,
 }

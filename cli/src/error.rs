@@ -23,6 +23,9 @@ pub(crate) enum Error {
     #[error("PKCS#8 decode error: {0}")]
     Pkcs8(#[from] pkcs::pkcs8::Error),
 
+    #[error("PKIX types error: {0}")]
+    PkixTypes(#[from] pkix_types::Error),
+
     #[error("JSON serialization error: {0}")]
     Json(#[from] serde_json::Error),
 
