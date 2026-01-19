@@ -5,7 +5,8 @@ use asn1::ASN1Object;
 use chrono::Utc;
 use clap::Args;
 use der::Der;
-use pem::Pem;
+use pem::{Pem, ToPem};
+use pkcs::pkcs8::PublicKey;
 use pkix_types::OidName;
 use sha1::Sha1;
 use sha2::{Digest, Sha256, Sha512};
@@ -297,12 +298,10 @@ pub(crate) fn execute(config: Config) -> Result<()> {
             }
         }
         if config.show_pubkey {
-            // Output public key in PEM format
-            let spki = tbs.subject_public_key_info();
-            let pubkey_bytes = spki.subject_public_key().as_bytes();
-
-            // Create PEM from public key bytes
-            let pem = Pem::from_bytes(pem::Label::PublicKey, pubkey_bytes);
+            // Output public key in PEM format using ToPem trait
+            let spki = tbs.subject_public_key_info().clone();
+            let pubkey = PublicKey::new(spki);
+            let pem = pubkey.to_pem()?;
             write!(output, "{}", pem)?;
         }
         if config.show_purposes {
