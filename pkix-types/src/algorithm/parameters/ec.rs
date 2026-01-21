@@ -5,9 +5,10 @@
 use super::{AlgorithmParameter, Error, RawAlgorithmParameter, Result};
 use crate::{AlgorithmParameters, OidName};
 use asn1::{Element, ObjectIdentifier};
+use serde::{Deserialize, Serialize};
 
 /// Well-known elliptic curves defined in [RFC 5480 Section 2.1.1.1](https://datatracker.ietf.org/doc/html/rfc5480#section-2.1.1.1)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum NamedCurve {
     /// secp192r1 (also known as prime192v1 or P-192)
     /// OID: 1.2.840.10045.3.1.1

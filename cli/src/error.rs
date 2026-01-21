@@ -23,6 +23,9 @@ pub(crate) enum Error {
     #[error("PKCS#8 decode error: {0}")]
     Pkcs8(#[from] pkcs::pkcs8::Error),
 
+    #[error("SEC1 decode error: {0}")]
+    Sec1(#[from] pkcs::sec1::Error),
+
     #[error("PKIX types error: {0}")]
     PkixTypes(#[from] pkix_types::Error),
 

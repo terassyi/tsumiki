@@ -1,5 +1,6 @@
 pub(crate) mod pkcs1;
 pub(crate) mod pkcs8;
+pub(crate) mod sec1;
 
 use clap::Args;
 use pem::Label;
@@ -14,6 +15,10 @@ use crate::utils::{FingerprintAlgorithm, read_input};
 use pkcs::pkcs1::RSAPrivateKey;
 use pkcs::pkcs8::OneAsymmetricKey;
 use pkcs::pkcs8::PublicKey;
+use pkcs::sec1::ECPrivateKey;
+use pkix_types::{
+    AlgorithmIdentifier, AlgorithmParameters, RawAlgorithmParameter, SubjectPublicKeyInfo,
+};
 
 #[derive(Args)]
 pub(crate) struct Config {
@@ -80,7 +85,32 @@ pub(crate) fn execute(config: Config) -> Result<()> {
                     Err("Cannot extract public key from v1 PKCS#8 key (no public key field)".into())
                 }
             }
-            _ => Err("Can only show public key from private keys (RSA-PKCS#1 or PKCS#8)".into()),
+            Label::ECPrivateKey => {
+                let key: ECPrivateKey = decode(pem)?;
+                match (&key.public_key, key.parameters) {
+                    (Some(pub_key), Some(curve)) => {
+                        let ec_oid = asn1::ObjectIdentifier::from_str(
+                            AlgorithmIdentifier::OID_EC_PUBLIC_KEY,
+                        )?;
+                        let curve_param = AlgorithmParameters::Other(RawAlgorithmParameter::new(
+                            asn1::Element::ObjectIdentifier(curve.oid()),
+                        ));
+                        let algorithm = AlgorithmIdentifier::new_with_params(ec_oid, curve_param);
+                        let spki = SubjectPublicKeyInfo::new(algorithm, pub_key.clone());
+                        let public_key = PublicKey::new(spki);
+                        let pem = public_key.to_pem()?;
+                        print!("{}", pem);
+                        Ok(())
+                    }
+                    (None, _) => {
+                        Err("Cannot extract public key from SEC1 key (no public key field)".into())
+                    }
+                    (_, None) => Err("Cannot extract public key: curve parameters missing".into()),
+                }
+            }
+            _ => Err(
+                "Can only show public key from private keys (RSA-PKCS#1, PKCS#8, or SEC1)".into(),
+            ),
         };
     }
 
@@ -106,6 +136,10 @@ pub(crate) fn execute(config: Config) -> Result<()> {
             Label::PublicKey => {
                 let key: PublicKey = decode(pem)?;
                 pkcs8::output_public_key_fingerprint(&key, &config)
+            }
+            Label::ECPrivateKey => {
+                let key = decode(pem)?;
+                sec1::output_ec_private_key_fingerprint(&key, &config)
             }
             _ => Err(format!("Unsupported PEM label: {}", pem.label()).into()),
         };
@@ -138,6 +172,12 @@ pub(crate) fn execute(config: Config) -> Result<()> {
                 println!("{}", output);
                 Ok(())
             }
+            Label::ECPrivateKey => {
+                let key: ECPrivateKey = decode(pem)?;
+                let output = sec1::output_ec_key_size(&key);
+                println!("{}", output);
+                Ok(())
+            }
             _ => Err(format!("Cannot determine key size for: {}", pem.label()).into()),
         };
     }
@@ -163,6 +203,10 @@ pub(crate) fn execute(config: Config) -> Result<()> {
         Label::PublicKey => {
             let key: PublicKey = decode(pem)?;
             pkcs8::output_public_key(&key, &config)
+        }
+        Label::ECPrivateKey => {
+            let key = decode(pem)?;
+            sec1::output_ec_private_key(&key, &config)
         }
         _ => Err(format!("Unsupported PEM label: {}", pem.label()).into()),
     }
