@@ -21,7 +21,6 @@
 //! ```
 
 use std::fmt;
-use std::str::FromStr;
 
 use asn1::{Element, ObjectIdentifier};
 use serde::{ser::SerializeStruct, Deserialize, Serialize};
@@ -170,10 +169,24 @@ impl Encoder<RelativeDistinguishedName, Element> for RelativeDistinguishedName {
 ///
 /// Represents a single attribute in an X.509 Name, such as CN=example.com
 /// or O=Example Organization.
+///
+/// The attribute value preserves its original encoding (PrintableString,
+/// UTF8String, etc.) to enable byte-identical re-encoding.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct AttributeTypeAndValue {
     pub attribute_type: ObjectIdentifier,
-    pub attribute_value: String,
+    #[serde(deserialize_with = "deserialize_attribute_value")]
+    pub attribute_value: DirectoryString,
+}
+
+fn deserialize_attribute_value<'de, D>(
+    deserializer: D,
+) -> std::result::Result<DirectoryString, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    Ok(DirectoryString::new(s))
 }
 
 impl AttributeTypeAndValue {
@@ -210,12 +223,20 @@ impl AttributeTypeAndValue {
     /// OID for emailAddress
     pub const OID_EMAIL_ADDRESS: &'static str = "1.2.840.113549.1.9.1";
 
-    /// Create a new AttributeTypeAndValue
-    pub fn new(attribute_type: ObjectIdentifier, attribute_value: String) -> Self {
+    /// Create a new AttributeTypeAndValue with default UTF8String encoding
+    pub fn new(
+        attribute_type: ObjectIdentifier,
+        attribute_value: impl Into<DirectoryString>,
+    ) -> Self {
         Self {
             attribute_type,
-            attribute_value,
+            attribute_value: attribute_value.into(),
         }
+    }
+
+    /// Get the string value of the attribute
+    pub fn value_str(&self) -> &str {
+        self.attribute_value.as_str()
     }
 }
 
@@ -264,7 +285,8 @@ impl Serialize for AttributeTypeAndValue {
         };
 
         state.serialize_field("attribute_type", &type_name)?;
-        state.serialize_field("attribute_value", &self.attribute_value)?;
+        // Serialize just the string value, not the full DirectoryString
+        state.serialize_field("attribute_value", self.attribute_value.as_str())?;
         state.end()
     }
 }
@@ -278,21 +300,32 @@ impl Decoder<Element, AttributeTypeAndValue> for Element {
         if let Element::Sequence(seq) = self {
             if seq.len() != 2 {
                 return Err(Error::InvalidAttributeTypeAndValue(
-                    "expected 2 elements in AttributeTypeAndValue sequence".to_string(),
+                    "expected 2 elements in AttributeTypeAndValue sequence".into(),
                 ));
             }
-            let attribute_type = if let Element::ObjectIdentifier(oid) = &seq[0] {
+
+            let mut iter = seq.iter();
+
+            let type_elem = iter.next().ok_or_else(|| {
+                Error::InvalidAttributeTypeAndValue("missing attribute type".into())
+            })?;
+            let attribute_type = if let Element::ObjectIdentifier(oid) = type_elem {
                 oid.clone()
             } else {
                 return Err(Error::InvalidAttributeTypeAndValue(
-                    "expected ObjectIdentifier for attribute type".to_string(),
+                    "expected ObjectIdentifier for attribute type".into(),
                 ));
             };
 
             // attribute_value can be various types depending on the attribute_type
             // Most X.509 attributes are strings (DirectoryString)
-            let dir_string: DirectoryString = seq[1].decode()?;
-            let attribute_value = dir_string.into();
+            // DirectoryString preserves the original encoding
+            let attribute_value = iter
+                .next()
+                .ok_or_else(|| {
+                    Error::InvalidAttributeTypeAndValue("missing attribute value".into())
+                })?
+                .decode()?;
 
             Ok(AttributeTypeAndValue {
                 attribute_type,
@@ -300,7 +333,7 @@ impl Decoder<Element, AttributeTypeAndValue> for Element {
             })
         } else {
             Err(Error::InvalidAttributeTypeAndValue(
-                "expected Sequence for AttributeTypeAndValue".to_string(),
+                "expected Sequence for AttributeTypeAndValue".into(),
             ))
         }
     }
@@ -313,15 +346,15 @@ impl Encoder<AttributeTypeAndValue, Element> for AttributeTypeAndValue {
 
     fn encode(&self) -> Result<Element> {
         let oid_elm = Element::ObjectIdentifier(self.attribute_type.clone());
-        let dir_string = DirectoryString::from_str(&self.attribute_value)
-            .expect("DirectoryString::from_str is infallible");
-        let value_elm = dir_string.encode()?;
+        let value_elm = self.attribute_value.encode()?;
         Ok(Element::Sequence(vec![oid_elm, value_elm]))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
     use rstest::rstest;
 
@@ -332,19 +365,19 @@ mod tests {
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
-                        attribute_value: "US".to_string(),
+                        attribute_value: "US".into(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.10").unwrap(),
-                        attribute_value: "Example Org".to_string(),
+                        attribute_value: "Example Org".into(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
-                        attribute_value: "example.com".to_string(),
+                        attribute_value: "example.com".into(),
                     }],
                 },
             ],
@@ -369,7 +402,7 @@ mod tests {
     fn test_attribute_type_and_value_encode_decode() {
         let attr = AttributeTypeAndValue {
             attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
-            attribute_value: "Test".to_string(),
+            attribute_value: "Test".into(),
         };
 
         let encoded = attr.encode().unwrap();
