@@ -11,7 +11,12 @@ use crate::extensions::{Extensions, ParsedExtensions};
 
 pub mod error;
 pub mod extensions;
+#[cfg(feature = "rustls")]
+mod rustls;
 mod types;
+
+#[cfg(feature = "rustls")]
+pub use rustls_pki_types;
 
 // Re-export public types from pkix-types
 pub use pkix_types::{

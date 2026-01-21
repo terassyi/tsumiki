@@ -66,4 +66,6 @@ pub enum Error {
     PKIXTypesError(#[from] pkix_types::Error),
     #[error("serialization error: {0}")]
     SerializationError(String),
+    #[error("DER encoding error: {0}")]
+    DerEncodingError(String),
 }

@@ -5,7 +5,12 @@ authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+rustls = ["dep:rustls-pki-types"]
+
 [dependencies]
+rustls-pki-types = { version = "1.14.0", optional = true }
 asn1 = { path = "../asn1" }
 chrono = { workspace = true }
 der = { path = "../der" }
