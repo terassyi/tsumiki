@@ -521,6 +521,7 @@ dependencies = [
  "pem",
  "pkix-types",
  "rstest",
+ "rustls-pki-types",
  "serde",
  "serde_json",
  "thiserror",
