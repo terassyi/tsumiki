@@ -2087,7 +2087,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
-                        attribute_value: "Example CA".to_string(),
+                        attribute_value: "Example CA".into(),
                     }],
                 },
             ],
@@ -2097,19 +2097,19 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COUNTRY_NAME).unwrap(),
-                        attribute_value: "US".to_string(),
+                        attribute_value: "US".into(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_STATE_OR_PROVINCE_NAME).unwrap(),
-                        attribute_value: "California".to_string(),
+                        attribute_value: "California".into(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_ORGANIZATION_NAME).unwrap(),
-                        attribute_value: "Example Corp".to_string(),
+                        attribute_value: "Example Corp".into(),
                     }],
                 },
             ],
@@ -2119,31 +2119,31 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COUNTRY_NAME).unwrap(),
-                        attribute_value: "JP".to_string(),
+                        attribute_value: "JP".into(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_STATE_OR_PROVINCE_NAME).unwrap(),
-                        attribute_value: "Tokyo".to_string(),
+                        attribute_value: "Tokyo".into(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![
                         AttributeTypeAndValue {
                             attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_ORGANIZATION_NAME).unwrap(),
-                            attribute_value: "ACME Inc".to_string(),
+                            attribute_value: "ACME Inc".into(),
                         },
                         AttributeTypeAndValue {
                             attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_ORGANIZATIONAL_UNIT_NAME).unwrap(),
-                            attribute_value: "Engineering".to_string(),
+                            attribute_value: "Engineering".into(),
                         },
                     ],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
-                        attribute_value: "www.example.com".to_string(),
+                        attribute_value: "www.example.com".into(),
                     }],
                 },
             ],
@@ -2153,7 +2153,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
-                        attribute_value: "日本語ドメイン.jp".to_string(),
+                        attribute_value: "日本語ドメイン.jp".into(),
                     }],
                 },
             ],
@@ -2191,15 +2191,17 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                                             Element::PrintableString(s) => {
                                                 assert_eq!(
                                                     s,
-                                                    &name.rdn_sequence()[i].attributes[j]
+                                                    name.rdn_sequence()[i].attributes[j]
                                                         .attribute_value
+                                                        .as_str()
                                                 );
                                             }
                                             Element::UTF8String(s) => {
                                                 assert_eq!(
                                                     s,
-                                                    &name.rdn_sequence()[i].attributes[j]
+                                                    name.rdn_sequence()[i].attributes[j]
                                                         .attribute_value
+                                                        .as_str()
                                                 );
                                             }
                                             _ => panic!("Expected PrintableString or UTF8String"),
@@ -2335,7 +2337,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                             pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
                         )
                         .unwrap(),
-                        attribute_value: "Test CA".to_string(),
+                        attribute_value: "Test CA".into(),
                     }],
                 }],
             },
@@ -2356,7 +2358,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                             pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
                         )
                         .unwrap(),
-                        attribute_value: "Test Subject".to_string(),
+                        attribute_value: "Test Subject".into(),
                     }],
                 }],
             },
@@ -2394,7 +2396,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                             pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
                         )
                         .unwrap(),
-                        attribute_value: "CA".to_string(),
+                        attribute_value: "CA".into(),
                     }],
                 }],
             },
@@ -2415,7 +2417,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                             pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
                         )
                         .unwrap(),
-                        attribute_value: "Subject".to_string(),
+                        attribute_value: "Subject".into(),
                     }],
                 }],
             },

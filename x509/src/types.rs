@@ -90,7 +90,7 @@ mod tests {
         let attr: AttributeTypeAndValue = sequence.decode().unwrap();
 
         assert_eq!(attr.attribute_type, attribute_type_oid);
-        assert_eq!(attr.attribute_value, expected_value_str);
+        assert_eq!(attr.attribute_value.as_str(), expected_value_str);
     }
 
     #[rstest(
@@ -151,7 +151,7 @@ mod tests {
                 attributes: vec![
                     AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
-                        attribute_value: "example.com".to_string(),
+                        attribute_value: "example.com".into(),
                     }
                 ]
             }
@@ -172,11 +172,11 @@ mod tests {
                 attributes: vec![
                     AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
-                        attribute_value: "example.com".to_string(),
+                        attribute_value: "example.com".into(),
                     },
                     AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
-                        attribute_value: "US".to_string(),
+                        attribute_value: "US".into(),
                     }
                 ]
             }
@@ -191,7 +191,14 @@ mod tests {
     )]
     fn test_rdn_decode_success(input: Element, expected: RelativeDistinguishedName) {
         let rdn: RelativeDistinguishedName = input.decode().unwrap();
-        assert_eq!(rdn, expected);
+        assert_eq!(rdn.attributes.len(), expected.attributes.len());
+        for (actual, exp) in rdn.attributes.iter().zip(expected.attributes.iter()) {
+            assert_eq!(actual.attribute_type, exp.attribute_type);
+            assert_eq!(
+                actual.attribute_value.as_str(),
+                exp.attribute_value.as_str()
+            );
+        }
     }
 
     #[rstest(
@@ -252,7 +259,7 @@ mod tests {
                         attributes: vec![
                             AttributeTypeAndValue {
                                 attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
-                                attribute_value: "example.com".to_string(),
+                                attribute_value: "example.com".into(),
                             }
                         ]
                     }
@@ -281,7 +288,7 @@ mod tests {
                         attributes: vec![
                             AttributeTypeAndValue {
                                 attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
-                                attribute_value: "example.com".to_string(),
+                                attribute_value: "example.com".into(),
                             }
                         ]
                     },
@@ -289,7 +296,7 @@ mod tests {
                         attributes: vec![
                             AttributeTypeAndValue {
                                 attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
-                                attribute_value: "US".to_string(),
+                                attribute_value: "US".into(),
                             }
                         ]
                     }
@@ -306,7 +313,17 @@ mod tests {
     )]
     fn test_name_decode_success(input: Element, expected: Name) {
         let name: Name = input.decode().unwrap();
-        assert_eq!(name, expected);
+        assert_eq!(name.rdn_sequence.len(), expected.rdn_sequence.len());
+        for (actual_rdn, exp_rdn) in name.rdn_sequence.iter().zip(expected.rdn_sequence.iter()) {
+            assert_eq!(actual_rdn.attributes.len(), exp_rdn.attributes.len());
+            for (actual, exp) in actual_rdn.attributes.iter().zip(exp_rdn.attributes.iter()) {
+                assert_eq!(actual.attribute_type, exp.attribute_type);
+                assert_eq!(
+                    actual.attribute_value.as_str(),
+                    exp.attribute_value.as_str()
+                );
+            }
+        }
     }
 
     #[rstest(

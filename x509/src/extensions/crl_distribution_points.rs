@@ -908,7 +908,7 @@ mod tests {
                         attributes: vec![
                             AttributeTypeAndValue {
                                 attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(), // CN
-                                attribute_value: "CRL1".to_string(),
+                                attribute_value: "CRL1".into(),
                             },
                         ],
                     },
@@ -926,11 +926,11 @@ mod tests {
                         attributes: vec![
                             AttributeTypeAndValue {
                                 attribute_type: ObjectIdentifier::from_str("2.5.4.10").unwrap(), // O
-                                attribute_value: "Example Org".to_string(),
+                                attribute_value: "Example Org".into(),
                             },
                             AttributeTypeAndValue {
                                 attribute_type: ObjectIdentifier::from_str("2.5.4.11").unwrap(), // OU
-                                attribute_value: "CRL Department".to_string(),
+                                attribute_value: "CRL Department".into(),
                             },
                         ],
                     },
@@ -966,7 +966,7 @@ mod tests {
         RelativeDistinguishedName {
             attributes: vec![AttributeTypeAndValue {
                 attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
-                attribute_value: "CRL1".to_string(),
+                attribute_value: "CRL1".into(),
             }],
         }
     )]
@@ -975,11 +975,11 @@ mod tests {
             attributes: vec![
                 AttributeTypeAndValue {
                     attribute_type: ObjectIdentifier::from_str("2.5.4.10").unwrap(),
-                    attribute_value: "Example Org".to_string(),
+                    attribute_value: "Example Org".into(),
                 },
                 AttributeTypeAndValue {
                     attribute_type: ObjectIdentifier::from_str("2.5.4.11").unwrap(),
-                    attribute_value: "Engineering".to_string(),
+                    attribute_value: "Engineering".into(),
                 },
             ],
         }
@@ -989,15 +989,15 @@ mod tests {
             attributes: vec![
                 AttributeTypeAndValue {
                     attribute_type: ObjectIdentifier::from_str("2.5.4.6").unwrap(),
-                    attribute_value: "US".to_string(),
+                    attribute_value: "US".into(),
                 },
                 AttributeTypeAndValue {
                     attribute_type: ObjectIdentifier::from_str("2.5.4.8").unwrap(),
-                    attribute_value: "California".to_string(),
+                    attribute_value: "California".into(),
                 },
                 AttributeTypeAndValue {
                     attribute_type: ObjectIdentifier::from_str("2.5.4.7").unwrap(),
-                    attribute_value: "San Francisco".to_string(),
+                    attribute_value: "San Francisco".into(),
                 },
             ],
         }

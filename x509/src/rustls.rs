@@ -49,18 +49,12 @@ impl TryFrom<Certificate> for CertificateDer<'static> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::extensions::Extensions;
-    use crate::{Validity, Version};
-    use asn1::{BitString, Element, Integer, ObjectIdentifier, OctetString};
-    use chrono::NaiveDateTime;
-    use pem::Pem;
-    use pkix_types::{
-        AlgorithmIdentifier, AlgorithmParameters, CertificateSerialNumber, Name,
-        SubjectPublicKeyInfo,
-    };
-    use rstest::rstest;
     use std::str::FromStr;
+
+    use super::*;
+    use crate::Version;
+    use pem::Pem;
+    use rstest::rstest;
 
     // Test certificate V1 (RSA 2048-bit, no extensions)
     const TEST_CERT_V1_PEM: &str = r"-----BEGIN CERTIFICATE-----
@@ -172,153 +166,15 @@ ZXN0gg4qLnRzdW1pa2kudGVzdIcEfwAAATAKBggqhkjOPQQDAgNnADBkAjAVRQuq
 sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
 -----END CERTIFICATE-----";
 
-    fn build_test_certificate(cn: &str, serial: Vec<u8>, is_ca: bool) -> Certificate {
-        let version_elem = Element::ContextSpecific {
-            slot: 0,
-            constructed: true,
-            element: Box::new(Element::Integer(Integer::from(vec![0x02]))),
-        };
-        let version: Version = version_elem.decode().unwrap();
-
-        let serial_number = CertificateSerialNumber::from(Integer::from(serial));
-
-        let signature = AlgorithmIdentifier::new_with_params(
-            ObjectIdentifier::from_str(AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION)
-                .unwrap(),
-            AlgorithmParameters::Null,
-        );
-
-        let name_elem = Element::Sequence(vec![Element::Set(vec![Element::Sequence(vec![
-            Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.4.3").unwrap()),
-            Element::UTF8String(cn.to_string()),
-        ])])]);
-        let name: Name = name_elem.decode().unwrap();
-
-        let not_before =
-            NaiveDateTime::parse_from_str("2024-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
-        let not_after =
-            NaiveDateTime::parse_from_str("2025-01-01 00:00:00", "%Y-%m-%d %H:%M:%S").unwrap();
-        let validity_elem = Element::Sequence(vec![
-            Element::UTCTime(not_before),
-            Element::UTCTime(not_after),
-        ]);
-        let validity: Validity = validity_elem.decode().unwrap();
-
-        let spki = SubjectPublicKeyInfo::new(
-            AlgorithmIdentifier::new_with_params(
-                ObjectIdentifier::from_str(AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap(),
-                AlgorithmParameters::Null,
-            ),
-            BitString::new(0, vec![0x00, 0x30, 0x0d]),
-        );
-
-        let ca_byte = if is_ca { 0xff } else { 0x00 };
-        let extensions_elem = Element::ContextSpecific {
-            slot: 3,
-            constructed: true,
-            element: Box::new(Element::Sequence(vec![Element::Sequence(vec![
-                Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.29.19").unwrap()),
-                Element::Boolean(true),
-                Element::OctetString(OctetString::from(vec![0x30, 0x03, 0x01, 0x01, ca_byte])),
-            ])])),
-        };
-        let extensions: Extensions = extensions_elem.decode().unwrap();
-
-        let tbs_elem = Element::Sequence(vec![
-            version.encode().unwrap(),
-            serial_number.encode().unwrap(),
-            signature.encode().unwrap(),
-            name.encode().unwrap(),
-            validity.encode().unwrap(),
-            name.encode().unwrap(),
-            spki.encode().unwrap(),
-            extensions.encode().unwrap(),
-        ]);
-
-        let signature_value = BitString::new(0, vec![0xde, 0xad, 0xbe, 0xef]);
-
-        let cert_elem = Element::Sequence(vec![
-            tbs_elem,
-            signature.encode().unwrap(),
-            Element::BitString(signature_value),
-        ]);
-
-        cert_elem.decode().unwrap()
-    }
-
-    #[rstest]
-    #[case::simple_cert("Test CA", vec![0x01], true)]
-    #[case::end_entity("End Entity", vec![0x01, 0x02, 0x03, 0x04], false)]
-    #[case::long_serial("Long Serial", vec![0x48, 0xc3, 0x54, 0x8e, 0x4a, 0x5e, 0xe7, 0x64], true)]
-    fn test_certificate_to_certificate_der(
-        #[case] cn: &str,
-        #[case] serial: Vec<u8>,
-        #[case] is_ca: bool,
-    ) {
-        let cert = build_test_certificate(cn, serial, is_ca);
-        let cert_der = CertificateDer::try_from(&cert).unwrap();
-        assert!(!cert_der.as_ref().is_empty());
-    }
-
-    #[rstest]
-    #[case::simple_cert("Test CA", vec![0x01], true)]
-    #[case::end_entity("End Entity", vec![0x01, 0x02, 0x03, 0x04], false)]
-    #[case::long_serial("Long Serial", vec![0x48, 0xc3, 0x54, 0x8e, 0x4a, 0x5e, 0xe7, 0x64], true)]
-    fn test_certificate_der_to_certificate(
-        #[case] cn: &str,
-        #[case] serial: Vec<u8>,
-        #[case] is_ca: bool,
-    ) {
-        let cert = build_test_certificate(cn, serial.clone(), is_ca);
-        let cert_der = CertificateDer::try_from(&cert).unwrap();
-        let cert_back = Certificate::try_from(cert_der).unwrap();
-
-        assert_eq!(
-            cert.tbs_certificate().version(),
-            cert_back.tbs_certificate().version()
-        );
-        assert_eq!(
-            cert.tbs_certificate().serial_number(),
-            cert_back.tbs_certificate().serial_number()
-        );
-    }
-
-    #[rstest]
-    #[case::simple_cert("Test CA", vec![0x01], true)]
-    #[case::end_entity("End Entity", vec![0x01, 0x02, 0x03, 0x04], false)]
-    #[case::long_serial("Long Serial", vec![0x48, 0xc3, 0x54, 0x8e, 0x4a, 0x5e, 0xe7, 0x64], true)]
-    fn test_certificate_roundtrip(#[case] cn: &str, #[case] serial: Vec<u8>, #[case] is_ca: bool) {
-        let cert = build_test_certificate(cn, serial, is_ca);
-
-        let cert_der = CertificateDer::try_from(&cert).unwrap();
-        let cert_roundtrip = Certificate::try_from(cert_der).unwrap();
-
-        let original_der = CertificateDer::try_from(&cert).unwrap();
-        let roundtrip_der = CertificateDer::try_from(&cert_roundtrip).unwrap();
-
-        assert_eq!(original_der.as_ref(), roundtrip_der.as_ref());
-    }
-
-    #[rstest]
-    #[case::simple_cert("Test CA", vec![0x01], true)]
-    #[case::end_entity("End Entity", vec![0x01, 0x02, 0x03, 0x04], false)]
-    fn test_certificate_owned_conversion(
-        #[case] cn: &str,
-        #[case] serial: Vec<u8>,
-        #[case] is_ca: bool,
-    ) {
-        let cert = build_test_certificate(cn, serial, is_ca);
-        let cert_der = CertificateDer::try_from(cert).unwrap();
-        assert!(!cert_der.as_ref().is_empty());
-    }
-
+    /// Test Certificate -> CertificateDer -> Certificate roundtrip
+    /// Verifies that certificate fields are preserved after encoding and decoding
     #[rstest]
     #[case::v1_rsa2048(TEST_CERT_V1_PEM, Version::V1)]
     #[case::v3_ca_rsa4096(TEST_CERT_V3_CA_PEM, Version::V3)]
     #[case::v3_ee_rsa2048(TEST_CERT_V3_EE_PEM, Version::V3)]
     #[case::v3_ecdsa_p256(TEST_CERT_V3_ECDSA_P256_PEM, Version::V3)]
     #[case::v3_ecdsa_p384(TEST_CERT_V3_ECDSA_P384_PEM, Version::V3)]
-    fn test_pem_to_certificate_to_certificate_der(
+    fn test_certificate_to_certificate_der_to_certificate(
         #[case] pem_str: &str,
         #[case] expected_version: Version,
     ) {
@@ -351,22 +207,52 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         );
     }
 
+    /// Test CertificateDer -> Certificate
+    /// Verifies that CertificateDer can be correctly decoded to Certificate
+    #[rstest]
+    #[case::v1_rsa2048(TEST_CERT_V1_PEM, Version::V1)]
+    #[case::v3_ca_rsa4096(TEST_CERT_V3_CA_PEM, Version::V3)]
+    #[case::v3_ee_rsa2048(TEST_CERT_V3_EE_PEM, Version::V3)]
+    #[case::v3_ecdsa_p256(TEST_CERT_V3_ECDSA_P256_PEM, Version::V3)]
+    #[case::v3_ecdsa_p384(TEST_CERT_V3_ECDSA_P384_PEM, Version::V3)]
+    fn test_certificate_der_to_certificate(
+        #[case] pem_str: &str,
+        #[case] expected_version: Version,
+    ) {
+        // PEM -> DER bytes
+        let pem = Pem::from_str(pem_str).unwrap();
+        let der_bytes: Vec<u8> = pem.decode().unwrap();
+
+        // DER bytes -> CertificateDer
+        let cert_der = CertificateDer::from(der_bytes);
+
+        // CertificateDer -> Certificate
+        let cert = Certificate::try_from(cert_der).unwrap();
+
+        assert_eq!(cert.tbs_certificate().version(), &expected_version);
+    }
+
+    /// Test CertificateDer -> Certificate -> CertificateDer roundtrip
+    /// Verifies that DER bytes are preserved after decoding and re-encoding.
+    /// This ensures that the original encoding (e.g., PrintableString vs UTF8String)
+    /// is preserved through the conversion process.
     #[rstest]
     #[case::v1_rsa2048(TEST_CERT_V1_PEM)]
     #[case::v3_ca_rsa4096(TEST_CERT_V3_CA_PEM)]
     #[case::v3_ee_rsa2048(TEST_CERT_V3_EE_PEM)]
     #[case::v3_ecdsa_p256(TEST_CERT_V3_ECDSA_P256_PEM)]
     #[case::v3_ecdsa_p384(TEST_CERT_V3_ECDSA_P384_PEM)]
-    fn test_pem_roundtrip_der_bytes_match(#[case] pem_str: &str) {
-        // PEM -> DER bytes (original)
+    fn test_certificate_der_to_certificate_to_certificate_der(#[case] pem_str: &str) {
+        // PEM -> DER bytes
         let pem = Pem::from_str(pem_str).unwrap();
         let original_der_bytes: Vec<u8> = pem.decode().unwrap();
 
-        // PEM -> Certificate -> CertificateDer
-        let cert: Certificate = Pem::from_str(pem_str).unwrap().decode().unwrap();
-        let cert_der = CertificateDer::try_from(&cert).unwrap();
+        // CertificateDer -> Certificate -> CertificateDer
+        let cert_der = CertificateDer::from(original_der_bytes.clone());
+        let cert = Certificate::try_from(cert_der).unwrap();
+        let roundtrip_der = CertificateDer::try_from(&cert).unwrap();
 
-        // Compare DER bytes
-        assert_eq!(original_der_bytes, cert_der.as_ref());
+        // Compare DER bytes - should be identical
+        assert_eq!(original_der_bytes, roundtrip_der.as_ref());
     }
 }
