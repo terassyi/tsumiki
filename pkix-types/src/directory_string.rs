@@ -7,12 +7,31 @@ use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use asn1::Element;
+use asn1::{BMPString, Element};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
 use crate::error::{Error, Result};
+
+/// The encoding type used for a DirectoryString.
+///
+/// This preserves the original ASN.1 encoding type so that re-encoding
+/// produces byte-identical output.
+///
+/// Default is UTF8String as recommended by RFC 5280 Section 4.1.2.4.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum StringEncoding {
+    /// PrintableString (tag 0x13)
+    PrintableString,
+    /// UTF8String (tag 0x0C) - default as recommended by RFC 5280
+    #[default]
+    UTF8String,
+    /// BMPString (tag 0x1E)
+    BMPString,
+    /// IA5String (tag 0x16)
+    IA5String,
+}
 
 /// DirectoryString as defined in RFC 5280 Section 4.1.2.4
 ///
@@ -26,25 +45,40 @@ use crate::error::{Error, Result};
 /// }
 /// ```
 ///
-/// This is a wrapper around a String that can be decoded from various ASN.1 string types.
-/// It is commonly used in X.509 certificate Distinguished Names and PKCS#9 attributes.
+/// This type preserves the original encoding type so that re-encoding
+/// produces byte-identical output. It is commonly used in X.509 certificate
+/// Distinguished Names and PKCS#9 attributes.
 ///
 /// Note: TeletexString and UniversalString are not currently supported in decoding
 /// as they are deprecated and rarely used in modern PKI.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DirectoryString {
-    inner: String,
+    value: String,
+    encoding: StringEncoding,
 }
 
 impl DirectoryString {
-    /// Create a new DirectoryString
+    /// Create a new DirectoryString with default encoding (UTF8String)
     pub fn new(value: String) -> Self {
-        Self { inner: value }
+        Self {
+            value,
+            encoding: StringEncoding::default(),
+        }
     }
 
-    /// Get the inner string value
+    /// Create a new DirectoryString with a specific encoding
+    pub fn with_encoding(value: String, encoding: StringEncoding) -> Self {
+        Self { value, encoding }
+    }
+
+    /// Get the string value
     pub fn as_str(&self) -> &str {
-        &self.inner
+        &self.value
+    }
+
+    /// Get the encoding type
+    pub fn encoding(&self) -> StringEncoding {
+        self.encoding
     }
 }
 
@@ -53,7 +87,7 @@ impl Serialize for DirectoryString {
     where
         S: serde::Serializer,
     {
-        self.inner.serialize(serializer)
+        self.value.serialize(serializer)
     }
 }
 
@@ -62,14 +96,17 @@ impl<'de> Deserialize<'de> for DirectoryString {
     where
         D: serde::Deserializer<'de>,
     {
-        let inner = String::deserialize(deserializer)?;
-        Ok(DirectoryString { inner })
+        let value = String::deserialize(deserializer)?;
+        Ok(DirectoryString {
+            value,
+            encoding: StringEncoding::default(),
+        })
     }
 }
 
 impl AsRef<str> for DirectoryString {
     fn as_ref(&self) -> &str {
-        &self.inner
+        &self.value
     }
 }
 
@@ -77,27 +114,25 @@ impl Deref for DirectoryString {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        &self.inner
+        &self.value
     }
 }
 
 impl From<DirectoryString> for String {
     fn from(ds: DirectoryString) -> Self {
-        ds.inner
+        ds.value
     }
 }
 
 impl From<String> for DirectoryString {
     fn from(value: String) -> Self {
-        Self { inner: value }
+        Self::new(value)
     }
 }
 
 impl From<&str> for DirectoryString {
     fn from(value: &str) -> Self {
-        Self {
-            inner: value.to_string(),
-        }
+        Self::new(value.to_string())
     }
 }
 
@@ -105,16 +140,18 @@ impl TryFrom<&Element> for DirectoryString {
     type Error = Error;
 
     fn try_from(element: &Element) -> Result<Self> {
-        let value = match element {
-            Element::PrintableString(s) => s.clone(),
-            Element::UTF8String(s) => s.clone(),
-            Element::BMPString(bmp) => bmp.to_string(),
-            Element::IA5String(s) => s.clone(),
+        let (value, encoding) = match element {
+            Element::PrintableString(s) => (s.clone(), StringEncoding::PrintableString),
+            Element::UTF8String(s) => (s.clone(), StringEncoding::UTF8String),
+            Element::BMPString(bmp) => (bmp.to_string(), StringEncoding::BMPString),
+            Element::IA5String(s) => (s.clone(), StringEncoding::IA5String),
             Element::OctetString(os) => {
                 // May come as OctetString due to IMPLICIT tagging
-                String::from_utf8(os.as_bytes().to_vec()).map_err(|e| {
+                // Default to UTF8String encoding for OctetString
+                let s = String::from_utf8(os.as_bytes().to_vec()).map_err(|e| {
                     Error::InvalidDirectoryString(format!("invalid UTF-8 in OctetString: {}", e))
-                })?
+                })?;
+                (s, StringEncoding::UTF8String)
             }
             other => {
                 return Err(Error::InvalidDirectoryString(format!(
@@ -123,7 +160,7 @@ impl TryFrom<&Element> for DirectoryString {
                 )))
             }
         };
-        Ok(Self { inner: value })
+        Ok(Self { value, encoding })
     }
 }
 
@@ -131,35 +168,47 @@ impl FromStr for DirectoryString {
     type Err = std::convert::Infallible;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        Ok(Self {
-            inner: s.to_string(),
-        })
+        Ok(Self::new(s.to_string()))
     }
 }
 
 impl From<&DirectoryString> for Element {
     fn from(ds: &DirectoryString) -> Self {
-        if is_printable_string(&ds.inner) {
-            Element::PrintableString(ds.inner.clone())
-        } else {
-            Element::UTF8String(ds.inner.clone())
+        match ds.encoding {
+            StringEncoding::PrintableString => Element::PrintableString(ds.value.clone()),
+            StringEncoding::UTF8String => Element::UTF8String(ds.value.clone()),
+            StringEncoding::BMPString => {
+                // BMPString::new can fail for characters outside BMP
+                // Fall back to UTF8String if conversion fails
+                BMPString::new(&ds.value)
+                    .map(Element::BMPString)
+                    .unwrap_or_else(|_| Element::UTF8String(ds.value.clone()))
+            }
+            StringEncoding::IA5String => Element::IA5String(ds.value.clone()),
         }
     }
 }
 
 impl From<DirectoryString> for Element {
     fn from(ds: DirectoryString) -> Self {
-        if is_printable_string(&ds.inner) {
-            Element::PrintableString(ds.inner)
-        } else {
-            Element::UTF8String(ds.inner)
+        match ds.encoding {
+            StringEncoding::PrintableString => Element::PrintableString(ds.value),
+            StringEncoding::UTF8String => Element::UTF8String(ds.value),
+            StringEncoding::BMPString => {
+                // BMPString::new can fail for characters outside BMP
+                // Fall back to UTF8String if conversion fails
+                BMPString::new(&ds.value)
+                    .map(Element::BMPString)
+                    .unwrap_or_else(|_| Element::UTF8String(ds.value))
+            }
+            StringEncoding::IA5String => Element::IA5String(ds.value),
         }
     }
 }
 
 impl fmt::Display for DirectoryString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.inner)
+        write!(f, "{}", self.value)
     }
 }
 
@@ -184,15 +233,6 @@ impl Encoder<DirectoryString, Element> for DirectoryString {
     }
 }
 
-/// Check if a string contains only PrintableString characters
-///
-/// PrintableString allows: A-Z, a-z, 0-9, space, and ' ( ) + , - . / : = ?
-fn is_printable_string(s: &str) -> bool {
-    const PRINTABLE_CHARS: &str =
-        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 '()+,-./:=?";
-    s.chars().all(|c| PRINTABLE_CHARS.contains(c))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,18 +243,29 @@ mod tests {
     fn test_directory_string_new() {
         let ds = DirectoryString::new("test".to_string());
         assert_eq!(ds.as_str(), "test");
+        assert_eq!(ds.encoding(), StringEncoding::UTF8String);
+    }
+
+    #[test]
+    fn test_directory_string_with_encoding() {
+        let ds =
+            DirectoryString::with_encoding("test".to_string(), StringEncoding::PrintableString);
+        assert_eq!(ds.as_str(), "test");
+        assert_eq!(ds.encoding(), StringEncoding::PrintableString);
     }
 
     #[rstest]
-    #[case(Element::PrintableString("Hello123".to_string()), "Hello123")]
-    #[case(Element::UTF8String("こんにちは".to_string()), "こんにちは")]
-    #[case(Element::IA5String("test@example.com".to_string()), "test@example.com")]
-    fn test_directory_string_from_element_success(
+    #[case(Element::PrintableString("Hello123".to_string()), "Hello123", StringEncoding::PrintableString)]
+    #[case(Element::UTF8String("こんにちは".to_string()), "こんにちは", StringEncoding::UTF8String)]
+    #[case(Element::IA5String("test@example.com".to_string()), "test@example.com", StringEncoding::IA5String)]
+    fn test_directory_string_from_element_preserves_encoding(
         #[case] element: Element,
-        #[case] expected: &str,
+        #[case] expected_value: &str,
+        #[case] expected_encoding: StringEncoding,
     ) {
         let ds = DirectoryString::try_from(&element).unwrap();
-        assert_eq!(ds.as_str(), expected);
+        assert_eq!(ds.as_str(), expected_value);
+        assert_eq!(ds.encoding(), expected_encoding);
     }
 
     #[test]
@@ -223,6 +274,7 @@ mod tests {
         let element = Element::BMPString(bmp);
         let ds = DirectoryString::try_from(&element).unwrap();
         assert_eq!(ds.as_str(), "テスト");
+        assert_eq!(ds.encoding(), StringEncoding::BMPString);
     }
 
     #[test]
@@ -231,6 +283,8 @@ mod tests {
         let element = Element::OctetString(asn1::OctetString::from(bytes));
         let ds = DirectoryString::try_from(&element).unwrap();
         assert_eq!(ds.as_str(), "hello");
+        // OctetString defaults to UTF8String encoding
+        assert_eq!(ds.encoding(), StringEncoding::UTF8String);
     }
 
     #[test]
@@ -241,25 +295,50 @@ mod tests {
     }
 
     #[rstest]
-    #[case("ABC123", Element::PrintableString("ABC123".to_string()))]
-    #[case("CN=Test", Element::PrintableString("CN=Test".to_string()))]
-    fn test_directory_string_to_element_printable(#[case] input: &str, #[case] expected: Element) {
-        let ds = DirectoryString::new(input.to_string());
+    #[case(StringEncoding::PrintableString, "ABC123", Element::PrintableString("ABC123".to_string()))]
+    #[case(StringEncoding::UTF8String, "ABC123", Element::UTF8String("ABC123".to_string()))]
+    #[case(StringEncoding::IA5String, "test@example.com", Element::IA5String("test@example.com".to_string()))]
+    fn test_directory_string_to_element_preserves_encoding(
+        #[case] encoding: StringEncoding,
+        #[case] value: &str,
+        #[case] expected: Element,
+    ) {
+        let ds = DirectoryString::with_encoding(value.to_string(), encoding);
         let element: Element = (&ds).into();
         assert_eq!(element, expected);
     }
 
-    #[rstest]
-    #[case("こんにちは", "こんにちは")]
-    #[case("test@example.com", "test@example.com")]
-    #[case("test!", "test!")]
-    fn test_directory_string_to_element_utf8(#[case] input: &str, #[case] expected: &str) {
-        let ds = DirectoryString::new(input.to_string());
-        let element: Element = (&ds).into();
-        assert!(matches!(element, Element::UTF8String(_)));
-        if let Element::UTF8String(s) = element {
-            assert_eq!(s, expected);
-        }
+    #[test]
+    fn test_directory_string_roundtrip_printable() {
+        let original = Element::PrintableString("Hello World".to_string());
+        let ds = DirectoryString::try_from(&original).unwrap();
+        let encoded: Element = ds.into();
+        assert_eq!(original, encoded);
+    }
+
+    #[test]
+    fn test_directory_string_roundtrip_utf8() {
+        let original = Element::UTF8String("Hello World".to_string());
+        let ds = DirectoryString::try_from(&original).unwrap();
+        let encoded: Element = ds.into();
+        assert_eq!(original, encoded);
+    }
+
+    #[test]
+    fn test_directory_string_roundtrip_bmp() {
+        let bmp = BMPString::new("Test").unwrap();
+        let original = Element::BMPString(bmp);
+        let ds = DirectoryString::try_from(&original).unwrap();
+        let encoded: Element = ds.into();
+        assert_eq!(original, encoded);
+    }
+
+    #[test]
+    fn test_directory_string_roundtrip_ia5() {
+        let original = Element::IA5String("test@example.com".to_string());
+        let ds = DirectoryString::try_from(&original).unwrap();
+        let encoded: Element = ds.into();
+        assert_eq!(original, encoded);
     }
 
     #[test]
@@ -283,6 +362,7 @@ mod tests {
         let expected = input.clone();
         let ds: DirectoryString = input.into();
         assert_eq!(ds.as_str(), expected);
+        assert_eq!(ds.encoding(), StringEncoding::UTF8String);
     }
 
     #[rstest]
@@ -291,6 +371,7 @@ mod tests {
     fn test_directory_string_from_str(#[case] input: &str) {
         let ds: DirectoryString = input.into();
         assert_eq!(ds.as_str(), input);
+        assert_eq!(ds.encoding(), StringEncoding::UTF8String);
     }
 
     #[test]
@@ -322,23 +403,13 @@ mod tests {
         assert_eq!(deserialized.as_str(), "serialize_test");
     }
 
-    #[rstest]
-    #[case("ABC123", true)]
-    #[case("Hello World", true)]
-    #[case("test(1)", true)]
-    #[case("CN=Test", true)]
-    #[case("test@example.com", false)] // @ not in printable
-    #[case("こんにちは", false)]
-    #[case("test!", false)]
-    fn test_is_printable_string(#[case] input: &str, #[case] expected: bool) {
-        assert_eq!(is_printable_string(input), expected);
-    }
-
     #[test]
     fn test_directory_string_clone() {
-        let ds1 = DirectoryString::new("test".to_string());
+        let ds1 =
+            DirectoryString::with_encoding("test".to_string(), StringEncoding::PrintableString);
         let ds2 = ds1.clone();
         assert_eq!(ds1, ds2);
+        assert_eq!(ds2.encoding(), StringEncoding::PrintableString);
     }
 
     #[test]
@@ -346,5 +417,18 @@ mod tests {
         let ds = DirectoryString::new("test".to_string());
         let debug_str = format!("{:?}", ds);
         assert!(debug_str.contains("test"));
+        assert!(debug_str.contains("UTF8String"));
+    }
+
+    #[test]
+    fn test_string_encoding_default() {
+        assert_eq!(StringEncoding::default(), StringEncoding::UTF8String);
+    }
+
+    #[test]
+    fn test_string_encoding_copy() {
+        let encoding = StringEncoding::PrintableString;
+        let copied = encoding;
+        assert_eq!(encoding, copied);
     }
 }
