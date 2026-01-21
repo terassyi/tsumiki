@@ -8,9 +8,11 @@ pub enum Error {
     #[error("PKCS#1 error: {0}")]
     Pkcs1(#[from] crate::pkcs1::Error),
 
+    #[error("SEC1 error: {0}")]
+    Sec1(#[from] crate::sec1::Error),
+
     #[error(transparent)]
     PKIXTypes(#[from] pkix_types::Error),
-    // PKCS#8 and SEC1 will be added later
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

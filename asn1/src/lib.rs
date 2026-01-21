@@ -918,6 +918,13 @@ impl TryFrom<ObjectIdentifier> for Vec<u8> {
         for v in oid.inner[2..].iter() {
             let mut encoded = Vec::new();
             let mut value = *v;
+
+            // Handle zero value explicitly
+            if value == 0 {
+                result.push(0x00);
+                continue;
+            }
+
             while value > 0 {
                 encoded.push(value as u8 & 0x7F);
                 value >>= 7;
