@@ -9,11 +9,14 @@ use tsumiki::encoder::{EncodableTo, Encoder};
 use crate::error::Error;
 use crate::extensions::{Extensions, ParsedExtensions};
 
+mod chain;
 pub mod error;
 pub mod extensions;
 #[cfg(feature = "rustls")]
 mod rustls;
 mod types;
+
+pub use chain::CertificateChain;
 
 #[cfg(feature = "rustls")]
 pub use rustls_pki_types;
@@ -34,7 +37,7 @@ Certificate  ::=  SEQUENCE  {
 }
  */
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Certificate {
     tbs_certificate: TBSCertificate,
     signature_algorithm: AlgorithmIdentifier,
@@ -87,6 +90,13 @@ impl Certificate {
     /// Get the signature value
     pub fn signature_value(&self) -> &BitString {
         &self.signature_value
+    }
+
+    /// Returns true if the certificate is self-signed.
+    ///
+    /// A certificate is considered self-signed if its Subject and Issuer are equal.
+    pub fn is_self_signed(&self) -> bool {
+        self.tbs_certificate.subject == self.tbs_certificate.issuer
     }
 
     /// Get a list of OIDs for all extensions present in the certificate
@@ -477,7 +487,7 @@ TBSCertificate  ::=  SEQUENCE  {
 }
  */
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TBSCertificate {
     version: Version,
     serial_number: CertificateSerialNumber,

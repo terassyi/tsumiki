@@ -5,6 +5,7 @@
 use rustls_pki_types::CertificateDer;
 
 use crate::Certificate;
+use crate::CertificateChain;
 use crate::error::Error;
 use asn1::ASN1Object;
 use tsumiki::decoder::Decoder;
@@ -44,6 +45,46 @@ impl TryFrom<Certificate> for CertificateDer<'static> {
 
     fn try_from(cert: Certificate) -> Result<Self, Self::Error> {
         CertificateDer::try_from(&cert)
+    }
+}
+
+/// Converts a slice of `CertificateDer` to a `CertificateChain`.
+impl TryFrom<&[CertificateDer<'_>]> for CertificateChain {
+    type Error = Error;
+
+    fn try_from(certs: &[CertificateDer<'_>]) -> Result<Self, Self::Error> {
+        let certificates: Result<Vec<Certificate>, Error> = certs
+            .iter()
+            .map(|c| Certificate::try_from(c.clone()))
+            .collect();
+        Ok(CertificateChain::new(certificates?))
+    }
+}
+
+/// Converts a `Vec<CertificateDer>` to a `CertificateChain`.
+impl TryFrom<Vec<CertificateDer<'_>>> for CertificateChain {
+    type Error = Error;
+
+    fn try_from(certs: Vec<CertificateDer<'_>>) -> Result<Self, Self::Error> {
+        CertificateChain::try_from(certs.as_slice())
+    }
+}
+
+/// Converts a `&CertificateChain` to a `Vec<CertificateDer<'static>>`.
+impl TryFrom<&CertificateChain> for Vec<CertificateDer<'static>> {
+    type Error = Error;
+
+    fn try_from(chain: &CertificateChain) -> Result<Self, Self::Error> {
+        chain.iter().map(CertificateDer::try_from).collect()
+    }
+}
+
+/// Converts a `CertificateChain` to a `Vec<CertificateDer<'static>>`.
+impl TryFrom<CertificateChain> for Vec<CertificateDer<'static>> {
+    type Error = Error;
+
+    fn try_from(chain: CertificateChain) -> Result<Self, Self::Error> {
+        Vec::try_from(&chain)
     }
 }
 
