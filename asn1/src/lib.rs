@@ -1277,6 +1277,20 @@ impl AsRef<[u8]> for OctetString {
     }
 }
 
+impl std::ops::Deref for OctetString {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl std::ops::DerefMut for OctetString {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.inner
+    }
+}
+
 impl AsMut<[u8]> for OctetString {
     fn as_mut(&mut self) -> &mut [u8] {
         &mut self.inner

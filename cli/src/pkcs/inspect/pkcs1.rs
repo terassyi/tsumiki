@@ -2,6 +2,7 @@ use super::Config;
 use crate::error::Result;
 use crate::output::OutputFormat;
 use crate::utils::{calculate_fingerprint, format_hex_dump};
+use pkcs::{PrivateKeyExt, PublicKeyExt};
 use std::fmt::Write;
 use tsumiki::encoder::Encoder;
 
@@ -33,6 +34,8 @@ pub(crate) fn output_rsa_private_key(
             let mut output = String::new();
 
             writeln!(output, "RSA Private Key (PKCS#1)")?;
+            writeln!(output, "Algorithm: {}", private_key.algorithm().name())?;
+            writeln!(output, "Key Size: {} bits", private_key.key_size())?;
             writeln!(output, "Version: {:?}", private_key.version)?;
             writeln!(output, "Modulus (n): {} bits", private_key.modulus.bits())?;
             writeln!(
@@ -118,7 +121,11 @@ pub(crate) fn output_rsa_private_key(
             print!("{}", output);
         }
         OutputFormat::Brief => {
-            println!("RSA Private Key | {} bits", private_key.modulus.bits());
+            println!(
+                "RSA Private Key | {} | {} bits",
+                private_key.algorithm().name(),
+                private_key.key_size()
+            );
         }
     }
 
@@ -153,6 +160,8 @@ pub(crate) fn output_rsa_public_key(
             let mut output = String::new();
 
             writeln!(output, "RSA Public Key (PKCS#1)")?;
+            writeln!(output, "Algorithm: {}", public_key.algorithm().name())?;
+            writeln!(output, "Key Size: {} bits", public_key.key_size())?;
             writeln!(output, "Modulus (n): {} bits", public_key.modulus.bits())?;
             writeln!(
                 output,
@@ -185,8 +194,11 @@ pub(crate) fn output_rsa_public_key(
             print!("{}", output);
         }
         OutputFormat::Brief => {
-            // Brief format for RSA public key
-            println!("RSA Public Key | {} bits", public_key.modulus.bits());
+            println!(
+                "RSA Public Key | {} | {} bits",
+                public_key.algorithm().name(),
+                public_key.key_size()
+            );
         }
     }
 

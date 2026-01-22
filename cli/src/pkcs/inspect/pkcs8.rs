@@ -2,8 +2,8 @@ use super::Config;
 use crate::error::Result;
 use crate::output::OutputFormat;
 use crate::utils::{calculate_fingerprint, format_hex_dump};
-use pkcs::pkcs8::{OID_ED448, OID_ED25519};
 use pkcs::pkcs9::ParsedAttributes;
+use pkcs::{KeyAlgorithm, PrivateKeyExt, PublicKeyExt};
 use pkix_types::OidName;
 use pkix_types::algorithm::parameters::DsaParameters;
 use std::fmt::Write;
@@ -62,6 +62,8 @@ pub(crate) fn output_private_key_info(
         return Ok(());
     }
 
+    let key_algorithm = key.algorithm();
+
     match config.output {
         OutputFormat::Json => {
             println!("{}", serde_json::to_string_pretty(&key)?);
@@ -81,7 +83,12 @@ pub(crate) fn output_private_key_info(
             } else {
                 alg_name
             };
-            writeln!(output, "Algorithm: {}", algorithm_display)?;
+            writeln!(
+                output,
+                "Algorithm: {} ({})",
+                algorithm_display,
+                key_algorithm.name()
+            )?;
             if let Some(params) = &key.private_key_algorithm.parameters {
                 match params {
                     pkcs::pkcs8::AlgorithmParameters::Null => {
@@ -266,7 +273,9 @@ fn output_dsa_parameters_to_string(
     key: &pkcs::pkcs8::PublicKey,
     output: &mut String,
 ) -> Result<()> {
-    if let Some(pkcs::pkcs8::AlgorithmParameters::Other(raw)) = key.algorithm().parameters.as_ref()
+    // Access SubjectPublicKeyInfo::algorithm() via AsRef to avoid conflict with PublicKeyExt::algorithm()
+    let spki: &pkix_types::SubjectPublicKeyInfo = key.as_ref();
+    if let Some(pkcs::pkcs8::AlgorithmParameters::Other(raw)) = spki.algorithm().parameters.as_ref()
     {
         if let Ok(dsa_params) = DsaParameters::try_from(raw) {
             writeln!(output, "  Prime (p): {} bits", dsa_params.p.bits())?;
@@ -281,6 +290,7 @@ pub(crate) fn output_public_key(key: &pkcs::pkcs8::PublicKey, config: &Config) -
     let algorithm_oid = key.algorithm_oid().to_string();
     let algorithm_name = key.oid_name().unwrap_or("Unknown");
     let key_bits = key.key_bits();
+    let key_algorithm = key.algorithm();
     let algorithm_display = if config.show_oid {
         &algorithm_oid
     } else {
@@ -297,12 +307,14 @@ pub(crate) fn output_public_key(key: &pkcs::pkcs8::PublicKey, config: &Config) -
         OutputFormat::Json => {
             let json_obj = serde_json::json!({
                 "algorithm": algorithm_display,
+                "algorithm_type": key_algorithm.name(),
                 "key_bits": key_bits,
             });
             println!("{}", serde_json::to_string_pretty(&json_obj)?);
         }
         OutputFormat::Yaml => {
             println!("algorithm: {}", algorithm_display);
+            println!("algorithm_type: {}", key_algorithm.name());
             println!("key_bits: {}", key_bits);
         }
         OutputFormat::Text => {
@@ -313,35 +325,26 @@ pub(crate) fn output_public_key(key: &pkcs::pkcs8::PublicKey, config: &Config) -
             writeln!(output, "Key Size: {} bits", key_bits)?;
             writeln!(output)?;
 
-            // Need to capture output_algorithm_details output
-            match algorithm_oid.as_str() {
-                pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION => {
-                    writeln!(output, "Algorithm Details:")?;
-                    writeln!(output, "  Type: RSA")?;
+            writeln!(output, "Algorithm Details:")?;
+            writeln!(output, "  Type: {}", key_algorithm.name())?;
+
+            match key_algorithm {
+                KeyAlgorithm::Rsa => {
                     writeln!(output, "  Key Size: {} bits", key.key_bits())?;
                 }
-                pkix_types::AlgorithmIdentifier::OID_ID_DSA => {
-                    writeln!(output, "Algorithm Details:")?;
-                    writeln!(output, "  Type: DSA")?;
-                    output_dsa_parameters_to_string(key, &mut output)?;
-                }
-                pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY => {
-                    writeln!(output, "Algorithm Details:")?;
-                    writeln!(output, "  Type: EC")?;
+                KeyAlgorithm::Ec => {
                     if let Ok(Some(curve_name)) = key.ec_curve_name() {
                         writeln!(output, "  Curve: {}", curve_name)?;
                     }
                 }
-                OID_ED25519 => {
-                    writeln!(output, "Algorithm Details:")?;
-                    writeln!(output, "  Type: Ed25519")?;
+                KeyAlgorithm::Ed25519 | KeyAlgorithm::Ed448 => {
+                    // No additional details needed
                 }
-                OID_ED448 => {
-                    writeln!(output, "Algorithm Details:")?;
-                    writeln!(output, "  Type: Ed448")?;
-                }
-                _ => {
-                    writeln!(output, "Algorithm Details: Unknown algorithm")?;
+                KeyAlgorithm::Unknown | _ => {
+                    // Check if DSA
+                    if algorithm_oid == pkix_types::AlgorithmIdentifier::OID_ID_DSA {
+                        output_dsa_parameters_to_string(key, &mut output)?;
+                    }
                 }
             }
 

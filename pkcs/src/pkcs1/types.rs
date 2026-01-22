@@ -165,16 +165,6 @@ impl Encoder<RSAPrivateKey, Element> for RSAPrivateKey {
     }
 }
 
-impl RSAPrivateKey {
-    /// Extract the public key from this private key
-    pub fn public_key(&self) -> RSAPublicKey {
-        RSAPublicKey {
-            modulus: self.modulus.clone(),
-            public_exponent: self.public_exponent.clone(),
-        }
-    }
-}
-
 impl PrivateKeyExt for RSAPrivateKey {
     fn key_size(&self) -> u32 {
         self.modulus.bits() as u32
@@ -597,7 +587,7 @@ EB7VTM4mzawmSqcOq3/aYDSYqcRBlk5lfWc43qcPVNoKZ9x993MFIgkCAwEAAQ==
     fn test_rsa_public_key_size(#[case] pem_str: &str, #[case] expected_bits: u32) {
         let pem = pem::Pem::from_str(pem_str).expect("Failed to parse PEM");
         let privkey: RSAPrivateKey = pem.decode().expect("Failed to decode RSAPrivateKey");
-        let pubkey = privkey.public_key();
+        let pubkey = privkey.public_key().expect("Failed to get public key");
         assert_eq!(pubkey.key_size(), expected_bits);
     }
 

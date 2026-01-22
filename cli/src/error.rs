@@ -17,14 +17,17 @@ pub(crate) enum Error {
     #[error("X.509 parse error: {0}")]
     X509(#[from] x509::error::Error),
 
-    #[error("PKCS decode error: {0}")]
-    Pkcs(#[from] pkcs::pkcs1::Error),
+    #[error("PKCS#1 decode error: {0}")]
+    Pkcs1(#[from] pkcs::pkcs1::Error),
 
     #[error("PKCS#8 decode error: {0}")]
     Pkcs8(#[from] pkcs::pkcs8::Error),
 
     #[error("SEC1 decode error: {0}")]
     Sec1(#[from] pkcs::sec1::Error),
+
+    #[error("PKCS error: {0}")]
+    Pkcs(#[from] pkcs::Error),
 
     #[error("PKIX types error: {0}")]
     PkixTypes(#[from] pkix_types::Error),
@@ -40,6 +43,9 @@ pub(crate) enum Error {
 
     #[error("Formatting error: {0}")]
     Fmt(#[from] std::fmt::Error),
+
+    #[error("cannot extract public key from {0}")]
+    PublicKeyExtraction(String),
 
     #[error("{0}")]
     Message(String),

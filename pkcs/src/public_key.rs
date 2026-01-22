@@ -23,7 +23,7 @@
 
 use asn1::{ASN1Object, Element};
 use der::Der;
-use pem::{Label, Pem};
+use pem::{Label, Pem, ToPem};
 
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
@@ -217,6 +217,24 @@ impl From<RSAPublicKey> for PublicKey {
 impl From<Pkcs8PublicKey> for PublicKey {
     fn from(key: Pkcs8PublicKey) -> Self {
         PublicKey::Spki(key)
+    }
+}
+
+impl ToPem for PublicKey {
+    type Error = Error;
+
+    fn pem_label(&self) -> Label {
+        match self {
+            PublicKey::Pkcs1(_) => Label::RSAPublicKey,
+            PublicKey::Spki(_) => Label::PublicKey,
+        }
+    }
+
+    fn to_pem(&self) -> Result<Pem> {
+        match self {
+            PublicKey::Pkcs1(key) => key.to_pem().map_err(Error::from),
+            PublicKey::Spki(key) => key.to_pem().map_err(Error::from),
+        }
     }
 }
 

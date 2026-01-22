@@ -2,6 +2,7 @@ use super::Config;
 use crate::error::Result;
 use crate::output::OutputFormat;
 use crate::utils::{calculate_fingerprint, format_hex_dump};
+use pkcs::PrivateKeyExt;
 use pkix_types::OidName;
 use std::fmt::Write;
 
@@ -27,6 +28,8 @@ pub(crate) fn output_ec_private_key(
             let mut output = String::new();
 
             writeln!(output, "EC Private Key (SEC1)")?;
+            writeln!(output, "Algorithm: {}", private_key.algorithm().name())?;
+            writeln!(output, "Key Size: {} bits", private_key.key_size())?;
             writeln!(output, "Version: {}", private_key.version as u8)?;
 
             if let Some(curve) = private_key.parameters {
@@ -89,7 +92,12 @@ pub(crate) fn output_ec_private_key(
                 .parameters
                 .and_then(|c| c.oid_name())
                 .unwrap_or("unknown");
-            println!("EC Private Key | {}", curve_name);
+            println!(
+                "EC Private Key | {} | {} | {} bits",
+                private_key.algorithm().name(),
+                curve_name,
+                private_key.key_size()
+            );
         }
     }
 
@@ -107,6 +115,5 @@ pub(crate) fn output_ec_private_key_fingerprint(
 }
 
 pub(crate) fn output_ec_key_size(private_key: &pkcs::sec1::ECPrivateKey) -> String {
-    let key_bits = private_key.private_key.as_bytes().len() * 8;
-    format!("Key Size: {} bits", key_bits)
+    format!("Key Size: {} bits", private_key.key_size())
 }
