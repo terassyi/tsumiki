@@ -73,6 +73,12 @@ impl AsRef<Integer> for CertificateSerialNumber {
     }
 }
 
+impl std::fmt::Display for CertificateSerialNumber {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.format_hex())
+    }
+}
+
 impl Deref for CertificateSerialNumber {
     type Target = Integer;
 

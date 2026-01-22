@@ -1,0 +1,23 @@
+[package]
+name = "examples"
+version.workspace = true
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "tls-echo-server"
+path = "tls_echo_server.rs"
+
+[[bin]]
+name = "tls-echo-client"
+path = "tls_echo_client.rs"
+
+[dependencies]
+x509 = { path = "../x509", features = ["rustls"] }
+pkcs = { path = "../pkcs", features = ["rustls"] }
+pem = { path = "../pem" }
+tsumiki = { path = "../tsumiki" }
+
+rustls = "0.23"
+tokio = { version = "1", features = ["full"] }
+tokio-rustls = "0.26"
