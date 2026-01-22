@@ -10,6 +10,7 @@ use tsumiki::encoder::Encoder;
 use crate::error::{Error, Result};
 use crate::pkcs1::{self, RSAPrivateKey};
 use crate::pkcs8::{self, OneAsymmetricKey};
+use crate::private_key::PrivateKey;
 use crate::sec1::{self, ECPrivateKey};
 
 // ============================================================================
@@ -180,6 +181,68 @@ impl TryFrom<PrivateKeyDer<'_>> for OneAsymmetricKey {
                 "expected PKCS#8 key".into(),
             ))),
         }
+    }
+}
+
+// ============================================================================
+// PrivateKey <-> PrivateKeyDer
+// ============================================================================
+
+/// Converts a `PrivateKeyDer` to a `PrivateKey`.
+/// Automatically detects the format from the enum variant.
+impl TryFrom<PrivateKeyDer<'_>> for PrivateKey {
+    type Error = Error;
+
+    fn try_from(key_der: PrivateKeyDer<'_>) -> Result<Self> {
+        match key_der {
+            PrivateKeyDer::Pkcs1(pkcs1) => {
+                let key = RSAPrivateKey::try_from(pkcs1)?;
+                Ok(PrivateKey::Pkcs1(key))
+            }
+            PrivateKeyDer::Sec1(sec1) => {
+                let key = ECPrivateKey::try_from(sec1)?;
+                Ok(PrivateKey::Sec1(key))
+            }
+            PrivateKeyDer::Pkcs8(pkcs8) => {
+                let key = OneAsymmetricKey::try_from(pkcs8)?;
+                Ok(PrivateKey::Pkcs8(key))
+            }
+            _ => Err(Error::Pkcs8(pkcs8::Error::InvalidStructure(
+                "unknown private key format".into(),
+            ))),
+        }
+    }
+}
+
+/// Converts a `PrivateKey` to a `PrivateKeyDer<'static>`.
+/// The output format matches the input format.
+impl TryFrom<&PrivateKey> for PrivateKeyDer<'static> {
+    type Error = Error;
+
+    fn try_from(key: &PrivateKey) -> Result<Self> {
+        match key {
+            PrivateKey::Pkcs1(rsa) => {
+                let der = PrivatePkcs1KeyDer::try_from(rsa)?;
+                Ok(PrivateKeyDer::Pkcs1(der))
+            }
+            PrivateKey::Sec1(ec) => {
+                let der = PrivateSec1KeyDer::try_from(ec)?;
+                Ok(PrivateKeyDer::Sec1(der))
+            }
+            PrivateKey::Pkcs8(pkcs8) => {
+                let der = PrivatePkcs8KeyDer::try_from(pkcs8)?;
+                Ok(PrivateKeyDer::Pkcs8(der))
+            }
+        }
+    }
+}
+
+/// Converts a `PrivateKey` to a `PrivateKeyDer<'static>`.
+impl TryFrom<PrivateKey> for PrivateKeyDer<'static> {
+    type Error = Error;
+
+    fn try_from(key: PrivateKey) -> Result<Self> {
+        PrivateKeyDer::try_from(&key)
     }
 }
 
@@ -497,6 +560,74 @@ D/mxYwPGfvOaoea8yxi7iXp8fM29MtiTHu/KdyWATVdPufYQvMw1M2OG
             TargetType::Pkcs8 => {
                 assert!(OneAsymmetricKey::try_from(private_key_der).is_err());
             }
+        }
+    }
+
+    // ========================================================================
+    // PrivateKey <-> PrivateKeyDer tests
+    // ========================================================================
+
+    /// Test PrivateKeyDer -> PrivateKey conversion for all formats
+    #[rstest]
+    #[case::pkcs1(RSA_2048_PKCS1_PEM, KeyType::Pkcs1, Some(2048))]
+    #[case::sec1(EC_P256_SEC1_PEM, KeyType::Sec1, Some(256))]
+    // PKCS#8 v1 keys don't have public key, so key_size returns 0
+    #[case::pkcs8_rsa(RSA_PKCS8_PEM, KeyType::Pkcs8, None)]
+    #[case::pkcs8_ec(EC_PKCS8_PEM, KeyType::Pkcs8, None)]
+    fn test_private_key_der_to_private_key(
+        #[case] pem_str: &str,
+        #[case] key_type: KeyType,
+        #[case] expected_key_size: Option<u32>,
+    ) {
+        let pem = Pem::from_str(pem_str).unwrap();
+        let der_bytes: Vec<u8> = pem.decode().unwrap();
+
+        let private_key_der = match key_type {
+            KeyType::Pkcs1 => PrivateKeyDer::Pkcs1(PrivatePkcs1KeyDer::from(der_bytes)),
+            KeyType::Sec1 => PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(der_bytes)),
+            KeyType::Pkcs8 => PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(der_bytes)),
+        };
+
+        let private_key = PrivateKey::try_from(private_key_der).unwrap();
+        if let Some(expected) = expected_key_size {
+            assert_eq!(private_key.key_size(), expected);
+        }
+
+        match key_type {
+            KeyType::Pkcs1 => assert!(private_key.is_pkcs1()),
+            KeyType::Sec1 => assert!(private_key.is_sec1()),
+            KeyType::Pkcs8 => assert!(private_key.is_pkcs8()),
+        }
+    }
+
+    /// Test PrivateKey -> PrivateKeyDer roundtrip
+    #[rstest]
+    #[case::pkcs1(RSA_2048_PKCS1_PEM, KeyType::Pkcs1)]
+    #[case::sec1(EC_P256_SEC1_PEM, KeyType::Sec1)]
+    #[case::pkcs8_rsa(RSA_PKCS8_PEM, KeyType::Pkcs8)]
+    #[case::pkcs8_ec(EC_PKCS8_PEM, KeyType::Pkcs8)]
+    fn test_private_key_to_private_key_der_roundtrip(
+        #[case] pem_str: &str,
+        #[case] key_type: KeyType,
+    ) {
+        let pem = Pem::from_str(pem_str).unwrap();
+        let der_bytes: Vec<u8> = pem.decode().unwrap();
+
+        let private_key_der = match key_type {
+            KeyType::Pkcs1 => PrivateKeyDer::Pkcs1(PrivatePkcs1KeyDer::from(der_bytes)),
+            KeyType::Sec1 => PrivateKeyDer::Sec1(PrivateSec1KeyDer::from(der_bytes)),
+            KeyType::Pkcs8 => PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(der_bytes)),
+        };
+
+        // PrivateKeyDer -> PrivateKey -> PrivateKeyDer
+        let private_key = PrivateKey::try_from(private_key_der).unwrap();
+        let roundtrip_der = PrivateKeyDer::try_from(&private_key).unwrap();
+
+        // Verify format is preserved
+        match key_type {
+            KeyType::Pkcs1 => assert!(matches!(roundtrip_der, PrivateKeyDer::Pkcs1(_))),
+            KeyType::Sec1 => assert!(matches!(roundtrip_der, PrivateKeyDer::Sec1(_))),
+            KeyType::Pkcs8 => assert!(matches!(roundtrip_der, PrivateKeyDer::Pkcs8(_))),
         }
     }
 }
