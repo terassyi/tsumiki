@@ -424,16 +424,3 @@ pub(crate) fn output_encrypted_private_key_info_fingerprint(
     println!("{}", fingerprint);
     Ok(())
 }
-
-pub(crate) fn output_private_key_size(key: &pkcs::pkcs8::OneAsymmetricKey) -> String {
-    let key_size = key.key_size();
-    if key_size == 0 {
-        "Key (v1 key - size not available)".to_string()
-    } else {
-        format!("Key Size: {} bits", key_size)
-    }
-}
-
-pub(crate) fn output_public_key_size(key: &pkcs::pkcs8::PublicKey) -> String {
-    format!("Key Size: {} bits", key.key_size())
-}

@@ -113,7 +113,3 @@ pub(crate) fn output_ec_private_key_fingerprint(
     println!("{}", fingerprint);
     Ok(())
 }
-
-pub(crate) fn output_ec_key_size(private_key: &pkcs::sec1::ECPrivateKey) -> String {
-    format!("Key Size: {} bits", private_key.key_size())
-}

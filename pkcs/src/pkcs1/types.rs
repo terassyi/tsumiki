@@ -352,6 +352,23 @@ impl ToPem for RSAPublicKey {
     }
 }
 
+// RSAPrivateKey -> PEM encoder
+impl ToPem for RSAPrivateKey {
+    type Error = Error;
+
+    fn pem_label(&self) -> Label {
+        Label::RSAPrivateKey
+    }
+
+    fn to_pem(&self) -> Result<Pem> {
+        let element = self.encode()?;
+        let asn1_obj = ASN1Object::new(vec![element]);
+        let der = asn1_obj.encode()?;
+        let der_bytes = der.encode()?;
+        Ok(Pem::from_bytes(self.pem_label(), &der_bytes))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

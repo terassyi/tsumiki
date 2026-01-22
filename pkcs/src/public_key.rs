@@ -36,24 +36,88 @@ use crate::private_key::KeyAlgorithm;
 ///
 /// This trait provides a unified interface for accessing properties
 /// common to all public key formats (PKCS#1, X.509/PKCS#8).
+///
+/// # Implementors
+///
+/// - [`RSAPublicKey`](crate::pkcs1::RSAPublicKey) - PKCS#1 RSA public keys
+/// - [`PublicKey`](crate::pkcs8::PublicKey) (PKCS#8) - X.509/SPKI public keys
+/// - [`PublicKey`] - Unified enum for all formats
+///
+/// # Examples
+///
+/// ```ignore
+/// use pkcs::{PublicKey, PublicKeyExt};
+/// use tsumiki::decoder::Decoder;
+/// use pem::Pem;
+///
+/// let pem: Pem = "-----BEGIN PUBLIC KEY-----...".parse()?;
+/// let key: PublicKey = pem.decode()?;
+///
+/// println!("Algorithm: {}", key.algorithm());
+/// println!("Key size: {} bits", key.key_size());
+/// ```
 pub trait PublicKeyExt {
     /// Returns the key size in bits.
     ///
     /// For RSA keys, this is the modulus bit length.
-    /// For EC keys, this is determined by the curve.
-    /// For Ed25519/Ed448, this returns the standard key sizes.
+    /// For EC keys, this is the uncompressed point bit length (e.g., 520 for P-256).
+    /// For Ed25519, this returns 256 bits.
+    /// For Ed448, this returns 448 bits.
     ///
     /// Returns 0 if the key size cannot be determined.
+    ///
+    /// # Note on EC Key Sizes
+    ///
+    /// For EC public keys, the returned size represents the uncompressed point format,
+    /// which is `1 + 2 * curve_bits / 8` bytes, or `8 + 2 * curve_bits` bits.
+    /// For example, a P-256 curve produces a 520-bit public key (65 bytes).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use pkcs::{PublicKey, PublicKeyExt};
+    ///
+    /// let key: PublicKey = /* ... */;
+    /// println!("Key size: {} bits", key.key_size());
+    /// ```
     fn key_size(&self) -> u32;
 
     /// Returns the algorithm type of this key.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use pkcs::{PublicKey, PublicKeyExt, KeyAlgorithm};
+    ///
+    /// let key: PublicKey = /* ... */;
+    /// match key.algorithm() {
+    ///     KeyAlgorithm::Rsa => println!("RSA key"),
+    ///     KeyAlgorithm::Ec => println!("Elliptic curve key"),
+    ///     KeyAlgorithm::Ed25519 => println!("Ed25519 key"),
+    ///     KeyAlgorithm::Ed448 => println!("Ed448 key"),
+    ///     KeyAlgorithm::Unknown => println!("Unknown algorithm"),
+    /// }
+    /// ```
     fn algorithm(&self) -> KeyAlgorithm;
 
-    /// Returns the raw public key bytes.
+    /// Returns the raw public key bytes, if available.
     ///
-    /// For PKCS#1 RSA keys, this returns `None` as the key is structured
-    /// (modulus + exponent). Use the `RSAPublicKey` type directly for access.
-    /// For X.509/PKCS#8 keys, this returns the subject public key bytes.
+    /// # Availability
+    ///
+    /// - **PKCS#1 RSA keys**: Returns `None` (the key is structured as modulus + exponent;
+    ///   use [`RSAPublicKey`](crate::pkcs1::RSAPublicKey) directly for access)
+    /// - **X.509/SPKI keys**: Returns the subject public key bytes
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use pkcs::{PublicKey, PublicKeyExt};
+    ///
+    /// let key: PublicKey = /* ... */;
+    /// if let Some(bytes) = key.public_key_bytes() {
+    ///     println!("Public key: {} bytes", bytes.len());
+    /// }
+    /// ```
     fn public_key_bytes(&self) -> Option<&[u8]>;
 }
 

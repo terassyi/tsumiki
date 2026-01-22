@@ -1,7 +1,7 @@
 use asn1::{ASN1Object, BitString, Element, Integer, OctetString};
 use der::Der;
 use num_bigint::BigInt;
-use pem::Pem;
+use pem::{Label, Pem, ToPem};
 use pkix_types::algorithm::AlgorithmIdentifier;
 use pkix_types::algorithm::parameters::ec::NamedCurve;
 use pkix_types::{OidName, SubjectPublicKeyInfo};
@@ -907,11 +907,11 @@ impl Decoder<Pem, PublicKey> for Pem {
     }
 }
 
-impl pem::ToPem for PublicKey {
+impl ToPem for PublicKey {
     type Error = Error;
 
     fn pem_label(&self) -> pem::Label {
-        pem::Label::PublicKey
+        Label::PublicKey
     }
 
     fn to_pem(&self) -> Result<Pem> {
@@ -919,13 +919,29 @@ impl pem::ToPem for PublicKey {
         let element: Element = self.encode()?;
 
         // Convert Element to ASN1Object and then to Der
-        let asn1_obj = asn1::ASN1Object::new(vec![element.clone()]);
-        let der: Der = asn1_obj.encode().map_err(Error::Asn1)?;
+        let asn1_obj = ASN1Object::new(vec![element.clone()]);
+        let der = asn1_obj.encode().map_err(Error::Asn1)?;
 
         // Encode Der to bytes
-        let der_bytes: Vec<u8> = Encoder::<Der, Vec<u8>>::encode(&der)?;
+        let der_bytes = der.encode()?;
 
         // Create PEM from DER bytes
+        Ok(Pem::from_bytes(self.pem_label(), &der_bytes))
+    }
+}
+
+impl ToPem for OneAsymmetricKey {
+    type Error = Error;
+
+    fn pem_label(&self) -> pem::Label {
+        Label::PrivateKey
+    }
+
+    fn to_pem(&self) -> Result<Pem> {
+        let element: Element = self.encode()?;
+        let asn1_obj = ASN1Object::new(vec![element]);
+        let der = asn1_obj.encode().map_err(Error::Asn1)?;
+        let der_bytes = der.encode()?;
         Ok(Pem::from_bytes(self.pem_label(), &der_bytes))
     }
 }

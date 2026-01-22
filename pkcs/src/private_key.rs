@@ -27,7 +27,7 @@
 
 use asn1::{ASN1Object, Element};
 use der::Der;
-use pem::{Label, Pem};
+use pem::{Label, Pem, ToPem};
 use pkix_types::algorithm::AlgorithmIdentifier;
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
@@ -91,27 +91,96 @@ impl std::fmt::Display for KeyAlgorithm {
 ///
 /// This trait provides a unified interface for accessing properties
 /// common to all private key formats (PKCS#1, SEC1, PKCS#8).
+///
+/// # Implementors
+///
+/// - [`RSAPrivateKey`](crate::pkcs1::RSAPrivateKey) - PKCS#1 RSA private keys
+/// - [`ECPrivateKey`](crate::sec1::ECPrivateKey) - SEC1 EC private keys
+/// - [`OneAsymmetricKey`](crate::pkcs8::OneAsymmetricKey) - PKCS#8 generic private keys
+/// - [`PrivateKey`] - Unified enum for all formats
+///
+/// # Examples
+///
+/// ```ignore
+/// use pkcs::{PrivateKey, PrivateKeyExt};
+/// use tsumiki::decoder::Decoder;
+/// use pem::Pem;
+///
+/// let pem: Pem = "-----BEGIN RSA PRIVATE KEY-----...".parse()?;
+/// let key: PrivateKey = pem.decode()?;
+///
+/// println!("Algorithm: {}", key.algorithm());
+/// println!("Key size: {} bits", key.key_size());
+///
+/// if let Some(pubkey) = key.public_key() {
+///     println!("Public key extracted successfully");
+/// }
+/// ```
 pub trait PrivateKeyExt {
     /// Returns the key size in bits.
     ///
     /// For RSA keys, this is the modulus bit length.
-    /// For EC keys, this is determined by the curve.
-    /// For Ed25519/Ed448, this returns the standard key sizes.
+    /// For EC keys, this is determined by the curve (e.g., 256 for P-256).
+    /// For Ed25519, this returns 256 bits.
+    /// For Ed448, this returns 448 bits.
     ///
-    /// Returns 0 if the key size cannot be determined.
+    /// Returns 0 if the key size cannot be determined (e.g., PKCS#8 v1 keys
+    /// without embedded public key information).
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use pkcs::{PrivateKey, PrivateKeyExt};
+    ///
+    /// let key: PrivateKey = /* ... */;
+    /// match key.key_size() {
+    ///     0 => println!("Key size unknown"),
+    ///     bits => println!("Key size: {} bits", bits),
+    /// }
+    /// ```
     fn key_size(&self) -> u32;
 
     /// Returns the algorithm type of this key.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use pkcs::{PrivateKey, PrivateKeyExt, KeyAlgorithm};
+    ///
+    /// let key: PrivateKey = /* ... */;
+    /// match key.algorithm() {
+    ///     KeyAlgorithm::Rsa => println!("RSA key"),
+    ///     KeyAlgorithm::Ec => println!("Elliptic curve key"),
+    ///     KeyAlgorithm::Ed25519 => println!("Ed25519 key"),
+    ///     KeyAlgorithm::Ed448 => println!("Ed448 key"),
+    ///     KeyAlgorithm::Unknown => println!("Unknown algorithm"),
+    /// }
+    /// ```
     fn algorithm(&self) -> KeyAlgorithm;
 
-    /// Returns the public key bytes, if available.
+    /// Returns the raw public key bytes, if available.
     ///
-    /// Not all key formats include the public key:
-    /// - PKCS#1 RSA keys contain the public exponent and modulus (use `RSAPrivateKey::public_key()` instead)
-    /// - SEC1 EC keys may optionally include the public key
-    /// - PKCS#8 v2 keys may include the public key
+    /// This method returns the public key as raw bytes when available in the
+    /// key structure. For structured access to the public key, use [`public_key()`](Self::public_key)
+    /// instead.
     ///
-    /// Returns `None` if the public key is not available in raw byte form.
+    /// # Availability
+    ///
+    /// - **PKCS#1 RSA keys**: Returns `None` (use [`public_key()`](Self::public_key) for structured access)
+    /// - **SEC1 EC keys**: Returns the uncompressed point bytes if present
+    /// - **PKCS#8 v2 keys**: Returns the public key bytes if present
+    /// - **PKCS#8 v1 keys**: Returns `None` (no public key embedded)
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use pkcs::{PrivateKey, PrivateKeyExt};
+    ///
+    /// let key: PrivateKey = /* ... */;
+    /// if let Some(bytes) = key.public_key_bytes() {
+    ///     println!("Public key: {} bytes", bytes.len());
+    /// }
+    /// ```
     fn public_key_bytes(&self) -> Option<&[u8]>;
 
     /// Extracts the public key from this private key, if available.
@@ -119,12 +188,36 @@ pub trait PrivateKeyExt {
     /// Returns a [`PublicKey`](crate::PublicKey) enum that can represent the public key
     /// in either PKCS#1 or X.509/SPKI format.
     ///
-    /// Not all private key formats include the public key:
-    /// - PKCS#1 RSA keys: Returns `Some(PublicKey::Pkcs1(...))` with modulus and exponent
-    /// - SEC1 EC keys: Returns `Some(PublicKey::Spki(...))` if the public key is present
-    /// - PKCS#8 v2 keys: Returns `Some(PublicKey::Spki(...))` if the public key is present
+    /// # Return Format
     ///
-    /// Returns `None` if the public key is not available.
+    /// The format of the returned public key depends on the input format:
+    ///
+    /// | Input Format | Output Format | Condition |
+    /// |--------------|---------------|-----------|
+    /// | PKCS#1 RSA   | `PublicKey::Pkcs1` | Always available |
+    /// | SEC1 EC      | `PublicKey::Spki` | If public key present |
+    /// | PKCS#8 v1    | `None` | No public key embedded |
+    /// | PKCS#8 v2    | `PublicKey::Spki` | If public key present |
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// use pkcs::{PrivateKey, PrivateKeyExt, PublicKey};
+    /// use pem::ToPem;
+    ///
+    /// let key: PrivateKey = /* ... */;
+    /// if let Some(pubkey) = key.public_key() {
+    ///     // Export to PEM format
+    ///     let pem = pubkey.to_pem()?;
+    ///     println!("{}", pem);
+    ///
+    ///     // Check the format
+    ///     match pubkey {
+    ///         PublicKey::Pkcs1(_) => println!("PKCS#1 RSA public key"),
+    ///         PublicKey::Spki(_) => println!("X.509/SPKI public key"),
+    ///     }
+    /// }
+    /// ```
     fn public_key(&self) -> Option<crate::PublicKey>;
 }
 
@@ -182,6 +275,13 @@ impl PrivateKey {
     /// This is a convenience method that delegates to [`PrivateKeyExt::public_key_bytes`].
     pub fn public_key_bytes(&self) -> Option<&[u8]> {
         <Self as PrivateKeyExt>::public_key_bytes(self)
+    }
+
+    /// Extract the public key from this private key, if available.
+    ///
+    /// This is a convenience method that delegates to [`PrivateKeyExt::public_key`].
+    pub fn public_key(&self) -> Option<crate::PublicKey> {
+        <Self as PrivateKeyExt>::public_key(self)
     }
 
     /// Returns `true` if this is a PKCS#1 RSA key.
@@ -327,6 +427,26 @@ impl From<ECPrivateKey> for PrivateKey {
 impl From<OneAsymmetricKey> for PrivateKey {
     fn from(key: OneAsymmetricKey) -> Self {
         PrivateKey::Pkcs8(key)
+    }
+}
+
+impl ToPem for PrivateKey {
+    type Error = Error;
+
+    fn pem_label(&self) -> Label {
+        match self {
+            PrivateKey::Pkcs1(_) => Label::RSAPrivateKey,
+            PrivateKey::Sec1(_) => Label::ECPrivateKey,
+            PrivateKey::Pkcs8(_) => Label::PrivateKey,
+        }
+    }
+
+    fn to_pem(&self) -> Result<Pem> {
+        match self {
+            PrivateKey::Pkcs1(key) => key.to_pem().map_err(Error::from),
+            PrivateKey::Sec1(key) => key.to_pem().map_err(Error::from),
+            PrivateKey::Pkcs8(key) => key.to_pem().map_err(Error::from),
+        }
     }
 }
 
@@ -505,5 +625,81 @@ JAOJrxibNzk6iWT9+VFcxO3m
             KeyFormat::Sec1 => assert!(key.is_sec1()),
             KeyFormat::Pkcs8 => assert!(key.is_pkcs8()),
         }
+    }
+
+    #[rstest]
+    #[case::pkcs1_rsa(RSA_2048_PKCS1, true, KeyAlgorithm::Rsa, 2048, 2048)]
+    #[case::sec1_ec(EC_P256_SEC1, true, KeyAlgorithm::Ec, 256, 520)]
+    #[case::pkcs8_rsa_v1(RSA_2048_PKCS8, false, KeyAlgorithm::Rsa, 0, 0)]
+    fn test_public_key_extraction(
+        #[case] pem_str: &str,
+        #[case] has_public_key: bool,
+        #[case] expected_algorithm: KeyAlgorithm,
+        #[case] expected_private_key_size: u32,
+        #[case] expected_public_key_size: u32,
+    ) {
+        let pem = Pem::from_str(pem_str).expect("Failed to parse PEM");
+        let key: PrivateKey = pem.decode().expect("Failed to decode PrivateKey");
+
+        // Verify algorithm
+        assert_eq!(key.algorithm(), expected_algorithm);
+
+        // Verify key size
+        assert_eq!(key.key_size(), expected_private_key_size);
+
+        // Verify public key extraction
+        let pub_key = key.public_key();
+        assert_eq!(pub_key.is_some(), has_public_key);
+
+        if let Some(pub_key) = pub_key {
+            // Public key should have the same algorithm
+            assert_eq!(pub_key.algorithm(), expected_algorithm);
+
+            // Verify public key size
+            assert_eq!(pub_key.key_size(), expected_public_key_size);
+        }
+    }
+
+    #[test]
+    fn test_public_key_extraction_pkcs1_returns_pkcs1_format() {
+        let pem = Pem::from_str(RSA_2048_PKCS1).expect("Failed to parse PEM");
+        let key: PrivateKey = pem.decode().expect("Failed to decode PrivateKey");
+
+        let pub_key = key.public_key().expect("Should have public key");
+        assert!(pub_key.is_pkcs1());
+        assert!(!pub_key.is_spki());
+    }
+
+    #[test]
+    fn test_public_key_extraction_sec1_returns_spki_format() {
+        let pem = Pem::from_str(EC_P256_SEC1).expect("Failed to parse PEM");
+        let key: PrivateKey = pem.decode().expect("Failed to decode PrivateKey");
+
+        let pub_key = key.public_key().expect("Should have public key");
+        assert!(!pub_key.is_pkcs1());
+        assert!(pub_key.is_spki());
+    }
+
+    #[rstest]
+    #[case::pkcs1_rsa(RSA_2048_PKCS1, Label::RSAPrivateKey)]
+    #[case::sec1_ec(EC_P256_SEC1, Label::ECPrivateKey)]
+    #[case::pkcs8_rsa(RSA_2048_PKCS8, Label::PrivateKey)]
+    fn test_to_pem_roundtrip(#[case] pem_str: &str, #[case] expected_label: Label) {
+        let original_pem = Pem::from_str(pem_str).expect("Failed to parse PEM");
+        let key: PrivateKey = original_pem.decode().expect("Failed to decode PrivateKey");
+
+        // Verify PEM label
+        assert_eq!(key.pem_label(), expected_label);
+
+        // Convert to PEM
+        let exported_pem = key.to_pem().expect("Failed to export to PEM");
+        assert_eq!(exported_pem.label(), expected_label);
+
+        // Decode back and verify
+        let decoded_key: PrivateKey = exported_pem
+            .decode()
+            .expect("Failed to decode exported PEM");
+        assert_eq!(decoded_key.algorithm(), key.algorithm());
+        assert_eq!(decoded_key.key_size(), key.key_size());
     }
 }
