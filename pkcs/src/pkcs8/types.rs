@@ -1,17 +1,19 @@
 use asn1::{ASN1Object, BitString, Element, Integer, OctetString};
 use der::Der;
 use num_bigint::BigInt;
-use pem::Pem;
+use pem::{Label, Pem, ToPem};
+use pkix_types::algorithm::AlgorithmIdentifier;
+use pkix_types::algorithm::parameters::ec::NamedCurve;
+use pkix_types::{OidName, SubjectPublicKeyInfo};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
 use super::Result;
 use super::error::Error;
+use crate::PublicKeyExt;
 use crate::pkcs9::Attributes;
-use pkix_types::OidName;
-use pkix_types::algorithm::AlgorithmIdentifier;
-use pkix_types::algorithm::parameters::ec::NamedCurve;
+use crate::private_key::{KeyAlgorithm, PrivateKeyExt};
 
 // PKCS#8 specific algorithm OID constants (RFC 8410)
 pub const OID_ED25519: &str = "1.3.101.112";
@@ -323,46 +325,45 @@ impl Decoder<Pem, OneAsymmetricKey> for Pem {
     }
 }
 
-impl OneAsymmetricKey {
-    /// Extract the public key from this private key
-    ///
-    /// Returns `Some(PublicKey)` if the public_key field is present (v2 keys).
-    /// Returns `None` if the public_key field is not present (v1 keys).
-    pub fn public_key(&self) -> Option<PublicKey> {
-        self.public_key.as_ref().map(|public_key_bits| {
-            let spki = pkix_types::SubjectPublicKeyInfo::new(
-                self.private_key_algorithm.clone(),
-                public_key_bits.clone(),
-            );
-            PublicKey::new(spki)
-        })
+impl PrivateKeyExt for OneAsymmetricKey {
+    fn key_size(&self) -> u32 {
+        let alg_oid_str = self.private_key_algorithm.algorithm().to_string();
+        let pubkey_bits = || {
+            self.public_key
+                .as_ref()
+                .map_or(0, |pk| pk.as_ref().len() as u32 * 8)
+        };
+
+        match alg_oid_str.as_str() {
+            AlgorithmIdentifier::OID_RSA_ENCRYPTION => pubkey_bits(),
+            AlgorithmIdentifier::OID_EC_PUBLIC_KEY => pubkey_bits(),
+            OID_ED25519 => 256,
+            OID_ED448 => 456,
+            _ => 0,
+        }
     }
 
-    /// Get the key size in bits
-    pub fn key_size(&self) -> u32 {
+    fn algorithm(&self) -> KeyAlgorithm {
         let alg_oid_str = self.private_key_algorithm.algorithm().to_string();
 
-        if alg_oid_str == AlgorithmIdentifier::OID_RSA_ENCRYPTION {
-            // RSA - size from public key field if available
-            if let Some(pub_key) = self.public_key() {
-                pub_key.as_ref().subject_public_key().as_ref().len() as u32 * 8
-            } else {
-                0 // v1 key - size not available
-            }
-        } else if alg_oid_str == AlgorithmIdentifier::OID_EC_PUBLIC_KEY {
-            // EC - size from public key field if available
-            if let Some(pub_key) = self.public_key() {
-                pub_key.as_ref().subject_public_key().as_ref().len() as u32 * 8
-            } else {
-                0 // v1 key - size not available
-            }
-        } else if alg_oid_str == crate::pkcs8::OID_ED25519 {
-            256
-        } else if alg_oid_str == crate::pkcs8::OID_ED448 {
-            456
-        } else {
-            0
+        match alg_oid_str.as_str() {
+            AlgorithmIdentifier::OID_RSA_ENCRYPTION => KeyAlgorithm::Rsa,
+            AlgorithmIdentifier::OID_EC_PUBLIC_KEY => KeyAlgorithm::Ec,
+            OID_ED25519 => KeyAlgorithm::Ed25519,
+            OID_ED448 => KeyAlgorithm::Ed448,
+            _ => KeyAlgorithm::Unknown,
         }
+    }
+
+    fn public_key_bytes(&self) -> Option<&[u8]> {
+        self.public_key.as_ref().map(|bs| bs.as_ref())
+    }
+
+    fn public_key(&self) -> Option<crate::PublicKey> {
+        let public_key = self.public_key.as_ref()?;
+        let spki =
+            SubjectPublicKeyInfo::new(self.private_key_algorithm.clone(), public_key.clone());
+        Some(crate::PublicKey::Spki(PublicKey::new(spki)))
     }
 }
 
@@ -759,19 +760,14 @@ impl PublicKey {
     /// Get key size in bits (unified API with other key types)
     pub fn key_size(&self) -> u32 {
         let alg_oid_str = self.algorithm_oid().to_string();
+        let pubkey_bits = || self.0.subject_public_key().as_ref().len() as u32 * 8;
 
-        if alg_oid_str == AlgorithmIdentifier::OID_RSA_ENCRYPTION {
-            // RSA
-            self.0.subject_public_key().as_ref().len() as u32 * 8
-        } else if alg_oid_str == AlgorithmIdentifier::OID_EC_PUBLIC_KEY {
-            // EC
-            self.0.subject_public_key().as_ref().len() as u32 * 8
-        } else if alg_oid_str == crate::pkcs8::OID_ED25519 {
-            256
-        } else if alg_oid_str == crate::pkcs8::OID_ED448 {
-            456
-        } else {
-            0
+        match alg_oid_str.as_str() {
+            AlgorithmIdentifier::OID_RSA_ENCRYPTION => pubkey_bits(),
+            AlgorithmIdentifier::OID_EC_PUBLIC_KEY => pubkey_bits(),
+            OID_ED25519 => 256,
+            OID_ED448 => 456,
+            _ => 0,
         }
     }
 
@@ -840,6 +836,29 @@ impl OidName for PublicKey {
     }
 }
 
+impl PublicKeyExt for PublicKey {
+    fn key_size(&self) -> u32 {
+        // Delegate to the existing key_size method
+        PublicKey::key_size(self)
+    }
+
+    fn algorithm(&self) -> KeyAlgorithm {
+        let alg_oid_str = self.algorithm_oid().to_string();
+
+        match alg_oid_str.as_str() {
+            AlgorithmIdentifier::OID_RSA_ENCRYPTION => KeyAlgorithm::Rsa,
+            AlgorithmIdentifier::OID_EC_PUBLIC_KEY => KeyAlgorithm::Ec,
+            OID_ED25519 => KeyAlgorithm::Ed25519,
+            OID_ED448 => KeyAlgorithm::Ed448,
+            _ => KeyAlgorithm::Unknown,
+        }
+    }
+
+    fn public_key_bytes(&self) -> Option<&[u8]> {
+        Some(self.subject_public_key().as_ref())
+    }
+}
+
 impl DecodableFrom<Element> for PublicKey {}
 
 // Decoder implementation for PublicKey from Element
@@ -888,11 +907,11 @@ impl Decoder<Pem, PublicKey> for Pem {
     }
 }
 
-impl pem::ToPem for PublicKey {
+impl ToPem for PublicKey {
     type Error = Error;
 
     fn pem_label(&self) -> pem::Label {
-        pem::Label::PublicKey
+        Label::PublicKey
     }
 
     fn to_pem(&self) -> Result<Pem> {
@@ -900,13 +919,29 @@ impl pem::ToPem for PublicKey {
         let element: Element = self.encode()?;
 
         // Convert Element to ASN1Object and then to Der
-        let asn1_obj = asn1::ASN1Object::new(vec![element.clone()]);
-        let der: Der = asn1_obj.encode().map_err(Error::Asn1)?;
+        let asn1_obj = ASN1Object::new(vec![element.clone()]);
+        let der = asn1_obj.encode().map_err(Error::Asn1)?;
 
         // Encode Der to bytes
-        let der_bytes: Vec<u8> = Encoder::<Der, Vec<u8>>::encode(&der)?;
+        let der_bytes = der.encode()?;
 
         // Create PEM from DER bytes
+        Ok(Pem::from_bytes(self.pem_label(), &der_bytes))
+    }
+}
+
+impl ToPem for OneAsymmetricKey {
+    type Error = Error;
+
+    fn pem_label(&self) -> pem::Label {
+        Label::PrivateKey
+    }
+
+    fn to_pem(&self) -> Result<Pem> {
+        let element: Element = self.encode()?;
+        let asn1_obj = ASN1Object::new(vec![element]);
+        let der = asn1_obj.encode().map_err(Error::Asn1)?;
+        let der_bytes = der.encode()?;
         Ok(Pem::from_bytes(self.pem_label(), &der_bytes))
     }
 }

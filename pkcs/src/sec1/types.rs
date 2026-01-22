@@ -7,13 +7,17 @@ use asn1::{ASN1Object, BitString, Element, Integer, OctetString};
 use der::Der;
 use num_bigint::BigInt;
 use pem::{Label, Pem, ToPem};
-use pkix_types::OidName;
 use pkix_types::algorithm::parameters::ec::NamedCurve;
+use pkix_types::algorithm::{AlgorithmIdentifier, AlgorithmParameters, RawAlgorithmParameter};
+use pkix_types::{OidName, SubjectPublicKeyInfo};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
 use super::error::{Error, Result};
+use crate::PublicKey;
+use crate::pkcs8::PublicKey as Pkcs8PublicKey;
+use crate::private_key::{KeyAlgorithm, PrivateKeyExt};
 
 /*
 RFC 5915 - Elliptic Curve Private Key Structure
@@ -102,11 +106,17 @@ impl ECPrivateKey {
         }
     }
 
-    /// Returns the key size in bits based on the curve.
+    /// Returns the curve name if parameters are present.
     #[must_use]
-    pub fn key_size(&self) -> u32 {
+    pub fn curve_name(&self) -> Option<&'static str> {
+        self.parameters.as_ref().and_then(|c| c.oid_name())
+    }
+}
+
+impl PrivateKeyExt for ECPrivateKey {
+    fn key_size(&self) -> u32 {
         self.parameters.map_or_else(
-            || (self.private_key.as_bytes().len() * 8) as u32,
+            || (self.private_key.len() * 8) as u32,
             |curve| match curve {
                 NamedCurve::Secp192r1 => 192,
                 NamedCurve::Secp224r1 => 224,
@@ -122,10 +132,30 @@ impl ECPrivateKey {
         )
     }
 
-    /// Returns the curve name if parameters are present.
-    #[must_use]
-    pub fn curve_name(&self) -> Option<&'static str> {
-        self.parameters.as_ref().and_then(|c| c.oid_name())
+    fn algorithm(&self) -> KeyAlgorithm {
+        KeyAlgorithm::Ec
+    }
+
+    fn public_key_bytes(&self) -> Option<&[u8]> {
+        self.public_key.as_ref().map(|bs| bs.as_ref())
+    }
+
+    fn public_key(&self) -> Option<PublicKey> {
+        // Need both public key and curve parameters to construct SPKI
+        let public_key = self.public_key.as_ref()?;
+        let curve = self.parameters?;
+
+        // Build AlgorithmIdentifier for EC with curve OID as parameter
+        let ec_oid = AlgorithmIdentifier::OID_EC_PUBLIC_KEY.parse().ok()?;
+        let curve_param = AlgorithmParameters::Other(RawAlgorithmParameter::new(
+            Element::ObjectIdentifier(curve.oid()),
+        ));
+        let algorithm = AlgorithmIdentifier::new_with_params(ec_oid, curve_param);
+
+        // Build SubjectPublicKeyInfo
+        let spki = SubjectPublicKeyInfo::new(algorithm, public_key.clone());
+
+        Some(PublicKey::Spki(Pkcs8PublicKey::new(spki)))
     }
 }
 
@@ -266,6 +296,7 @@ impl ToPem for ECPrivateKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::private_key::PrivateKeyExt;
     use rstest::rstest;
     use std::str::FromStr;
 

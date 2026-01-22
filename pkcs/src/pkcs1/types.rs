@@ -7,6 +7,9 @@ use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
 use super::error::{Error, Result};
+use crate::PublicKey;
+use crate::private_key::{KeyAlgorithm, PrivateKeyExt};
+use crate::public_key::PublicKeyExt;
 
 /*
 RFC 8017 - PKCS #1: RSA Cryptography Specifications
@@ -162,18 +165,26 @@ impl Encoder<RSAPrivateKey, Element> for RSAPrivateKey {
     }
 }
 
-impl RSAPrivateKey {
-    /// Extract the public key from this private key
-    pub fn public_key(&self) -> RSAPublicKey {
-        RSAPublicKey {
-            modulus: self.modulus.clone(),
-            public_exponent: self.public_exponent.clone(),
-        }
+impl PrivateKeyExt for RSAPrivateKey {
+    fn key_size(&self) -> u32 {
+        self.modulus.bits() as u32
     }
 
-    /// Get the key size in bits (RSA modulus bit length)
-    pub fn key_size(&self) -> u32 {
-        self.modulus.bits() as u32
+    fn algorithm(&self) -> KeyAlgorithm {
+        KeyAlgorithm::Rsa
+    }
+
+    fn public_key_bytes(&self) -> Option<&[u8]> {
+        // RSA public key is derived from modulus and public_exponent,
+        // not stored as raw bytes. Use public_key() method instead.
+        None
+    }
+
+    fn public_key(&self) -> Option<PublicKey> {
+        Some(PublicKey::Pkcs1(RSAPublicKey {
+            modulus: self.modulus.clone(),
+            public_exponent: self.public_exponent.clone(),
+        }))
     }
 }
 
@@ -299,6 +310,22 @@ impl RSAPublicKey {
     }
 }
 
+impl PublicKeyExt for RSAPublicKey {
+    fn key_size(&self) -> u32 {
+        self.modulus.bits() as u32
+    }
+
+    fn algorithm(&self) -> KeyAlgorithm {
+        KeyAlgorithm::Rsa
+    }
+
+    fn public_key_bytes(&self) -> Option<&[u8]> {
+        // RSA public key is structured (modulus + exponent),
+        // not stored as raw bytes. Use the type directly.
+        None
+    }
+}
+
 // RSAPublicKey -> PEM encoder
 impl ToPem for RSAPublicKey {
     type Error = Error;
@@ -325,9 +352,27 @@ impl ToPem for RSAPublicKey {
     }
 }
 
+// RSAPrivateKey -> PEM encoder
+impl ToPem for RSAPrivateKey {
+    type Error = Error;
+
+    fn pem_label(&self) -> Label {
+        Label::RSAPrivateKey
+    }
+
+    fn to_pem(&self) -> Result<Pem> {
+        let element = self.encode()?;
+        let asn1_obj = ASN1Object::new(vec![element]);
+        let der = asn1_obj.encode()?;
+        let der_bytes = der.encode()?;
+        Ok(Pem::from_bytes(self.pem_label(), &der_bytes))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::private_key::PrivateKeyExt;
     use rstest::rstest;
     use std::str::FromStr;
 
@@ -559,7 +604,7 @@ EB7VTM4mzawmSqcOq3/aYDSYqcRBlk5lfWc43qcPVNoKZ9x993MFIgkCAwEAAQ==
     fn test_rsa_public_key_size(#[case] pem_str: &str, #[case] expected_bits: u32) {
         let pem = pem::Pem::from_str(pem_str).expect("Failed to parse PEM");
         let privkey: RSAPrivateKey = pem.decode().expect("Failed to decode RSAPrivateKey");
-        let pubkey = privkey.public_key();
+        let pubkey = privkey.public_key().expect("Failed to get public key");
         assert_eq!(pubkey.key_size(), expected_bits);
     }
 

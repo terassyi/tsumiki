@@ -12,13 +12,9 @@ use crate::error::Result;
 use crate::inspect::decode;
 use crate::output::OutputFormat;
 use crate::utils::{FingerprintAlgorithm, read_input};
-use pkcs::pkcs1::RSAPrivateKey;
-use pkcs::pkcs8::OneAsymmetricKey;
-use pkcs::pkcs8::PublicKey;
-use pkcs::sec1::ECPrivateKey;
-use pkix_types::{
-    AlgorithmIdentifier, AlgorithmParameters, RawAlgorithmParameter, SubjectPublicKeyInfo,
-};
+use pkcs::PrivateKey;
+use pkcs::PublicKey;
+use tsumiki::decoder::Decoder;
 
 #[derive(Args)]
 pub(crate) struct Config {
@@ -68,50 +64,17 @@ pub(crate) fn execute(config: Config) -> Result<()> {
 
     // If show_pubkey is set, show and output public key
     if config.show_pubkey {
-        return match pem.label() {
-            Label::RSAPrivateKey => {
-                let key: RSAPrivateKey = decode(pem)?;
-                let pem = key.public_key().to_pem()?;
-                print!("{}", pem);
-                Ok(())
-            }
-            Label::PrivateKey => {
-                let key: OneAsymmetricKey = decode(pem)?;
-                if let Some(pub_key) = key.public_key() {
-                    let pem = pub_key.to_pem()?;
-                    print!("{}", pem);
-                    Ok(())
-                } else {
-                    Err("Cannot extract public key from v1 PKCS#8 key (no public key field)".into())
-                }
-            }
-            Label::ECPrivateKey => {
-                let key: ECPrivateKey = decode(pem)?;
-                match (&key.public_key, key.parameters) {
-                    (Some(pub_key), Some(curve)) => {
-                        let ec_oid = asn1::ObjectIdentifier::from_str(
-                            AlgorithmIdentifier::OID_EC_PUBLIC_KEY,
-                        )?;
-                        let curve_param = AlgorithmParameters::Other(RawAlgorithmParameter::new(
-                            asn1::Element::ObjectIdentifier(curve.oid()),
-                        ));
-                        let algorithm = AlgorithmIdentifier::new_with_params(ec_oid, curve_param);
-                        let spki = SubjectPublicKeyInfo::new(algorithm, pub_key.clone());
-                        let public_key = PublicKey::new(spki);
-                        let pem = public_key.to_pem()?;
-                        print!("{}", pem);
-                        Ok(())
-                    }
-                    (None, _) => {
-                        Err("Cannot extract public key from SEC1 key (no public key field)".into())
-                    }
-                    (_, None) => Err("Cannot extract public key: curve parameters missing".into()),
-                }
-            }
-            _ => Err(
-                "Can only show public key from private keys (RSA-PKCS#1, PKCS#8, or SEC1)".into(),
-            ),
-        };
+        let key: PrivateKey = pem.decode().map_err(|_| {
+            crate::error::Error::PublicKeyExtraction(
+                "unsupported key format (only RSA-PKCS#1, PKCS#8, or SEC1)".to_string(),
+            )
+        })?;
+        let pub_key = key.public_key().ok_or_else(|| {
+            crate::error::Error::PublicKeyExtraction(format!("{} key", key.algorithm()))
+        })?;
+        let pem = pub_key.to_pem()?;
+        print!("{}", pem);
+        return Ok(());
     }
 
     // If show_fingerprint is set, only display fingerprint
@@ -134,7 +97,7 @@ pub(crate) fn execute(config: Config) -> Result<()> {
                 pkcs8::output_encrypted_private_key_info_fingerprint(&key, &config)
             }
             Label::PublicKey => {
-                let key: PublicKey = decode(pem)?;
+                let key: pkcs::pkcs8::PublicKey = decode(pem)?;
                 pkcs8::output_public_key_fingerprint(&key, &config)
             }
             Label::ECPrivateKey => {
@@ -148,34 +111,23 @@ pub(crate) fn execute(config: Config) -> Result<()> {
     // If show_key_size is set, display key size information
     if config.show_key_size {
         return match pem.label() {
-            Label::RSAPrivateKey => {
-                let key: RSAPrivateKey = decode(pem)?;
-                let output = pkcs1::output_rsa_key_size(&key);
-                println!("{}", output);
+            Label::RSAPrivateKey | Label::PrivateKey | Label::ECPrivateKey => {
+                let key: PrivateKey = pem.decode().map_err(|e| {
+                    crate::error::Error::Message(format!("Failed to decode private key: {}", e))
+                })?;
+                let key_size = key.key_size();
+                if key_size == 0 {
+                    println!("Key Size: unknown (v1 PKCS#8 key)");
+                } else {
+                    println!("Key Size: {} bits", key_size);
+                }
                 Ok(())
             }
-            Label::RSAPublicKey => {
-                let key: pkcs::pkcs1::RSAPublicKey = decode(pem)?;
-                let output = pkcs1::output_rsa_public_key_size(&key);
-                println!("{}", output);
-                Ok(())
-            }
-            Label::PrivateKey => {
-                let key: OneAsymmetricKey = decode(pem)?;
-                let output = pkcs8::output_private_key_size(&key);
-                println!("{}", output);
-                Ok(())
-            }
-            Label::PublicKey => {
-                let key: PublicKey = decode(pem)?;
-                let output = pkcs8::output_public_key_size(&key);
-                println!("{}", output);
-                Ok(())
-            }
-            Label::ECPrivateKey => {
-                let key: ECPrivateKey = decode(pem)?;
-                let output = sec1::output_ec_key_size(&key);
-                println!("{}", output);
+            Label::RSAPublicKey | Label::PublicKey => {
+                let key: PublicKey = pem.decode().map_err(|e| {
+                    crate::error::Error::Message(format!("Failed to decode public key: {}", e))
+                })?;
+                println!("Key Size: {} bits", key.key_size());
                 Ok(())
             }
             _ => Err(format!("Cannot determine key size for: {}", pem.label()).into()),
@@ -201,7 +153,7 @@ pub(crate) fn execute(config: Config) -> Result<()> {
             pkcs8::output_encrypted_private_key_info(&key, &config)
         }
         Label::PublicKey => {
-            let key: PublicKey = decode(pem)?;
+            let key: pkcs::pkcs8::PublicKey = decode(pem)?;
             pkcs8::output_public_key(&key, &config)
         }
         Label::ECPrivateKey => {
