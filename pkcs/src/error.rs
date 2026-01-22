@@ -27,6 +27,12 @@ pub enum Error {
         pkcs1: Box<crate::pkcs1::Error>,
     },
 
+    #[error("unrecognized public key format: spki={spki}, pkcs1={pkcs1}")]
+    UnrecognizedPublicKeyFormat {
+        spki: Box<crate::pkcs8::Error>,
+        pkcs1: Box<crate::pkcs1::Error>,
+    },
+
     #[error("empty ASN.1 object")]
     EmptyAsn1Object,
 }

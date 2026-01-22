@@ -8,16 +8,125 @@
 //!
 //! The primary use case is automatic format detection when loading keys from
 //! DER or PEM data.
+//!
+//! # PrivateKeyExt Trait
+//!
+//! The [`PrivateKeyExt`] trait provides a unified interface for accessing
+//! common private key properties across different formats:
+//!
+//! ```ignore
+//! use pkcs::{PrivateKey, PrivateKeyExt};
+//!
+//! let key: PrivateKey = /* ... */;
+//! println!("Algorithm: {:?}", key.algorithm());
+//! println!("Key size: {} bits", key.key_size());
+//! if let Some(pubkey) = key.public_key_bytes() {
+//!     println!("Public key available");
+//! }
+//! ```
 
 use asn1::{ASN1Object, Element};
 use der::Der;
 use pem::{Label, Pem};
+use pkix_types::algorithm::AlgorithmIdentifier;
+use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
 use crate::error::{Error, Result};
 use crate::pkcs1::RSAPrivateKey;
-use crate::pkcs8::OneAsymmetricKey;
+use crate::pkcs8::{OID_ED448, OID_ED25519, OneAsymmetricKey};
 use crate::sec1::ECPrivateKey;
+
+/// Key algorithm type.
+///
+/// Represents the cryptographic algorithm used by a private key.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum KeyAlgorithm {
+    /// RSA encryption
+    Rsa,
+    /// Elliptic Curve (ECDSA/ECDH)
+    Ec,
+    /// Ed25519 (EdDSA)
+    Ed25519,
+    /// Ed448 (EdDSA)
+    Ed448,
+    /// Unknown or unsupported algorithm
+    Unknown,
+}
+
+impl KeyAlgorithm {
+    /// Returns the OID string for this algorithm, if known.
+    #[must_use]
+    pub fn oid(&self) -> Option<&'static str> {
+        match self {
+            KeyAlgorithm::Rsa => Some(AlgorithmIdentifier::OID_RSA_ENCRYPTION),
+            KeyAlgorithm::Ec => Some(AlgorithmIdentifier::OID_EC_PUBLIC_KEY),
+            KeyAlgorithm::Ed25519 => Some(OID_ED25519),
+            KeyAlgorithm::Ed448 => Some(OID_ED448),
+            KeyAlgorithm::Unknown => None,
+        }
+    }
+
+    /// Returns a human-readable name for this algorithm.
+    #[must_use]
+    pub fn name(&self) -> &'static str {
+        match self {
+            KeyAlgorithm::Rsa => "RSA",
+            KeyAlgorithm::Ec => "EC",
+            KeyAlgorithm::Ed25519 => "Ed25519",
+            KeyAlgorithm::Ed448 => "Ed448",
+            KeyAlgorithm::Unknown => "Unknown",
+        }
+    }
+}
+
+impl std::fmt::Display for KeyAlgorithm {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name())
+    }
+}
+
+/// Trait for common private key operations.
+///
+/// This trait provides a unified interface for accessing properties
+/// common to all private key formats (PKCS#1, SEC1, PKCS#8).
+pub trait PrivateKeyExt {
+    /// Returns the key size in bits.
+    ///
+    /// For RSA keys, this is the modulus bit length.
+    /// For EC keys, this is determined by the curve.
+    /// For Ed25519/Ed448, this returns the standard key sizes.
+    ///
+    /// Returns 0 if the key size cannot be determined.
+    fn key_size(&self) -> u32;
+
+    /// Returns the algorithm type of this key.
+    fn algorithm(&self) -> KeyAlgorithm;
+
+    /// Returns the public key bytes, if available.
+    ///
+    /// Not all key formats include the public key:
+    /// - PKCS#1 RSA keys contain the public exponent and modulus (use `RSAPrivateKey::public_key()` instead)
+    /// - SEC1 EC keys may optionally include the public key
+    /// - PKCS#8 v2 keys may include the public key
+    ///
+    /// Returns `None` if the public key is not available in raw byte form.
+    fn public_key_bytes(&self) -> Option<&[u8]>;
+
+    /// Extracts the public key from this private key, if available.
+    ///
+    /// Returns a [`PublicKey`](crate::PublicKey) enum that can represent the public key
+    /// in either PKCS#1 or X.509/SPKI format.
+    ///
+    /// Not all private key formats include the public key:
+    /// - PKCS#1 RSA keys: Returns `Some(PublicKey::Pkcs1(...))` with modulus and exponent
+    /// - SEC1 EC keys: Returns `Some(PublicKey::Spki(...))` if the public key is present
+    /// - PKCS#8 v2 keys: Returns `Some(PublicKey::Spki(...))` if the public key is present
+    ///
+    /// Returns `None` if the public key is not available.
+    fn public_key(&self) -> Option<crate::PublicKey>;
+}
 
 /// A private key in one of the supported formats.
 ///
@@ -55,12 +164,24 @@ impl PrivateKey {
     }
 
     /// Get the key size in bits.
+    ///
+    /// This is a convenience method that delegates to [`PrivateKeyExt::key_size`].
     pub fn key_size(&self) -> u32 {
-        match self {
-            PrivateKey::Pkcs1(key) => key.key_size(),
-            PrivateKey::Sec1(key) => key.key_size(),
-            PrivateKey::Pkcs8(key) => key.key_size(),
-        }
+        <Self as PrivateKeyExt>::key_size(self)
+    }
+
+    /// Get the algorithm type of this key.
+    ///
+    /// This is a convenience method that delegates to [`PrivateKeyExt::algorithm`].
+    pub fn algorithm(&self) -> KeyAlgorithm {
+        <Self as PrivateKeyExt>::algorithm(self)
+    }
+
+    /// Get the public key bytes, if available.
+    ///
+    /// This is a convenience method that delegates to [`PrivateKeyExt::public_key_bytes`].
+    pub fn public_key_bytes(&self) -> Option<&[u8]> {
+        <Self as PrivateKeyExt>::public_key_bytes(self)
     }
 
     /// Returns `true` if this is a PKCS#1 RSA key.
@@ -206,6 +327,40 @@ impl From<ECPrivateKey> for PrivateKey {
 impl From<OneAsymmetricKey> for PrivateKey {
     fn from(key: OneAsymmetricKey) -> Self {
         PrivateKey::Pkcs8(key)
+    }
+}
+
+impl PrivateKeyExt for PrivateKey {
+    fn key_size(&self) -> u32 {
+        match self {
+            PrivateKey::Pkcs1(key) => key.key_size(),
+            PrivateKey::Sec1(key) => key.key_size(),
+            PrivateKey::Pkcs8(key) => key.key_size(),
+        }
+    }
+
+    fn algorithm(&self) -> KeyAlgorithm {
+        match self {
+            PrivateKey::Pkcs1(key) => key.algorithm(),
+            PrivateKey::Sec1(key) => key.algorithm(),
+            PrivateKey::Pkcs8(key) => key.algorithm(),
+        }
+    }
+
+    fn public_key_bytes(&self) -> Option<&[u8]> {
+        match self {
+            PrivateKey::Pkcs1(key) => key.public_key_bytes(),
+            PrivateKey::Sec1(key) => key.public_key_bytes(),
+            PrivateKey::Pkcs8(key) => key.public_key_bytes(),
+        }
+    }
+
+    fn public_key(&self) -> Option<crate::PublicKey> {
+        match self {
+            PrivateKey::Pkcs1(key) => PrivateKeyExt::public_key(key),
+            PrivateKey::Sec1(key) => PrivateKeyExt::public_key(key),
+            PrivateKey::Pkcs8(key) => PrivateKeyExt::public_key(key),
+        }
     }
 }
 

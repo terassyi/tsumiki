@@ -7,6 +7,9 @@ use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
 use super::error::{Error, Result};
+use crate::PublicKey;
+use crate::private_key::{KeyAlgorithm, PrivateKeyExt};
+use crate::public_key::PublicKeyExt;
 
 /*
 RFC 8017 - PKCS #1: RSA Cryptography Specifications
@@ -170,10 +173,28 @@ impl RSAPrivateKey {
             public_exponent: self.public_exponent.clone(),
         }
     }
+}
 
-    /// Get the key size in bits (RSA modulus bit length)
-    pub fn key_size(&self) -> u32 {
+impl PrivateKeyExt for RSAPrivateKey {
+    fn key_size(&self) -> u32 {
         self.modulus.bits() as u32
+    }
+
+    fn algorithm(&self) -> KeyAlgorithm {
+        KeyAlgorithm::Rsa
+    }
+
+    fn public_key_bytes(&self) -> Option<&[u8]> {
+        // RSA public key is derived from modulus and public_exponent,
+        // not stored as raw bytes. Use public_key() method instead.
+        None
+    }
+
+    fn public_key(&self) -> Option<PublicKey> {
+        Some(PublicKey::Pkcs1(RSAPublicKey {
+            modulus: self.modulus.clone(),
+            public_exponent: self.public_exponent.clone(),
+        }))
     }
 }
 
@@ -299,6 +320,22 @@ impl RSAPublicKey {
     }
 }
 
+impl PublicKeyExt for RSAPublicKey {
+    fn key_size(&self) -> u32 {
+        self.modulus.bits() as u32
+    }
+
+    fn algorithm(&self) -> KeyAlgorithm {
+        KeyAlgorithm::Rsa
+    }
+
+    fn public_key_bytes(&self) -> Option<&[u8]> {
+        // RSA public key is structured (modulus + exponent),
+        // not stored as raw bytes. Use the type directly.
+        None
+    }
+}
+
 // RSAPublicKey -> PEM encoder
 impl ToPem for RSAPublicKey {
     type Error = Error;
@@ -328,6 +365,7 @@ impl ToPem for RSAPublicKey {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::private_key::PrivateKeyExt;
     use rstest::rstest;
     use std::str::FromStr;
 

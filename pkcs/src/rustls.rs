@@ -255,6 +255,7 @@ mod tests {
     use tsumiki::decoder::Decoder;
 
     use super::*;
+    use crate::private_key::PrivateKeyExt;
 
     #[derive(Debug, Clone, Copy)]
     enum KeyType {
