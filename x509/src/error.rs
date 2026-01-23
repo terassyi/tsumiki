@@ -68,4 +68,10 @@ pub enum Error {
     SerializationError(String),
     #[error("DER encoding error: {0}")]
     DerEncodingError(String),
+    #[error("PEM error: {0}")]
+    PemError(#[from] pem::error::Error),
+    #[error("DER error: {0}")]
+    DerError(#[from] der::error::Error),
+    #[error("unexpected PEM label: expected {expected}, got {got}")]
+    UnexpectedPemLabel { expected: String, got: String },
 }

@@ -7,10 +7,13 @@
 //!   an intermediate CA trusted by the system
 
 use std::ops::Deref;
+use std::str::FromStr;
 
+use pem::FromPem;
 use serde::{Deserialize, Serialize};
 
 use crate::Certificate;
+use crate::error::Error;
 use crate::extensions::BasicConstraints;
 
 /// An ordered chain of X.509 certificates.
@@ -153,15 +156,37 @@ impl IntoIterator for CertificateChain {
     }
 }
 
+impl FromPem for CertificateChain {
+    type Error = Error;
+
+    fn expected_label() -> pem::Label {
+        pem::Label::Certificate
+    }
+
+    fn from_pem(pem: &pem::Pem) -> Result<Self, Self::Error> {
+        let cert = Certificate::from_pem(pem)?;
+        Ok(Self::from(cert))
+    }
+}
+
+impl FromStr for CertificateChain {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let pems = pem::parse_many(s)?;
+        let certs = pems
+            .iter()
+            .filter(|p| p.label() == pem::Label::Certificate)
+            .map(Certificate::from_pem)
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self::new(certs))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::ASN1Object;
-    use der::Der;
-    use pem::Pem;
     use rstest::rstest;
-    use std::str::FromStr;
-    use tsumiki::decoder::Decoder;
 
     // Self-signed CA certificate with BasicConstraints CA=TRUE
     const TEST_CERT_V3_CA: &str = r"-----BEGIN CERTIFICATE-----
@@ -223,10 +248,7 @@ I36SjnCvZLfTAZy2PzjD+JS43m/+2ydsdhU7+aUoR+w=
 -----END CERTIFICATE-----";
 
     fn parse_cert(pem_str: &str) -> Certificate {
-        let pem = Pem::from_str(pem_str).unwrap();
-        let der: Der = pem.decode().unwrap();
-        let asn1_obj: ASN1Object = der.decode().unwrap();
-        asn1_obj.decode().unwrap()
+        pem_str.parse().unwrap()
     }
 
     #[rstest]

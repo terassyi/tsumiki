@@ -47,6 +47,18 @@ pub(crate) enum Error {
     #[error("cannot extract public key from {0}")]
     PublicKeyExtraction(String),
 
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
+    #[error("TLS error: {0}")]
+    Tls(String),
+
+    #[error("Certificate error: {0}")]
+    Certificate(String),
+
+    #[error("Connection error: {0}")]
+    Connection(String),
+
     #[error("{0}")]
     Message(String),
 }
