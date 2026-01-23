@@ -392,3 +392,185 @@ fn test_cert_inspect_json_extensions() {
         "Should have subject_alt_name"
     );
 }
+
+// Chain selection flag tests
+
+#[test]
+fn test_cert_inspect_chain_first() {
+    tsumiki()
+        .args([
+            "cert",
+            "inspect",
+            &test_cert_path("chain.pem"),
+            "-o",
+            "brief",
+            "--first",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("CN=localhost"))
+        .stdout(predicate::str::contains("CN=Tsumiki Example CA").not());
+}
+
+#[test]
+fn test_cert_inspect_chain_first_short() {
+    tsumiki()
+        .args([
+            "cert",
+            "inspect",
+            &test_cert_path("chain.pem"),
+            "-o",
+            "brief",
+            "-1",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("CN=localhost"))
+        .stdout(predicate::str::contains("CN=Tsumiki Example CA").not());
+}
+
+#[test]
+fn test_cert_inspect_chain_index_0() {
+    tsumiki()
+        .args([
+            "cert",
+            "inspect",
+            &test_cert_path("chain.pem"),
+            "-o",
+            "brief",
+            "--index",
+            "0",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("CN=localhost"))
+        .stdout(predicate::str::contains("CN=Tsumiki Example CA").not());
+}
+
+#[test]
+fn test_cert_inspect_chain_index_1() {
+    tsumiki()
+        .args([
+            "cert",
+            "inspect",
+            &test_cert_path("chain.pem"),
+            "-o",
+            "brief",
+            "--index",
+            "1",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("CN=Tsumiki Example CA"))
+        .stdout(predicate::str::contains("CN=localhost").not());
+}
+
+#[test]
+fn test_cert_inspect_chain_index_out_of_range() {
+    tsumiki()
+        .args([
+            "cert",
+            "inspect",
+            &test_cert_path("chain.pem"),
+            "--index",
+            "5",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("out of range"));
+}
+
+#[test]
+fn test_cert_inspect_chain_depth_1() {
+    tsumiki()
+        .args([
+            "cert",
+            "inspect",
+            &test_cert_path("chain.pem"),
+            "-o",
+            "brief",
+            "--depth",
+            "1",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("CN=localhost"))
+        .stdout(predicate::str::contains("CN=Tsumiki Example CA").not());
+}
+
+#[test]
+fn test_cert_inspect_chain_depth_2() {
+    tsumiki()
+        .args([
+            "cert",
+            "inspect",
+            &test_cert_path("chain.pem"),
+            "-o",
+            "brief",
+            "--depth",
+            "2",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("CN=localhost"))
+        .stdout(predicate::str::contains("CN=Tsumiki Example CA"));
+}
+
+#[test]
+fn test_cert_inspect_chain_root() {
+    tsumiki()
+        .args([
+            "cert",
+            "inspect",
+            &test_cert_path("chain.pem"),
+            "-o",
+            "brief",
+            "--root",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("CN=Tsumiki Example CA"))
+        .stdout(predicate::str::contains("CN=localhost").not());
+}
+
+#[test]
+fn test_cert_inspect_root_not_found() {
+    tsumiki()
+        .args(["cert", "inspect", &test_cert_path("server.crt"), "--root"])
+        .assert()
+        .success()
+        .stdout(predicate::str::is_empty());
+}
+
+#[test]
+fn test_cert_inspect_no_header_brief() {
+    tsumiki()
+        .args([
+            "cert",
+            "inspect",
+            &test_cert_path("chain.pem"),
+            "-o",
+            "brief",
+            "--no-header",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("[0]").not())
+        .stdout(predicate::str::contains("[1]").not())
+        .stdout(predicate::str::contains("CN=localhost"))
+        .stdout(predicate::str::contains("CN=Tsumiki Example CA"));
+}
+
+#[test]
+fn test_cert_inspect_no_header_text() {
+    tsumiki()
+        .args([
+            "cert",
+            "inspect",
+            &test_cert_path("chain.pem"),
+            "--no-header",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--- Certificate").not());
+}

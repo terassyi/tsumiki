@@ -108,6 +108,26 @@ pub(crate) struct Config {
     /// Check if certificate is self-signed
     #[arg(long)]
     check_self_signed: bool,
+
+    /// Show only the first certificate in the chain
+    #[arg(long, short = '1', conflicts_with_all = ["index", "depth"])]
+    first: bool,
+
+    /// Show only the certificate at the specified index (0-indexed)
+    #[arg(long, conflicts_with_all = ["first", "depth"])]
+    index: Option<usize>,
+
+    /// Show only the first N certificates in the chain
+    #[arg(long, conflicts_with_all = ["first", "index"])]
+    depth: Option<usize>,
+
+    /// Show only the root certificate (self-signed) if present
+    #[arg(long, conflicts_with_all = ["first", "index", "depth"])]
+    root: bool,
+
+    /// Hide certificate index headers (--- Certificate N ---)
+    #[arg(long)]
+    no_header: bool,
 }
 
 impl Config {
@@ -293,10 +313,18 @@ pub(crate) fn execute(config: Config) -> Result<()> {
         ));
     }
 
+    // Filter chain based on selection flags
+    let chain = filter_chain(&chain, &config)?;
+
+    // Empty chain after filtering (e.g., --root with no root cert)
+    if chain.is_empty() {
+        return Ok(());
+    }
+
     // Show specific fields if requested
     if config.should_show_specific_fields() {
         for (i, cert) in chain.iter().enumerate() {
-            if chain.len() > 1 {
+            if chain.len() > 1 && !config.no_header {
                 println!("--- Certificate {} ---", i);
             }
             show_specific_fields(cert, &config)?;
@@ -309,6 +337,53 @@ pub(crate) fn execute(config: Config) -> Result<()> {
     output_certificate_chain(&chain, &config)?;
 
     Ok(())
+}
+
+fn filter_chain(chain: &CertificateChain, config: &Config) -> Result<CertificateChain> {
+    if config.first {
+        return chain
+            .first()
+            .cloned()
+            .map(CertificateChain::from)
+            .ok_or_else(|| crate::error::Error::Certificate("no certificates found".to_string()));
+    }
+
+    if let Some(index) = config.index {
+        return chain
+            .get(index)
+            .cloned()
+            .map(CertificateChain::from)
+            .ok_or_else(|| {
+                crate::error::Error::Certificate(format!(
+                    "certificate index {} out of range (chain has {} certificates)",
+                    index,
+                    chain.len()
+                ))
+            });
+    }
+
+    if let Some(depth) = config.depth {
+        let certs: Vec<_> = chain.iter().take(depth).cloned().collect();
+        if certs.is_empty() {
+            return Err(crate::error::Error::Certificate(
+                "no certificates found".to_string(),
+            ));
+        }
+        return Ok(CertificateChain::new(certs));
+    }
+
+    if config.root {
+        // Find self-signed certificate
+        for cert in chain.iter() {
+            if cert.is_self_signed() {
+                return Ok(CertificateChain::from(cert.clone()));
+            }
+        }
+        // No root found, return empty chain
+        return Ok(CertificateChain::new(vec![]));
+    }
+
+    Ok(chain.clone())
 }
 
 fn show_specific_fields(cert: &Certificate, config: &Config) -> Result<()> {
@@ -498,7 +573,7 @@ fn output_certificate_chain(chain: &CertificateChain, config: &Config) -> Result
     match config.output {
         OutputFormat::Text => {
             for (i, cert) in chain.iter().enumerate() {
-                if chain.len() > 1 {
+                if chain.len() > 1 && !config.no_header {
                     println!("--- Certificate {} ---", i);
                 }
                 println!("{}", cert);
@@ -531,7 +606,7 @@ fn output_certificate_chain(chain: &CertificateChain, config: &Config) -> Result
                 let validity = tbs.validity();
                 let not_before = validity.not_before().format("%Y-%m-%d").to_string();
                 let not_after = validity.not_after().format("%Y-%m-%d").to_string();
-                if chain.len() > 1 {
+                if chain.len() > 1 && !config.no_header {
                     println!(
                         "[{}] {} | Valid: {} to {}",
                         i, subject, not_before, not_after
