@@ -26,3 +26,8 @@ sha1 = "0.10.6"
 base64.workspace = true
 chrono.workspace = true
 rustls.workspace = true
+
+[dev-dependencies]
+assert_cmd = "2.0"
+predicates = "3.1"
+serde_json.workspace = true
