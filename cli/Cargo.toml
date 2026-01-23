@@ -10,7 +10,7 @@ name = "tsumiki"
 path = "src/main.rs"
 
 [dependencies]
-x509 = { path = "../x509" }
+x509 = { path = "../x509", features = ["rustls"] }
 pem = { path = "../pem" }
 der = { path = "../der" }
 asn1 = { path = "../asn1" }
@@ -25,3 +25,4 @@ sha2 = "0.10.9"
 sha1 = "0.10.6"
 base64.workspace = true
 chrono.workspace = true
+rustls.workspace = true

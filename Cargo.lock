@@ -237,6 +237,7 @@ dependencies = [
  "pem",
  "pkcs",
  "pkix-types",
+ "rustls",
  "serde_json",
  "serde_yml",
  "sha1",

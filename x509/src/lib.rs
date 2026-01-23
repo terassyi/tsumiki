@@ -1,8 +1,11 @@
+use std::fmt;
+use std::str::FromStr;
+
 use asn1::{ASN1Object, BitString, Element, Integer, ObjectIdentifier};
 use chrono::{Datelike, NaiveDateTime};
+use pem::{FromPem, Pem};
 use pkix_types::OidName;
 use serde::{Deserialize, Serialize, ser::SerializeStruct};
-use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
@@ -446,10 +449,29 @@ impl Decoder<pem::Pem, Certificate> for pem::Pem {
     type Error = Error;
 
     fn decode(&self) -> Result<Certificate, Self::Error> {
-        // Decode PEM to DER
-        let der: der::Der = self.decode().map_err(|e| {
-            Error::InvalidCertificate(format!("Failed to decode PEM to DER: {}", e))
-        })?;
+        Certificate::from_pem(self)
+    }
+}
+
+impl pem::FromPem for Certificate {
+    type Error = Error;
+
+    fn expected_label() -> pem::Label {
+        pem::Label::Certificate
+    }
+
+    fn from_pem(pem: &pem::Pem) -> Result<Self, Self::Error> {
+        // Check label
+        if pem.label() != Self::expected_label() {
+            return Err(Error::UnexpectedPemLabel {
+                expected: Self::expected_label().to_string(),
+                got: pem.label().to_string(),
+            });
+        }
+
+        // Decode PEM to DER bytes
+        let der_bytes: Vec<u8> = pem.decode()?;
+        let der: der::Der = der_bytes.decode()?;
 
         // Decode DER to ASN1Object
         let asn1_obj: asn1::ASN1Object = der.decode().map_err(|e| {
@@ -457,15 +479,22 @@ impl Decoder<pem::Pem, Certificate> for pem::Pem {
         })?;
 
         // Get first element
-        if asn1_obj.elements().is_empty() {
-            return Err(Error::InvalidCertificate(
-                "No elements in ASN1Object".to_string(),
-            ));
-        }
-        let element = &asn1_obj.elements()[0];
+        let element = asn1_obj
+            .elements()
+            .first()
+            .ok_or_else(|| Error::InvalidCertificate("No elements in ASN1Object".to_string()))?;
 
         // Decode to Certificate
         element.decode()
+    }
+}
+
+impl FromStr for Certificate {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let pem = Pem::from_str(s)?;
+        Self::from_pem(&pem)
     }
 }
 

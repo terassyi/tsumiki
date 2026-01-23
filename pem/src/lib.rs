@@ -139,6 +139,18 @@ pub trait ToPem {
     fn to_pem(&self) -> Result<Pem, Self::Error>;
 }
 
+/// Trait for types that can be constructed from PEM format
+pub trait FromPem: Sized {
+    /// The error type returned by from_pem
+    type Error;
+
+    /// Get the expected PEM label for this type
+    fn expected_label() -> Label;
+
+    /// Construct from PEM format
+    fn from_pem(pem: &Pem) -> Result<Self, Self::Error>;
+}
+
 impl DecodableFrom<Pem> for Vec<u8> {}
 
 impl Decoder<Pem, Vec<u8>> for Pem {
@@ -169,6 +181,64 @@ impl Decoder<&str, Pem> for &str {
     fn decode(&self) -> Result<Pem, Self::Error> {
         Pem::from_str(self)
     }
+}
+
+/// Parse multiple PEM blocks from a string.
+///
+/// Returns a vector of all PEM blocks found in the input.
+/// This is useful for parsing certificate chains or files containing
+/// multiple certificates/keys.
+///
+/// # Example
+/// ```
+/// use pem::parse_many;
+///
+/// let pem_data = "-----BEGIN CERTIFICATE-----\nAAA=\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nBBB=\n-----END CERTIFICATE-----";
+/// let pems = parse_many(pem_data).unwrap();
+/// assert_eq!(pems.len(), 2);
+/// ```
+pub fn parse_many(s: &str) -> Result<Vec<Pem>, Error> {
+    // Normalize input: ensure each boundary marker is on its own line
+    let normalized = s.replace("----------", "-----\n-----");
+
+    let mut pems = Vec::new();
+    let mut current_block: Option<(Label, Vec<&str>)> = None;
+
+    for line in normalized.lines() {
+        if let Ok(label) = Label::get_label(line) {
+            if line.contains("BEGIN") {
+                // Start a new block
+                current_block = Some((label, vec![line]));
+            } else if line.contains("END") {
+                // End current block
+                if let Some((begin_label, mut lines)) = current_block.take() {
+                    if begin_label == label {
+                        lines.push(line);
+                        let block = lines.join("\n") + "\n";
+                        pems.push(Pem::from_str(&block)?);
+                    } else {
+                        return Err(Error::LabelMissMatch);
+                    }
+                } else {
+                    return Err(Error::MissingPreEncapsulationBoundary);
+                }
+            }
+        } else if let Some((_, ref mut lines)) = current_block {
+            // Inside a block, collect data lines
+            lines.push(line);
+        }
+        // Ignore lines outside of PEM blocks
+    }
+
+    if current_block.is_some() {
+        return Err(Error::MissingPostEncapsulationBoundary);
+    }
+
+    if pems.is_empty() {
+        return Err(Error::MissingPreEncapsulationBoundary);
+    }
+
+    Ok(pems)
 }
 
 impl FromStr for Pem {
@@ -452,5 +522,26 @@ AAA==
         // Verify the content is the same
         let re_decoded: Vec<u8> = re_encoded_pem.decode().unwrap();
         assert_eq!(decoded, re_decoded);
+    }
+
+    #[rstest]
+    #[case::single(vec![TEST_PEM_CERT1], "\n", 1)]
+    #[case::multiple(vec![TEST_PEM_CERT1, TEST_PEM_CERT2], "\n", 2)]
+    #[case::with_whitespace(vec![TEST_PEM_CERT1, TEST_PEM_CERT2], "\n\n\n", 2)]
+    #[case::no_trailing_newline(vec![TEST_PEM_CERT1, TEST_PEM_CERT2], "", 2)]
+    fn test_parse_many(#[case] certs: Vec<&str>, #[case] sep: &str, #[case] expected_count: usize) {
+        let input = certs
+            .iter()
+            .map(|c| c.trim_end())
+            .collect::<Vec<_>>()
+            .join(sep);
+        let pems = crate::parse_many(&input).unwrap();
+        assert_eq!(pems.len(), expected_count);
+    }
+
+    #[test]
+    fn test_parse_many_empty() {
+        let result = crate::parse_many("");
+        assert!(result.is_err());
     }
 }
