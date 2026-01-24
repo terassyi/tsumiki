@@ -32,21 +32,43 @@ format-check:
 # Run all checks (format, lint, test)
 check: format-check lint test
 
-# Run tests (all packages or specific package)
+# Run unit tests (all crates, excludes cli/tests e2e)
 test package='':
-    {{ if package == '' { 'cargo test --all-features' } else { 'cargo test --all-features --package ' + package } }}
+    {{ if package == '' { 'cargo test --all-features --lib' } else { 'cargo test --all-features --package ' + package + ' --lib' } }}
 
-# Run tests with verbose output
+# Run unit tests with verbose output
 testv package='':
-    {{ if package == '' { 'cargo test --all-features -- --nocapture' } else { 'cargo test --all-features --package ' + package + ' -- --nocapture' } }}
+    {{ if package == '' { 'cargo test --all-features --lib -- --nocapture' } else { 'cargo test --all-features --package ' + package + ' --lib -- --nocapture' } }}
 
 # Run a specific test in a package
 test-name package name:
     cargo test --package {{ package }} -- {{ name }} --exact --nocapture
+
+# Run e2e tests (cli/tests only)
+e2e:
+    cargo test --package cli --test '*'
+
+# Run e2e tests with verbose output
+e2ev:
+    cargo test --package cli --test '*' -- --nocapture
+
+# Run all tests (unit + e2e)
+test-all: test e2e
+
+# Run rustls integration test (mTLS connection)
+test-rustls-integration:
+    #!/bin/bash
+    set -e
+    cargo run --package examples --bin tls-echo-server &
+    SERVER_PID=$!
+    trap "kill $SERVER_PID 2>/dev/null || true" EXIT
+    sleep 2
+    cargo run --package examples --bin tls-echo-client -- --message "test" | grep -q "test"
+    echo "rustls integration test passed"
 
 # Clean build artifacts
 clean:
     cargo clean
 
 # Run CI checks locally
-ci: format-check lint test
+ci: format-check lint test e2e
