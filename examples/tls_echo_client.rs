@@ -7,9 +7,13 @@
 //!   First start the server:
 //!     cargo run --bin tls-echo-server
 //!
-//!   Then run the client:
+//!   Then run the client (interactive mode):
 //!     cargo run --bin tls-echo-client
+//!
+//!   Or send a single message and exit:
+//!     cargo run --bin tls-echo-client -- --message "hello"
 
+use std::env;
 use std::fs;
 use std::io::{self, BufRead, Write};
 use std::net::ToSocketAddrs;
@@ -205,8 +209,23 @@ fn load_private_key(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
     })
 }
 
+/// Parse command line arguments
+fn parse_args() -> Option<String> {
+    let args: Vec<String> = env::args().collect();
+    let mut i = 1;
+    while i < args.len() {
+        if (args[i] == "--message" || args[i] == "-m") && i + 1 < args.len() {
+            return Some(args[i + 1].clone());
+        }
+        i += 1;
+    }
+    None
+}
+
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    let single_message = parse_args();
+
     println!("mTLS Echo Client Example");
     println!("========================\n");
 
@@ -257,9 +276,28 @@ async fn main() -> io::Result<()> {
     })?;
 
     println!("Connected! TLS handshake successful.");
+
+    // Single message mode: send message and exit
+    if let Some(message) = single_message {
+        let msg = format!("{}\n", message);
+        tls_stream.write_all(msg.as_bytes()).await?;
+
+        let mut buf = vec![0u8; 1024];
+        let n = tls_stream.read(&mut buf).await?;
+        if n == 0 {
+            println!("Server closed connection");
+            return Ok(());
+        }
+
+        let response = String::from_utf8_lossy(&buf[..n]);
+        print!("Server echoed: {}", response);
+        io::stdout().flush()?;
+        return Ok(());
+    }
+
+    // Interactive mode
     println!("\nType messages to send (Ctrl+D to quit):\n");
 
-    // Read from stdin and send to server
     let stdin = io::stdin();
     for line in stdin.lock().lines() {
         let line = line?;
