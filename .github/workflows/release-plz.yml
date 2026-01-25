@@ -1,0 +1,129 @@
+name: Release-plz
+
+permissions:
+  pull-requests: write
+  contents: write
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Dry run (do not actually publish or create releases)'
+        type: boolean
+        default: false
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Jobs for workflow_dispatch (PR creation)
+  test:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/test
+
+  e2e-test:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/e2e-test
+
+  rustls-integration-test:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    needs: test
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/rustls-integration-test
+
+  cargo-update-check:
+    name: Check Cargo.lock is up to date
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    needs:
+      - test
+      - e2e-test
+      - rustls-integration-test
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/cargo-update
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fail-on-change: 'true'
+
+  dry-run:
+    name: Dry-run
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    needs:
+      - cargo-update-check
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561 # master
+
+      - name: Run release-plz update (dry-run)
+        run: |
+          cargo install release-plz
+          release-plz update --config .github/release-plz.toml
+          echo "Dry run completed. No changes were published."
+
+  release-pr:
+    name: Create Release PR
+    if: github.event_name == 'workflow_dispatch' && !inputs.dry-run
+    runs-on: ubuntu-24.04
+    needs:
+      - dry-run
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561 # master
+
+      - name: Run release-plz (create PR)
+        uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+          config: .github/release-plz.toml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  # Job for release PR merge (actual release)
+  release:
+    name: Release
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'release')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561 # master
+
+      - name: Run release-plz (release)
+        uses: release-plz/action@v0.5
+        with:
+          command: release
+          config: .github/release-plz.toml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

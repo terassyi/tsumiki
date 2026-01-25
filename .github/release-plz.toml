@@ -1,0 +1,37 @@
+# release-plz configuration
+# https://release-plz.ieni.dev/docs/config
+
+[workspace]
+# Use conventional commits to determine version bumps
+# feat: -> minor, fix: -> patch, BREAKING CHANGE: -> major
+changelog_update = true
+
+# Generate changelog for each release
+changelog_config = ".github/cliff.toml"
+
+# PR settings
+pr_labels = ["release"]
+pr_draft = false
+
+# Release settings
+publish = true
+publish_allow_dirty = false
+release_always = false
+git_release_enable = true
+git_release_draft = false
+
+# Do not publish prereleases to crates.io
+allow_prerelease = false
+
+# crates that should not be published
+[[package]]
+name = "tsumiki-cli"
+publish = true
+git_release_enable = false
+git_tag_enable = true
+
+[[package]]
+name = "examples"
+publish = false
+git_release_enable = false
+changelog_update = false

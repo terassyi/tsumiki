@@ -1,0 +1,116 @@
+name: Release
+
+on:
+  push:
+    tags:
+      # Triggered when release-plz creates tsumiki-cli tag
+      - 'tsumiki-cli-v[0-9]+.[0-9]+.[0-9]+'
+      - 'tsumiki-cli-v[0-9]+.[0-9]+.[0-9]+-*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  extract-version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+    steps:
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          # Extract version from tag format: tsumiki-cli-vX.Y.Z
+          VERSION="${TAG#tsumiki-cli-v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+          # Check if prerelease (has suffix like -alpha, -beta, -rc.1, -dev)
+          if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-.+ ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+            echo "This is a prerelease"
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+            echo "This is a stable release"
+          fi
+
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/test
+
+  e2e-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/e2e-test
+
+  rustls-integration-test:
+    runs-on: ubuntu-24.04
+    needs: test
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/rustls-integration-test
+
+  build:
+    needs:
+      - extract-version
+      - test
+      - e2e-test
+      - rustls-integration-test
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+            artifact-name: tsumiki-linux-amd64
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            artifact-name: tsumiki-linux-arm64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact-name: tsumiki-darwin-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/build
+        with:
+          target: ${{ matrix.target }}
+          artifact-name: ${{ matrix.artifact-name }}
+
+  release:
+    runs-on: ubuntu-24.04
+    needs:
+      - extract-version
+      - build
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          for dir in artifacts/*/; do
+            cp "$dir"* release-assets/
+          done
+          ls -la release-assets/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "tsumiki-cli v${{ needs.extract-version.outputs.version }}"
+          prerelease: ${{ needs.extract-version.outputs.prerelease == 'true' }}
+          files: release-assets/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
