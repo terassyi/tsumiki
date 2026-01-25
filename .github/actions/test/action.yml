@@ -3,9 +3,9 @@ description: 'Run format check, clippy, and unit tests'
 
 inputs:
   toolchain:
-    description: 'Rust toolchain version (overrides rust-toolchain.toml)'
+    description: 'Rust toolchain version'
     required: false
-    default: ''
+    default: 'stable'
 
 runs:
   using: 'composite'
