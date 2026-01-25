@@ -95,9 +95,7 @@ impl Decoder<Element, CertificateSerialNumber> for Element {
     fn decode(&self) -> Result<CertificateSerialNumber> {
         match self {
             Element::Integer(i) => Ok(CertificateSerialNumber { inner: i.clone() }),
-            _ => Err(Error::InvalidCertificateSerialNumber(
-                "expected Integer for CertificateSerialNumber".to_string(),
-            )),
+            _ => Err(Error::CertificateSerialNumberExpectedInteger),
         }
     }
 }

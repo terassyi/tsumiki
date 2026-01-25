@@ -109,20 +109,19 @@ impl Attribute for UnstructuredName {
         // The values should be a SET
         let elements = asn1_obj.elements();
         if elements.is_empty() {
-            return Err(Error::InvalidUnstructuredName("Empty ASN1Object".into()));
+            return Err(Error::AttributeEmptyAsn1Object("unstructuredName"));
         }
 
         // The first element should be a SET
         let Element::Set(set) = &elements[0] else {
-            return Err(Error::InvalidUnstructuredName(
-                "unstructuredName values must be a SET".into(),
-            ));
+            return Err(Error::AttributeExpectedElementType {
+                attr: "unstructuredName",
+                expected: "SET",
+            });
         };
 
         if set.is_empty() {
-            return Err(Error::InvalidUnstructuredName(
-                "unstructuredName values SET is empty".into(),
-            ));
+            return Err(Error::AttributeEmptyValuesSet("unstructuredName"));
         }
 
         // Get the first value from the SET
@@ -132,20 +131,12 @@ impl Attribute for UnstructuredName {
             Element::UTF8String(_) | Element::PrintableString(_) | Element::BMPString(_) => {
                 // Use DirectoryString to handle all string types
                 DirectoryString::try_from(&set[0])
-                    .map_err(|e| {
-                        Error::InvalidUnstructuredName(format!(
-                            "Invalid unstructuredName DirectoryString: {}",
-                            e
-                        ))
-                    })?
+                    .map_err(|e| Error::ChallengePasswordInvalidEncoding(e.to_string()))?
                     .as_str()
                     .to_string()
             }
             _ => {
-                return Err(Error::InvalidUnstructuredName(format!(
-                    "Invalid unstructuredName type: expected IA5String or DirectoryString, got {:?}",
-                    set[0]
-                )));
+                return Err(Error::UnstructuredNameInvalidType(format!("{:?}", set[0])));
             }
         };
 
@@ -212,9 +203,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case(vec![], "unstructuredName values SET is empty")]
-    #[case(vec![Element::Integer(vec![1, 2, 3].into())], "Invalid unstructuredName type")]
-    #[case(vec![Element::Null], "Invalid unstructuredName type")]
+    #[case(vec![], "AttributeEmptyValuesSet")]
+    #[case(vec![Element::Integer(vec![1, 2, 3].into())], "UnstructuredNameInvalidType")]
+    #[case(vec![Element::Null], "UnstructuredNameInvalidType")]
     fn test_unstructured_name_parse_errors(
         #[case] elements: Vec<Element>,
         #[case] error_msg: &str,

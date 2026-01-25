@@ -64,24 +64,17 @@ impl Decoder<Element, ExtensionRequest> for Element {
         match self {
             Element::Sequence(seq_elements) => {
                 if seq_elements.is_empty() {
-                    return Err(Error::InvalidExtensionRequest(
-                        "ExtensionRequest must contain at least one Extension".to_string(),
-                    ));
+                    return Err(Error::ExtensionRequestInvalidValueCount(0));
                 }
 
-                let mut extensions = Vec::new();
-                for elem in seq_elements {
-                    let extension: Extension = elem.decode().map_err(|e: pkix_types::Error| {
-                        Error::InvalidExtensionRequest(e.to_string())
-                    })?;
-                    extensions.push(extension);
-                }
+                let extensions = seq_elements
+                    .iter()
+                    .map(|elem| elem.decode())
+                    .collect::<std::result::Result<Vec<_>, _>>()?;
 
                 Ok(ExtensionRequest { extensions })
             }
-            _ => Err(Error::InvalidExtensionRequest(
-                "expected Sequence for ExtensionRequest".to_string(),
-            )),
+            _ => Err(Error::ExtensionRequestExpectedSequence),
         }
     }
 }
@@ -97,14 +90,8 @@ impl Encoder<ExtensionRequest, Element> for ExtensionRequest {
             return Err(Error::EmptyValue("ExtensionRequest".to_string()));
         }
 
-        let extension_elements: Result<Vec<Element>> = self
-            .extensions
-            .iter()
-            .map(|ext| {
-                ext.encode()
-                    .map_err(|e: pkix_types::Error| Error::InvalidExtensionRequest(e.to_string()))
-            })
-            .collect();
+        let extension_elements: std::result::Result<Vec<Element>, _> =
+            self.extensions.iter().map(|ext| ext.encode()).collect();
 
         Ok(Element::Sequence(extension_elements?))
     }
@@ -163,28 +150,24 @@ impl Attribute for ExtensionRequest {
         let elements = asn1_obj.elements();
 
         if elements.is_empty() {
-            return Err(Error::InvalidExtensionRequest("Empty ASN1Object".into()));
+            return Err(Error::AttributeEmptyAsn1Object("extensionRequest"));
         }
 
         // The first element should be a SET
         let Element::Set(set) = &elements[0] else {
-            return Err(Error::InvalidExtensionRequest(
-                "extensionRequest values must be a SET".into(),
-            ));
+            return Err(Error::AttributeExpectedElementType {
+                attr: "extensionRequest",
+                expected: "SET",
+            });
         };
 
         if set.len() != 1 {
-            return Err(Error::InvalidExtensionRequest(format!(
-                "extensionRequest SET must contain exactly one value, got {}",
-                set.len()
-            )));
+            return Err(Error::ExtensionRequestInvalidValueCount(set.len()));
         }
 
         // The value should be a SEQUENCE (Extensions)
         let Element::Sequence(_) = &set[0] else {
-            return Err(Error::InvalidExtensionRequest(
-                "extensionRequest value must be a SEQUENCE".into(),
-            ));
+            return Err(Error::ExtensionRequestExpectedSequence);
         };
 
         // Decode the Extensions SEQUENCE into ExtensionRequest
@@ -311,17 +294,17 @@ mod tests {
     #[case(2)] // Two extensions
     #[case(3)] // Three extensions
     fn test_extension_request_multiple_extensions(#[case] count: usize) {
-        let mut extensions = Vec::new();
-        for i in 0..count {
-            let oid = ObjectIdentifier::from_str(&format!("2.5.29.{}", 14 + i)).unwrap();
-            let value_seq = Element::Sequence(vec![Element::Boolean(true)]);
-            let value_asn1 = ASN1Object::new(vec![value_seq]);
-            let value_der = value_asn1.encode().unwrap();
-            let value_bytes = value_der.encode().unwrap();
-            let value = OctetString::from(value_bytes);
-
-            extensions.push(Extension::new(oid, false, value));
-        }
+        let extensions: Vec<_> = (0..count)
+            .map(|i| {
+                let oid = ObjectIdentifier::from_str(&format!("2.5.29.{}", 14 + i)).unwrap();
+                let value_seq = Element::Sequence(vec![Element::Boolean(true)]);
+                let value_asn1 = ASN1Object::new(vec![value_seq]);
+                let value_der = value_asn1.encode().unwrap();
+                let value_bytes = value_der.encode().unwrap();
+                let value = OctetString::from(value_bytes);
+                Extension::new(oid, false, value)
+            })
+            .collect();
 
         let ext_req = ExtensionRequest::new(extensions).unwrap();
         assert_eq!(ext_req.extensions().len(), count);

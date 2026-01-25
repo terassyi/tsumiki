@@ -95,30 +95,21 @@ impl Decoder<Element, RawAttribute> for Element {
 
     fn decode(&self) -> Result<RawAttribute> {
         let Element::Sequence(seq) = self else {
-            return Err(Error::InvalidAttribute(
-                "Attribute must be a SEQUENCE".into(),
-            ));
+            return Err(Error::AttributeExpectedSequence);
         };
 
         if seq.len() != 2 {
-            return Err(Error::InvalidAttribute(format!(
-                "Attribute SEQUENCE must have 2 elements, got {}",
-                seq.len()
-            )));
+            return Err(Error::AttributeInvalidElementCount(seq.len()));
         }
 
         // First element: type (OBJECT IDENTIFIER)
         let Element::ObjectIdentifier(attribute_type) = &seq[0] else {
-            return Err(Error::InvalidAttribute(
-                "First element of Attribute must be OBJECT IDENTIFIER".into(),
-            ));
+            return Err(Error::AttributeExpectedOid);
         };
 
         // Second element: values (SET OF ANY)
         let Element::Set(_) = &seq[1] else {
-            return Err(Error::InvalidAttribute(
-                "Second element of Attribute must be SET".into(),
-            ));
+            return Err(Error::AttributeExpectedSet);
         };
 
         // Encode the SET back to DER bytes and store as OctetString for lazy parsing
@@ -144,7 +135,7 @@ impl Encoder<RawAttribute, Element> for RawAttribute {
         let values_element = asn1_obj
             .elements()
             .first()
-            .ok_or_else(|| Error::InvalidAttribute("Empty ASN1Object".into()))?
+            .ok_or(Error::AttributeEmptyAsn1Object("RawAttribute"))?
             .clone();
 
         Ok(Element::Sequence(vec![
@@ -164,6 +155,50 @@ pub trait Attribute: Sized {
 
     /// Parse the attribute values (DER-encoded SET OF in OctetString)
     fn parse(values: &OctetString) -> Result<Self>;
+}
+
+/// Helper function to extract the single value from a PKCS#9 attribute's SET.
+///
+/// Most PKCS#9 attributes follow the pattern:
+/// - Parse OctetString to ASN1Object
+/// - Extract first element (must be a SET)
+/// - Verify SET contains exactly one element
+/// - Return that element for further processing
+///
+/// This function encapsulates that common pattern.
+///
+/// # Arguments
+/// * `values` - The raw DER-encoded attribute values
+/// * `attr_name` - The attribute name for error messages
+///
+/// # Returns
+/// The single Element contained in the SET, or an error if the structure is invalid.
+pub fn extract_single_value(values: &OctetString, attr_name: &'static str) -> Result<Element> {
+    let asn1_obj = ASN1Object::try_from(values).map_err(Error::from)?;
+
+    let first_element = asn1_obj
+        .elements()
+        .first()
+        .ok_or(Error::AttributeEmptyAsn1Object(attr_name))?;
+
+    let set_contents = match first_element {
+        Element::Set(contents) => contents,
+        _ => {
+            return Err(Error::AttributeExpectedElementType {
+                attr: attr_name,
+                expected: "SET",
+            });
+        }
+    };
+
+    match set_contents.as_slice() {
+        [single] => Ok(single.clone()),
+        [] => Err(Error::AttributeEmptyValuesSet(attr_name)),
+        _ => Err(Error::AttributeInvalidValueCount {
+            attr: attr_name,
+            actual: set_contents.len(),
+        }),
+    }
 }
 
 /// Attributes type as defined in PKCS#8 and PKCS#9
@@ -190,9 +225,7 @@ impl Attributes {
 
     /// Get an attribute by OID
     pub fn get_by_oid<O: AsOid>(&self, oid: O) -> Result<Option<&RawAttribute>> {
-        let oid_obj = oid
-            .as_oid()
-            .map_err(|e| Error::InvalidAttribute(e.to_string()))?;
+        let oid_obj = oid.as_oid()?;
         Ok(self.0.iter().find(|attr| attr.attribute_type() == &oid_obj))
     }
 
@@ -268,7 +301,7 @@ impl Decoder<Element, Attributes> for Element {
 
     fn decode(&self) -> Result<Attributes> {
         let Element::Set(elements) = self else {
-            return Err(Error::InvalidAttribute("Attributes must be a SET".into()));
+            return Err(Error::AttributesExpectedSet);
         };
 
         let attributes = elements

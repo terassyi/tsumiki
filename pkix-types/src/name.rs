@@ -91,7 +91,7 @@ impl Decoder<Element, Name> for Element {
                     .collect::<Result<Vec<RelativeDistinguishedName>>>()?;
                 Ok(Name { rdn_sequence })
             }
-            _ => Err(Error::InvalidName("expected Sequence for Name".to_string())),
+            _ => Err(Error::NameExpectedSequence),
         }
     }
 }
@@ -146,9 +146,7 @@ impl Decoder<Element, RelativeDistinguishedName> for Element {
                     .collect::<Result<Vec<AttributeTypeAndValue>>>()?;
                 Ok(RelativeDistinguishedName { attributes })
             }
-            _ => Err(Error::InvalidRelativeDistinguishedName(
-                "expected Set for RelativeDistinguishedName".to_string(),
-            )),
+            _ => Err(Error::RdnExpectedSet),
         }
     }
 }
@@ -297,45 +295,27 @@ impl Decoder<Element, AttributeTypeAndValue> for Element {
     type Error = Error;
 
     fn decode(&self) -> Result<AttributeTypeAndValue> {
-        if let Element::Sequence(seq) = self {
-            if seq.len() != 2 {
-                return Err(Error::InvalidAttributeTypeAndValue(
-                    "expected 2 elements in AttributeTypeAndValue sequence".into(),
-                ));
+        let Element::Sequence(seq) = self else {
+            return Err(Error::AttributeTypeAndValueExpectedSequence);
+        };
+
+        // attribute_value can be various types depending on the attribute_type
+        // Most X.509 attributes are strings (DirectoryString)
+        // DirectoryString preserves the original encoding
+        let (attribute_type, attribute_value) = match seq.as_slice() {
+            [Element::ObjectIdentifier(oid), value_elem] => (oid.clone(), value_elem.decode()?),
+            [_, _] => {
+                return Err(Error::AttributeTypeAndValueExpectedOid);
             }
+            _ => {
+                return Err(Error::AttributeTypeAndValueInvalidElementCount);
+            }
+        };
 
-            let mut iter = seq.iter();
-
-            let type_elem = iter.next().ok_or_else(|| {
-                Error::InvalidAttributeTypeAndValue("missing attribute type".into())
-            })?;
-            let attribute_type = if let Element::ObjectIdentifier(oid) = type_elem {
-                oid.clone()
-            } else {
-                return Err(Error::InvalidAttributeTypeAndValue(
-                    "expected ObjectIdentifier for attribute type".into(),
-                ));
-            };
-
-            // attribute_value can be various types depending on the attribute_type
-            // Most X.509 attributes are strings (DirectoryString)
-            // DirectoryString preserves the original encoding
-            let attribute_value = iter
-                .next()
-                .ok_or_else(|| {
-                    Error::InvalidAttributeTypeAndValue("missing attribute value".into())
-                })?
-                .decode()?;
-
-            Ok(AttributeTypeAndValue {
-                attribute_type,
-                attribute_value,
-            })
-        } else {
-            Err(Error::InvalidAttributeTypeAndValue(
-                "expected Sequence for AttributeTypeAndValue".into(),
-            ))
-        }
+        Ok(AttributeTypeAndValue {
+            attribute_type,
+            attribute_value,
+        })
     }
 }
 

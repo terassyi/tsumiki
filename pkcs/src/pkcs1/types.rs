@@ -68,17 +68,11 @@ impl Decoder<Element, Version> for Element {
     type Error = Error;
 
     fn decode(&self) -> Result<Version> {
-        match self {
-            Element::Integer(int) => {
-                let value: i64 = int.try_into().map_err(|_| {
-                    Error::InvalidInteger("Version integer value out of range for i64".to_string())
-                })?;
-                Version::try_from(value)
-            }
-            _ => Err(Error::InvalidStructure(
-                "Version must be an INTEGER element".to_string(),
-            )),
-        }
+        let Element::Integer(int) = self else {
+            return Err(Error::ExpectedInteger { field: "version" });
+        };
+        let value: i64 = int.try_into().map_err(|_| Error::VersionOutOfRange)?;
+        Version::try_from(value)
     }
 }
 
@@ -103,45 +97,39 @@ impl Decoder<Element, RSAPrivateKey> for Element {
     type Error = Error;
 
     fn decode(&self) -> Result<RSAPrivateKey> {
-        match self {
-            Element::Sequence(elements) => {
-                if elements.len() < 9 {
-                    return Err(Error::InvalidStructure(format!(
-                        "expected at least 9 elements in RSAPrivateKey sequence, got {}",
-                        elements.len()
-                    )));
-                }
+        let Element::Sequence(elements) = self else {
+            return Err(Error::ExpectedSequence);
+        };
 
-                // Helper to extract INTEGER
-                let get_integer = |idx: usize, field_name: &str| -> Result<Integer> {
-                    if let Element::Integer(int) = &elements[idx] {
-                        Ok(int.clone())
-                    } else {
-                        Err(Error::InvalidStructure(format!(
-                            "expected Integer for {}",
-                            field_name
-                        )))
-                    }
-                };
+        let [ver, mod_, pub_exp, priv_exp, p1, p2, exp1, exp2, coef, ..] = elements.as_slice()
+        else {
+            return Err(Error::InvalidElementCount {
+                expected: "at least 9",
+                actual: elements.len(),
+            });
+        };
 
-                let version: Version = elements[0].decode()?;
-
-                Ok(RSAPrivateKey {
-                    version,
-                    modulus: get_integer(1, "modulus")?,
-                    public_exponent: get_integer(2, "publicExponent")?,
-                    private_exponent: get_integer(3, "privateExponent")?,
-                    prime1: get_integer(4, "prime1")?,
-                    prime2: get_integer(5, "prime2")?,
-                    exponent1: get_integer(6, "exponent1")?,
-                    exponent2: get_integer(7, "exponent2")?,
-                    coefficient: get_integer(8, "coefficient")?,
-                })
+        // Helper to extract INTEGER
+        let get_integer = |elem: &Element, field: &'static str| -> Result<Integer> {
+            match elem {
+                Element::Integer(int) => Ok(int.clone()),
+                _ => Err(Error::ExpectedInteger { field }),
             }
-            _ => Err(Error::InvalidStructure(
-                "expected Sequence for RSAPrivateKey".to_string(),
-            )),
-        }
+        };
+
+        let version: Version = ver.decode()?;
+
+        Ok(RSAPrivateKey {
+            version,
+            modulus: get_integer(mod_, "modulus")?,
+            public_exponent: get_integer(pub_exp, "publicExponent")?,
+            private_exponent: get_integer(priv_exp, "privateExponent")?,
+            prime1: get_integer(p1, "prime1")?,
+            prime2: get_integer(p2, "prime2")?,
+            exponent1: get_integer(exp1, "exponent1")?,
+            exponent2: get_integer(exp2, "exponent2")?,
+            coefficient: get_integer(coef, "coefficient")?,
+        })
     }
 }
 
@@ -210,35 +198,31 @@ impl Decoder<Element, RSAPublicKey> for Element {
     type Error = Error;
 
     fn decode(&self) -> Result<RSAPublicKey> {
-        match self {
-            Element::Sequence(elements) => {
-                if elements.len() != 2 {
-                    return Err(Error::InvalidStructure(format!(
-                        "expected 2 elements in RSAPublicKey sequence, got {}",
-                        elements.len()
-                    )));
-                }
+        let Element::Sequence(elements) = self else {
+            return Err(Error::ExpectedSequence);
+        };
 
-                let get_integer = |idx: usize, field_name: &str| -> Result<Integer> {
-                    if let Element::Integer(int) = &elements[idx] {
-                        Ok(int.clone())
-                    } else {
-                        Err(Error::InvalidStructure(format!(
-                            "expected Integer for {}",
-                            field_name
-                        )))
-                    }
-                };
+        let [mod_elem, exp_elem] = elements.as_slice() else {
+            return Err(Error::InvalidElementCount {
+                expected: "2",
+                actual: elements.len(),
+            });
+        };
 
-                Ok(RSAPublicKey {
-                    modulus: get_integer(0, "modulus")?,
-                    public_exponent: get_integer(1, "publicExponent")?,
-                })
-            }
-            _ => Err(Error::InvalidStructure(
-                "expected Sequence for RSAPublicKey".to_string(),
-            )),
-        }
+        let Element::Integer(modulus) = mod_elem else {
+            return Err(Error::ExpectedInteger { field: "modulus" });
+        };
+
+        let Element::Integer(public_exponent) = exp_elem else {
+            return Err(Error::ExpectedInteger {
+                field: "publicExponent",
+            });
+        };
+
+        Ok(RSAPublicKey {
+            modulus: modulus.clone(),
+            public_exponent: public_exponent.clone(),
+        })
     }
 }
 
@@ -269,10 +253,7 @@ impl Decoder<pem::Pem, RSAPrivateKey> for pem::Pem {
         let asn1_obj = der.decode()?;
 
         // Get first element
-        if asn1_obj.elements().is_empty() {
-            return Err(Error::InvalidStructure("No elements in ASN1Object".into()));
-        }
-        let element = &asn1_obj.elements()[0];
+        let element = asn1_obj.elements().first().ok_or(Error::EmptyAsn1Object)?;
 
         // Decode to RSAPrivateKey
         element.decode()
@@ -293,10 +274,7 @@ impl Decoder<Pem, RSAPublicKey> for Pem {
         let asn1_obj = der.decode()?;
 
         // Get first element
-        if asn1_obj.elements().is_empty() {
-            return Err(Error::InvalidStructure("No elements in ASN1Object".into()));
-        }
-        let element = &asn1_obj.elements()[0];
+        let element = asn1_obj.elements().first().ok_or(Error::EmptyAsn1Object)?;
 
         // Decode to RSAPublicKey
         element.decode()

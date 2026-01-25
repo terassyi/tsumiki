@@ -32,6 +32,9 @@ pub(crate) enum Error {
     #[error("PKIX types error: {0}")]
     PkixTypes(#[from] pkix_types::Error),
 
+    #[error("algorithm parameter error: {0}")]
+    AlgorithmParameter(#[from] pkix_types::algorithm::parameters::Error),
+
     #[error("JSON serialization error: {0}")]
     Json(#[from] serde_json::Error),
 
@@ -44,35 +47,51 @@ pub(crate) enum Error {
     #[error("Formatting error: {0}")]
     Fmt(#[from] std::fmt::Error),
 
-    #[error("cannot extract public key from {0}")]
-    PublicKeyExtraction(String),
+    // Input validation errors
+    #[error("invalid hostname: {0}")]
+    InvalidHostname(String),
+    #[error("--remote cannot be used with file input")]
+    RemoteWithFileInput,
+    #[error("unsupported PEM label: {0}")]
+    UnsupportedPemLabel(String),
 
-    #[error("Invalid input: {0}")]
-    InvalidInput(String),
+    // Connection errors
+    #[error("failed to connect to {host}:{port}: {reason}")]
+    ConnectionFailed {
+        host: String,
+        port: u16,
+        reason: String,
+    },
 
-    #[error("TLS error: {0}")]
-    Tls(String),
+    // TLS errors
+    #[error("failed to create TLS connection: {0}")]
+    TlsConnectionFailed(String),
+    #[error("TLS handshake failed: {0}")]
+    TlsHandshakeFailed(String),
+    #[error("no certificates received from server")]
+    NoCertificatesReceived,
 
-    #[error("Certificate error: {0}")]
-    Certificate(String),
+    // Certificate errors
+    #[error("no certificates found")]
+    NoCertificatesFound,
+    #[error("certificate index {index} out of range (chain has {total} certificates)")]
+    CertificateIndexOutOfRange { index: usize, total: usize },
+    #[error("failed to parse certificate chain: {0}")]
+    CertificateChainParseFailed(String),
 
-    #[error("Connection error: {0}")]
-    Connection(String),
+    // Key extraction errors
+    #[error("cannot extract public key: unsupported key format (only RSA-PKCS#1, PKCS#8, or SEC1)")]
+    UnsupportedKeyFormat,
+    #[error("cannot extract public key from {0} key")]
+    PublicKeyExtractionFailed(String),
 
-    #[error("{0}")]
-    Message(String),
-}
-
-impl From<&str> for Error {
-    fn from(s: &str) -> Self {
-        Error::Message(s.to_string())
-    }
-}
-
-impl From<String> for Error {
-    fn from(s: String) -> Self {
-        Error::Message(s)
-    }
+    // Decode errors
+    #[error("failed to decode private key: {0}")]
+    PrivateKeyDecodeFailed(String),
+    #[error("failed to decode public key: {0}")]
+    PublicKeyDecodeFailed(String),
+    #[error("cannot determine key size for: {0}")]
+    CannotDetermineKeySize(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

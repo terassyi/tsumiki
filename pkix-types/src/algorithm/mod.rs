@@ -187,10 +187,7 @@ impl AlgorithmIdentifier {
     pub fn parameter<P: AlgorithmParameter>(&self) -> crate::error::Result<Option<P>> {
         match &self.parameters {
             None => Ok(None),
-            Some(AlgorithmParameters::Null) => Err(Error::InvalidAlgorithmIdentifier(
-                "Cannot convert NULL to typed parameter".into(),
-            )
-            .into()),
+            Some(AlgorithmParameters::Null) => Err(Error::NullParameterNotSupported.into()),
             Some(AlgorithmParameters::Other(raw)) => {
                 Ok(Some(P::parse(raw).map_err(Error::ParameterError)?))
             }
@@ -283,16 +280,10 @@ impl Decoder<Element, AlgorithmIdentifier> for Element {
                 let algorithm = match elements.first() {
                     Some(Element::ObjectIdentifier(oid)) => oid.clone(),
                     Some(_) => {
-                        return Err(Error::InvalidAlgorithmIdentifier(
-                            "AlgorithmIdentifier algorithm must be OBJECT IDENTIFIER".into(),
-                        )
-                        .into());
+                        return Err(Error::ExpectedOidForAlgorithm.into());
                     }
                     None => {
-                        return Err(Error::InvalidAlgorithmIdentifier(
-                            "AlgorithmIdentifier must have at least 1 element".into(),
-                        )
-                        .into());
+                        return Err(Error::EmptyAlgorithmIdentifier.into());
                     }
                 };
 
@@ -305,10 +296,7 @@ impl Decoder<Element, AlgorithmIdentifier> for Element {
                 };
 
                 if elements.len() > 2 {
-                    return Err(Error::InvalidAlgorithmIdentifier(
-                        "AlgorithmIdentifier must have at most 2 elements".into(),
-                    )
-                    .into());
+                    return Err(Error::TooManyElements.into());
                 }
 
                 Ok(AlgorithmIdentifier {
@@ -316,10 +304,7 @@ impl Decoder<Element, AlgorithmIdentifier> for Element {
                     parameters,
                 })
             }
-            _ => Err(Error::InvalidAlgorithmIdentifier(
-                "AlgorithmIdentifier must be a SEQUENCE".into(),
-            )
-            .into()),
+            _ => Err(Error::ExpectedSequence.into()),
         }
     }
 }
@@ -330,13 +315,14 @@ impl Encoder<AlgorithmIdentifier, Element> for AlgorithmIdentifier {
     type Error = crate::error::Error;
 
     fn encode(&self) -> crate::error::Result<Element> {
-        let mut elements = vec![Element::ObjectIdentifier(self.algorithm.clone())];
-        if let Some(params) = &self.parameters {
-            elements.push(match params {
-                AlgorithmParameters::Null => Element::Null,
-                AlgorithmParameters::Other(raw) => raw.element().clone(),
-            });
-        }
+        let params_elem = self.parameters.as_ref().map(|params| match params {
+            AlgorithmParameters::Null => Element::Null,
+            AlgorithmParameters::Other(raw) => raw.element().clone(),
+        });
+
+        let elements: Vec<_> = std::iter::once(Element::ObjectIdentifier(self.algorithm.clone()))
+            .chain(params_elem)
+            .collect();
 
         Ok(Element::Sequence(elements))
     }

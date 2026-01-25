@@ -5,6 +5,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::error::Error;
 use crate::extensions::Extension;
 
@@ -62,14 +63,11 @@ impl Decoder<OctetString, ExtendedKeyUsage> for OctetString {
 
     fn decode(&self) -> Result<ExtendedKeyUsage, Self::Error> {
         let asn1_obj = ASN1Object::try_from(self).map_err(Error::InvalidASN1)?;
-        let elements = asn1_obj.elements();
-
-        if elements.is_empty() {
-            return Err(Error::InvalidExtendedKeyUsage("empty sequence".to_string()));
-        }
-
         // The first element should be a Sequence
-        elements[0].decode()
+        match asn1_obj.elements() {
+            [elem, ..] => elem.decode(),
+            [] => Err(error::Error::EmptySequence(error::Kind::ExtendedKeyUsage).into()),
+        }
     }
 }
 
@@ -82,31 +80,20 @@ impl Decoder<Element, ExtendedKeyUsage> for Element {
         match self {
             Element::Sequence(elements) => {
                 if elements.is_empty() {
-                    return Err(Error::InvalidExtendedKeyUsage(
-                        "empty sequence - at least one KeyPurposeId required".to_string(),
-                    ));
+                    return Err(error::Error::ExtendedKeyUsageEmpty.into());
                 }
 
-                let mut purposes = Vec::new();
-                for elem in elements {
-                    match elem {
-                        Element::ObjectIdentifier(oid) => {
-                            purposes.push(oid.clone());
-                        }
-                        _ => {
-                            return Err(Error::InvalidExtendedKeyUsage(format!(
-                                "expected ObjectIdentifier, got {:?}",
-                                elem
-                            )));
-                        }
-                    }
-                }
+                let purposes = elements
+                    .iter()
+                    .map(|elem| match elem {
+                        Element::ObjectIdentifier(oid) => Ok(oid.clone()),
+                        _ => Err(error::Error::ExtendedKeyUsageExpectedOid),
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 Ok(ExtendedKeyUsage { purposes })
             }
-            _ => Err(Error::InvalidExtendedKeyUsage(
-                "expected Sequence".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::ExtendedKeyUsage).into()),
         }
     }
 }
@@ -118,9 +105,7 @@ impl Encoder<ExtendedKeyUsage, Element> for ExtendedKeyUsage {
 
     fn encode(&self) -> Result<Element, Self::Error> {
         if self.purposes.is_empty() {
-            return Err(Error::InvalidExtendedKeyUsage(
-                "at least one KeyPurposeId required".to_string(),
-            ));
+            return Err(error::Error::ExtendedKeyUsageEmpty.into());
         }
 
         let elements = self
@@ -248,19 +233,19 @@ mod tests {
         // Test case: Empty sequence (at least one required)
         case(
             Element::Sequence(vec![]),
-            "empty sequence - at least one KeyPurposeId required"
+            "at least one KeyPurposeId required"
         ),
         // Test case: Not a Sequence
         case(
             Element::OctetString(OctetString::from(vec![0x01, 0x02])),
-            "expected Sequence"
+            "expected SEQUENCE"
         ),
         // Test case: Sequence with non-OID element
         case(
             Element::Sequence(vec![
                 Element::Integer(asn1::Integer::from(vec![0x01])),
             ]),
-            "expected ObjectIdentifier"
+            "all elements must be OBJECT IDENTIFIER"
         ),
         // Test case: Mixed OID and non-OID
         case(
@@ -268,7 +253,7 @@ mod tests {
                 Element::ObjectIdentifier(ObjectIdentifier::from_str(ExtendedKeyUsage::SERVER_AUTH).unwrap()),
                 Element::OctetString(OctetString::from(vec![0x01])),
             ]),
-            "expected ObjectIdentifier"
+            "all elements must be OBJECT IDENTIFIER"
         ),
     )]
     fn test_extended_key_usage_decode_failure(input: Element, expected_error_msg: &str) {

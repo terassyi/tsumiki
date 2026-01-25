@@ -59,37 +59,26 @@ impl Decoder<Element, SubjectPublicKeyInfo> for Element {
 
     fn decode(&self) -> Result<SubjectPublicKeyInfo> {
         let Element::Sequence(elements) = self else {
-            return Err(Error::InvalidSubjectPublicKeyInfo(
-                "expected Sequence".to_string(),
-            ));
+            return Err(Error::SubjectPublicKeyInfoExpectedSequence);
         };
 
-        if elements.len() != 2 {
-            return Err(Error::InvalidSubjectPublicKeyInfo(format!(
-                "expected 2 elements in sequence, got {}",
-                elements.len()
-            )));
-        }
-
-        let mut iter = elements.iter();
-
-        let algorithm_elm = iter
-            .next()
-            .ok_or_else(|| Error::InvalidSubjectPublicKeyInfo("missing algorithm".to_string()))?;
-        let algorithm = algorithm_elm.decode()?;
-
-        let public_key_elm = iter.next().ok_or_else(|| {
-            Error::InvalidSubjectPublicKeyInfo("missing subject public key".to_string())
-        })?;
-        let Element::BitString(subject_public_key) = public_key_elm else {
-            return Err(Error::InvalidSubjectPublicKeyInfo(
-                "expected BitString for subject public key".to_string(),
-            ));
+        let (algorithm, subject_public_key) = match elements.as_slice() {
+            [algorithm_elm, Element::BitString(subject_public_key)] => {
+                (algorithm_elm.decode()?, subject_public_key.clone())
+            }
+            [_, _] => {
+                return Err(Error::SubjectPublicKeyInfoExpectedBitString);
+            }
+            _ => {
+                return Err(Error::SubjectPublicKeyInfoInvalidElementCount(
+                    elements.len(),
+                ));
+            }
         };
 
         Ok(SubjectPublicKeyInfo {
             algorithm,
-            subject_public_key: subject_public_key.clone(),
+            subject_public_key,
         })
     }
 }
@@ -145,7 +134,10 @@ mod tests {
 
         let result: Result<SubjectPublicKeyInfo> = element.decode();
         assert!(result.is_err());
-        assert!(matches!(result, Err(Error::InvalidSubjectPublicKeyInfo(_))));
+        assert!(matches!(
+            result,
+            Err(Error::SubjectPublicKeyInfoInvalidElementCount(_))
+        ));
     }
 
     #[test]
@@ -161,6 +153,9 @@ mod tests {
 
         let result: Result<SubjectPublicKeyInfo> = element.decode();
         assert!(result.is_err());
-        assert!(matches!(result, Err(Error::InvalidSubjectPublicKeyInfo(_))));
+        assert!(matches!(
+            result,
+            Err(Error::SubjectPublicKeyInfoExpectedBitString)
+        ));
     }
 }

@@ -18,7 +18,7 @@
 //! signed data. In such data, the contentType attribute type is
 //! required if there are any PKCS #7 authenticated attributes.
 
-use asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
+use asn1::{Element, ObjectIdentifier, OctetString};
 use pkix_types::OidName;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
 use std::fmt;
@@ -26,7 +26,7 @@ use std::str::FromStr;
 
 use crate::pkcs9::error::{Error, Result};
 
-use super::Attribute;
+use super::{Attribute, extract_single_value};
 
 /// contentType attribute
 ///
@@ -172,41 +172,21 @@ impl Attribute for ContentType {
     const OID: &'static str = "1.2.840.113549.1.9.3";
 
     fn parse(values: &OctetString) -> Result<Self> {
-        let asn1_obj = ASN1Object::try_from(values).map_err(Error::from)?;
-        let elements = asn1_obj.elements();
-        if elements.is_empty() {
-            return Err(Error::InvalidContentType("Empty ASN1Object".into()));
-        }
-
-        // The first element should be a SET
-        let Element::Set(set) = &elements[0] else {
-            return Err(Error::InvalidContentType(
-                "Expected SET in contentType values".into(),
-            ));
-        };
-
-        // contentType is SINGLE VALUE, so the SET should contain exactly one element
-        if set.len() != 1 {
-            return Err(Error::InvalidContentType(format!(
-                "contentType must have exactly one value, got {}",
-                set.len()
-            )));
-        }
+        let value = extract_single_value(values, "contentType")?;
 
         // The value should be an OBJECT IDENTIFIER
-        let Element::ObjectIdentifier(oid) = &set[0] else {
-            return Err(Error::InvalidContentType(
-                "contentType value must be OBJECT IDENTIFIER".into(),
-            ));
+        let Element::ObjectIdentifier(oid) = value else {
+            return Err(Error::InvalidContentTypeExpectedOid);
         };
 
-        Self::new(oid.clone())
+        Self::new(oid)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use asn1::ASN1Object;
     use rstest::rstest;
     use tsumiki::encoder::Encoder;
 

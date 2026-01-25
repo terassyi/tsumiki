@@ -99,19 +99,19 @@ mod tests {
         // Test case: Not a sequence
         case(
             Element::Integer(Integer::from(vec![0x01])),
-            "InvalidAttributeTypeAndValue"
+            "AttributeTypeAndValueExpectedSequence"
         ),
         // Test case: Empty sequence
         case(
             Element::Sequence(vec![]),
-            "InvalidAttributeTypeAndValue"
+            "AttributeTypeAndValueInvalidElementCount"
         ),
         // Test case: Only one element
         case(
             Element::Sequence(vec![
                 Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.4.3").unwrap())
             ]),
-            "InvalidAttributeTypeAndValue"
+            "AttributeTypeAndValueInvalidElementCount"
         ),
         // Test case: Invalid attribute type (not an OID)
         case(
@@ -119,7 +119,7 @@ mod tests {
                 Element::Integer(Integer::from(vec![0x01])),
                 Element::UTF8String("value".to_string())
             ]),
-            "InvalidAttributeTypeAndValue"
+            "AttributeTypeAndValueExpectedOid"
         )
     )]
     fn test_attribute_type_and_value_decode_failure(input: Element, expected_error_type: &str) {
@@ -207,12 +207,12 @@ mod tests {
         // Test case: Not a Set (should return RDN error)
         case(
             Element::Sequence(vec![]),
-            "InvalidRelativeDistinguishedName"
+            "RdnExpectedSet"
         ),
         // Test case: Invalid attribute (should propagate AttributeTypeAndValue error)
         case(
             Element::Set(vec![Element::Integer(Integer::from(vec![0x01]))]),
-            "InvalidAttributeTypeAndValue"
+            "AttributeTypeAndValueExpectedSequence"
         ),
         // Test case: Set with partially invalid attributes
         case(
@@ -223,7 +223,7 @@ mod tests {
                 ]),
                 Element::Integer(Integer::from(vec![0x01])) // Invalid
             ]),
-            "InvalidAttributeTypeAndValue"
+            "AttributeTypeAndValueExpectedSequence"
         )
     )]
     fn test_rdn_decode_failure(input: Element, expected_error_variant: &str) {
@@ -332,19 +332,19 @@ mod tests {
         // Test case: Not a Sequence (should return Name error)
         case(
             Element::Integer(Integer::from(vec![0x01])),
-            "InvalidName"
+            "NameExpectedSequence"
         ),
         // Test case: Invalid RDN (should propagate RDN error)
         case(
             Element::Sequence(vec![Element::Integer(Integer::from(vec![0x01]))]),
-            "InvalidRelativeDistinguishedName"
+            "RdnExpectedSet"
         ),
         // Test case: Invalid AttributeTypeAndValue (should propagate through the chain)
         case(
             Element::Sequence(vec![
                 Element::Set(vec![Element::Integer(Integer::from(vec![0x01]))])
             ]),
-            "InvalidAttributeTypeAndValue"
+            "AttributeTypeAndValueExpectedSequence"
         ),
         // Test case: Multiple RDNs with one invalid (should fail on first error)
         case(
@@ -357,7 +357,7 @@ mod tests {
                 ]),
                 Element::Integer(Integer::from(vec![0x01])) // Invalid RDN
             ]),
-            "InvalidRelativeDistinguishedName"
+            "RdnExpectedSet"
         )
     )]
     fn test_name_decode_failure(input: Element, expected_error_variant: &str) {

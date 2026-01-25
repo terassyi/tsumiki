@@ -6,6 +6,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::error::Error;
 
 use super::{Extension, policy_constraints::SkipCerts};
@@ -44,13 +45,11 @@ impl Extension for InhibitAnyPolicy {
 
     fn parse(value: &OctetString) -> Result<Self, Error> {
         let asn1_obj = ASN1Object::try_from(value).map_err(Error::InvalidASN1)?;
-        let elements = asn1_obj.elements();
 
-        if elements.is_empty() {
-            return Err(Error::InvalidInhibitAnyPolicy("empty content".to_string()));
+        match asn1_obj.elements() {
+            [elem, ..] => elem.decode(),
+            [] => Err(error::Error::EmptyContent(error::Kind::InhibitAnyPolicy).into()),
         }
-
-        elements[0].decode()
     }
 }
 
@@ -62,16 +61,12 @@ impl Decoder<Element, InhibitAnyPolicy> for Element {
     fn decode(&self) -> Result<InhibitAnyPolicy, Self::Error> {
         match self {
             Element::Integer(int) => {
-                let skip_certs = int.to_u32().ok_or_else(|| {
-                    Error::InvalidInhibitAnyPolicy(
-                        "skipCerts value out of range for u32".to_string(),
-                    )
-                })?;
+                let skip_certs = int.to_u32().ok_or(error::Error::ValueOutOfRangeU32(
+                    error::Kind::InhibitAnyPolicy,
+                ))?;
                 Ok(InhibitAnyPolicy { skip_certs })
             }
-            _ => Err(Error::InvalidInhibitAnyPolicy(
-                "expected Integer".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedInteger(error::Kind::InhibitAnyPolicy).into()),
         }
     }
 }
@@ -146,8 +141,8 @@ mod tests {
         assert!(result.is_err(), "Expected error but got: {:?}", result);
         let err_str = format!("{:?}", result.unwrap_err());
         assert!(
-            err_str.contains("expected Integer"),
-            "Error message 'expected Integer' not found in '{}'",
+            err_str.contains("ExpectedInteger"),
+            "Error message 'ExpectedInteger' not found in '{}'",
             err_str
         );
     }

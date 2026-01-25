@@ -5,6 +5,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::error::Error;
 use crate::extensions::Extension;
 use crate::extensions::general_name::GeneralName;
@@ -54,88 +55,62 @@ impl Decoder<Element, GeneralSubtree> for Element {
     fn decode(&self) -> Result<GeneralSubtree, Self::Error> {
         match self {
             Element::Sequence(elements) => {
-                let mut iter = elements.iter();
+                // First element: base (GeneralName), rest are optional minimum/maximum
+                let (base_elem, rest) = match elements.as_slice() {
+                    [base, rest @ ..] => (base, rest),
+                    [] => {
+                        return Err(
+                            error::Error::EmptySequence(error::Kind::NameConstraints).into()
+                        );
+                    }
+                };
 
-                // First element: base (GeneralName)
-                let base: GeneralName = iter
-                    .next()
-                    .ok_or_else(|| {
-                        Error::InvalidNameConstraints(
-                            "GeneralSubtree must have at least base field".to_string(),
-                        )
-                    })?
-                    .decode()?;
-
-                let mut minimum = 0u32;
-                let mut maximum = None;
+                let base: GeneralName = base_elem.decode()?;
 
                 // Process optional minimum [0] and maximum [1] fields
-                for elem in iter {
-                    match elem {
-                        Element::ContextSpecific {
-                            slot: 0, element, ..
-                        } => {
-                            // minimum [0] IMPLICIT INTEGER DEFAULT 0
-                            // IMPLICIT tagging: content is raw INTEGER bytes as OctetString
-                            match element.as_ref() {
-                                Element::OctetString(os) => {
-                                    let integer = Integer::from(os.as_bytes());
-                                    let value: u64 = (&integer).try_into().map_err(|_| {
-                                        Error::InvalidNameConstraints(
-                                            "minimum value out of range".to_string(),
-                                        )
-                                    })?;
-                                    if value > u32::MAX as u64 {
-                                        return Err(Error::InvalidNameConstraints(
-                                            "minimum value too large for u32".to_string(),
-                                        ));
+                let (minimum, maximum) =
+                    rest.iter()
+                        .try_fold((0u32, None), |(min, max), elem| match elem {
+                            Element::ContextSpecific {
+                                slot: 0, element, ..
+                            } => {
+                                // minimum [0] IMPLICIT INTEGER DEFAULT 0
+                                match element.as_ref() {
+                                    Element::OctetString(os) => {
+                                        let integer = Integer::from(os.as_bytes());
+                                        let value = integer.to_u32().ok_or(
+                                            error::Error::ValueOutOfRangeU32(
+                                                error::Kind::NameConstraints,
+                                            ),
+                                        )?;
+                                        Ok((value, max))
                                     }
-                                    minimum = value as u32;
-                                }
-                                _ => {
-                                    return Err(Error::InvalidNameConstraints(
-                                        "minimum must be INTEGER (as OctetString for IMPLICIT tag)"
-                                            .to_string(),
-                                    ));
+                                    _ => Err(error::Error::ExpectedInteger(
+                                        error::Kind::NameConstraints,
+                                    )),
                                 }
                             }
-                        }
-                        Element::ContextSpecific {
-                            slot: 1, element, ..
-                        } => {
-                            // maximum [1] IMPLICIT INTEGER OPTIONAL
-                            // IMPLICIT tagging: content is raw INTEGER bytes as OctetString
-                            match element.as_ref() {
-                                Element::OctetString(os) => {
-                                    let integer = Integer::from(os.as_bytes());
-                                    let value: u64 = (&integer).try_into().map_err(|_| {
-                                        Error::InvalidNameConstraints(
-                                            "maximum value out of range".to_string(),
-                                        )
-                                    })?;
-                                    if value > u32::MAX as u64 {
-                                        return Err(Error::InvalidNameConstraints(
-                                            "maximum value too large for u32".to_string(),
-                                        ));
+                            Element::ContextSpecific {
+                                slot: 1, element, ..
+                            } => {
+                                // maximum [1] IMPLICIT INTEGER OPTIONAL
+                                match element.as_ref() {
+                                    Element::OctetString(os) => {
+                                        let integer = Integer::from(os.as_bytes());
+                                        let value = integer.to_u32().ok_or(
+                                            error::Error::ValueOutOfRangeU32(
+                                                error::Kind::NameConstraints,
+                                            ),
+                                        )?;
+                                        Ok((min, Some(value)))
                                     }
-                                    maximum = Some(value as u32);
-                                }
-                                _ => {
-                                    return Err(Error::InvalidNameConstraints(
-                                        "maximum must be INTEGER (as OctetString for IMPLICIT tag)"
-                                            .to_string(),
-                                    ));
+                                    _ => Err(error::Error::ExpectedInteger(
+                                        error::Kind::NameConstraints,
+                                    )),
                                 }
                             }
-                        }
-                        _ => {
-                            return Err(Error::InvalidNameConstraints(format!(
-                                "unexpected element in GeneralSubtree: {:?}",
-                                elem
-                            )));
-                        }
-                    }
-                }
+                            _ => Err(error::Error::NameConstraintsInvalidElement),
+                        })?;
 
                 Ok(GeneralSubtree {
                     base,
@@ -143,9 +118,7 @@ impl Decoder<Element, GeneralSubtree> for Element {
                     maximum,
                 })
             }
-            _ => Err(Error::InvalidNameConstraints(
-                "GeneralSubtree must be Sequence".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::NameConstraints).into()),
         }
     }
 }
@@ -190,13 +163,10 @@ impl Encoder<GeneralSubtree, Element> for GeneralSubtree {
             }
         });
 
-        let mut elements = vec![base_elem];
-        if let Some(min) = minimum_elem {
-            elements.push(min);
-        }
-        if let Some(max) = maximum_elem {
-            elements.push(max);
-        }
+        let elements: Vec<_> = std::iter::once(base_elem)
+            .chain(minimum_elem)
+            .chain(maximum_elem)
+            .collect();
 
         Ok(Element::Sequence(elements))
     }
@@ -219,14 +189,12 @@ impl Decoder<OctetString, NameConstraints> for OctetString {
 
     fn decode(&self) -> Result<NameConstraints, Self::Error> {
         let asn1_obj = ASN1Object::try_from(self).map_err(Error::InvalidASN1)?;
-        let elements = asn1_obj.elements();
-
-        if elements.is_empty() {
-            return Err(Error::InvalidNameConstraints("empty sequence".to_string()));
-        }
 
         // The first element should be a Sequence
-        elements[0].decode()
+        match asn1_obj.elements() {
+            [elem, ..] => elem.decode(),
+            [] => Err(error::Error::EmptySequence(error::Kind::NameConstraints).into()),
+        }
     }
 }
 
@@ -238,76 +206,67 @@ impl Decoder<Element, NameConstraints> for Element {
     fn decode(&self) -> Result<NameConstraints, Self::Error> {
         match self {
             Element::Sequence(elements) => {
-                let mut permitted_subtrees = None;
-                let mut excluded_subtrees = None;
-
-                for elem in elements {
-                    match elem {
-                        Element::ContextSpecific {
-                            slot: 0, element, ..
-                        } => {
-                            // permittedSubtrees [0] IMPLICIT GeneralSubtrees
-                            match element.as_ref() {
-                                Element::Sequence(subtrees) => {
-                                    if subtrees.is_empty() {
-                                        return Err(Error::InvalidNameConstraints(
-                                            "permittedSubtrees must contain at least one GeneralSubtree".to_string(),
-                                        ));
+                let (permitted_subtrees, excluded_subtrees) =
+                    elements.iter().try_fold(
+                        (None, None),
+                        |(permitted, excluded), elem| -> Result<_, Error> {
+                            match elem {
+                                Element::ContextSpecific {
+                                    slot: 0, element, ..
+                                } => {
+                                    // permittedSubtrees [0] IMPLICIT GeneralSubtrees
+                                    match element.as_ref() {
+                                        Element::Sequence(subtrees) => {
+                                            if subtrees.is_empty() {
+                                                return Err(error::Error::EmptySequence(
+                                                    error::Kind::NameConstraints,
+                                                )
+                                                .into());
+                                            }
+                                            let parsed_subtrees = subtrees
+                                                .iter()
+                                                .map(|e| e.decode())
+                                                .collect::<Result<Vec<GeneralSubtree>, _>>()?;
+                                            Ok((Some(parsed_subtrees), excluded))
+                                        }
+                                        _ => Err(error::Error::ExpectedSequence(
+                                            error::Kind::NameConstraints,
+                                        )
+                                        .into()),
                                     }
-                                    let mut parsed_subtrees = Vec::new();
-                                    for subtree_elem in subtrees {
-                                        let subtree: GeneralSubtree = subtree_elem.decode()?;
-                                        parsed_subtrees.push(subtree);
+                                }
+                                Element::ContextSpecific {
+                                    slot: 1, element, ..
+                                } => {
+                                    // excludedSubtrees [1] IMPLICIT GeneralSubtrees
+                                    match element.as_ref() {
+                                        Element::Sequence(subtrees) => {
+                                            if subtrees.is_empty() {
+                                                return Err(error::Error::EmptySequence(
+                                                    error::Kind::NameConstraints,
+                                                )
+                                                .into());
+                                            }
+                                            let parsed_subtrees = subtrees
+                                                .iter()
+                                                .map(|e| e.decode())
+                                                .collect::<Result<Vec<GeneralSubtree>, _>>()?;
+                                            Ok((permitted, Some(parsed_subtrees)))
+                                        }
+                                        _ => Err(error::Error::ExpectedSequence(
+                                            error::Kind::NameConstraints,
+                                        )
+                                        .into()),
                                     }
-                                    permitted_subtrees = Some(parsed_subtrees);
                                 }
-                                _ => {
-                                    return Err(Error::InvalidNameConstraints(
-                                        "permittedSubtrees must be Sequence".to_string(),
-                                    ));
-                                }
+                                _ => Err(error::Error::NameConstraintsInvalidElement.into()),
                             }
-                        }
-                        Element::ContextSpecific {
-                            slot: 1, element, ..
-                        } => {
-                            // excludedSubtrees [1] IMPLICIT GeneralSubtrees
-                            match element.as_ref() {
-                                Element::Sequence(subtrees) => {
-                                    if subtrees.is_empty() {
-                                        return Err(Error::InvalidNameConstraints(
-                                            "excludedSubtrees must contain at least one GeneralSubtree".to_string(),
-                                        ));
-                                    }
-                                    let mut parsed_subtrees = Vec::new();
-                                    for subtree_elem in subtrees {
-                                        let subtree: GeneralSubtree = subtree_elem.decode()?;
-                                        parsed_subtrees.push(subtree);
-                                    }
-                                    excluded_subtrees = Some(parsed_subtrees);
-                                }
-                                _ => {
-                                    return Err(Error::InvalidNameConstraints(
-                                        "excludedSubtrees must be Sequence".to_string(),
-                                    ));
-                                }
-                            }
-                        }
-                        _ => {
-                            return Err(Error::InvalidNameConstraints(format!(
-                                "unexpected element in NameConstraints: {:?}",
-                                elem
-                            )));
-                        }
-                    }
-                }
+                        },
+                    )?;
 
                 // RFC 5280: At least one of permittedSubtrees or excludedSubtrees MUST be present
                 if permitted_subtrees.is_none() && excluded_subtrees.is_none() {
-                    return Err(Error::InvalidNameConstraints(
-                        "at least one of permittedSubtrees or excludedSubtrees must be present"
-                            .to_string(),
-                    ));
+                    return Err(error::Error::NameConstraintsEmptyContent.into());
                 }
 
                 Ok(NameConstraints {
@@ -315,9 +274,7 @@ impl Decoder<Element, NameConstraints> for Element {
                     excluded_subtrees,
                 })
             }
-            _ => Err(Error::InvalidNameConstraints(
-                "expected Sequence".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::NameConstraints).into()),
         }
     }
 }
@@ -329,9 +286,7 @@ impl Encoder<NameConstraints, Element> for NameConstraints {
 
     fn encode(&self) -> Result<Element, Self::Error> {
         if self.permitted_subtrees.is_none() && self.excluded_subtrees.is_none() {
-            return Err(Error::InvalidNameConstraints(
-                "at least one of permittedSubtrees or excludedSubtrees must be present".to_string(),
-            ));
+            return Err(error::Error::NameConstraintsEmptyContent.into());
         }
 
         let permitted_elem = match &self.permitted_subtrees {
@@ -577,7 +532,7 @@ mod tests {
     // Test case: Not a Sequence
     #[case(
         Element::OctetString(OctetString::from(vec![0x01, 0x02])),
-        "expected Sequence"
+        "expected SEQUENCE"
     )]
     // Test case: permittedSubtrees with empty sequence
     #[case(
@@ -588,7 +543,7 @@ mod tests {
                 element: Box::new(Element::Sequence(vec![])),
             },
         ]),
-        "permittedSubtrees must contain at least one GeneralSubtree"
+        "empty sequence"
     )]
     // Test case: excludedSubtrees with empty sequence
     #[case(
@@ -599,7 +554,7 @@ mod tests {
                 element: Box::new(Element::Sequence(vec![])),
             },
         ]),
-        "excludedSubtrees must contain at least one GeneralSubtree"
+        "empty sequence"
     )]
     fn test_name_constraints_decode_failure(
         #[case] input: Element,

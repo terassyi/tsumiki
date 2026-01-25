@@ -26,14 +26,17 @@ fn connect_tls(
     config: ClientConfig,
 ) -> Result<StreamOwned<ClientConnection, TcpStream>> {
     let server_name = ServerName::try_from(host.to_string())
-        .map_err(|_| Error::InvalidInput(format!("invalid hostname: {}", host)))?;
+        .map_err(|_| Error::InvalidHostname(host.to_string()))?;
 
     let addr = format!("{}:{}", host, port);
-    let tcp_stream = TcpStream::connect(&addr)
-        .map_err(|e| Error::Connection(format!("failed to connect: {}", e)))?;
+    let tcp_stream = TcpStream::connect(&addr).map_err(|e| Error::ConnectionFailed {
+        host: host.to_string(),
+        port,
+        reason: e.to_string(),
+    })?;
 
     let conn = ClientConnection::new(Arc::new(config), server_name)
-        .map_err(|e| Error::Tls(format!("failed to create TLS connection: {}", e)))?;
+        .map_err(|e| Error::TlsConnectionFailed(e.to_string()))?;
 
     Ok(StreamOwned::new(conn, tcp_stream))
 }
@@ -44,10 +47,9 @@ fn extract_certificate_chain(
     let certs = tls_stream
         .conn
         .peer_certificates()
-        .ok_or_else(|| Error::Tls("no certificates received from server".to_string()))?;
+        .ok_or(Error::NoCertificatesReceived)?;
 
-    CertificateChain::try_from(certs)
-        .map_err(|e| Error::Certificate(format!("failed to parse certificate chain: {}", e)))
+    CertificateChain::try_from(certs).map_err(|e| Error::CertificateChainParseFailed(e.to_string()))
 }
 
 /// Fetches the certificate chain from a remote TLS server.
@@ -64,7 +66,7 @@ pub fn fetch_certificate_chain(host: &str, port: u16) -> Result<CertificateChain
 
     tls_stream
         .flush()
-        .map_err(|e| Error::Tls(format!("TLS handshake failed: {}", e)))?;
+        .map_err(|e| Error::TlsHandshakeFailed(e.to_string()))?;
 
     extract_certificate_chain(&tls_stream)
 }

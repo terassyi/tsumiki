@@ -95,10 +95,7 @@ impl TryFrom<i64> for CMSVersion {
             3 => Ok(CMSVersion::V3),
             4 => Ok(CMSVersion::V4),
             5 => Ok(CMSVersion::V5),
-            _ => Err(Error::InvalidCountersignature(format!(
-                "Invalid CMSVersion: {}",
-                value
-            ))),
+            _ => Err(Error::CountersignatureInvalidVersion),
         }
     }
 }
@@ -109,7 +106,7 @@ impl TryFrom<&Integer> for CMSVersion {
     fn try_from(value: &Integer) -> std::result::Result<Self, Self::Error> {
         let i64_val = value
             .to_i64()
-            .ok_or_else(|| Error::InvalidCountersignature("Invalid version value".into()))?;
+            .ok_or(Error::CountersignatureInvalidVersion)?;
         CMSVersion::try_from(i64_val)
     }
 }
@@ -156,34 +153,31 @@ impl Decoder<Element, IssuerAndSerialNumber> for Element {
 
     fn decode(&self) -> Result<IssuerAndSerialNumber> {
         let Element::Sequence(elements) = self else {
-            return Err(Error::InvalidCountersignature(
-                "IssuerAndSerialNumber must be SEQUENCE".into(),
-            ));
-        };
-
-        if elements.len() != 2 {
-            return Err(Error::InvalidCountersignature(format!(
-                "IssuerAndSerialNumber must have 2 elements, got {}",
-                elements.len()
+            return Err(Error::CountersignatureExpectedSequence(format!(
+                "IssuerAndSerialNumber: got {:?}",
+                self
             )));
-        }
-
-        let mut iter = elements.iter();
-
-        let issuer_elm = iter.next().ok_or_else(|| {
-            Error::InvalidCountersignature("Missing issuer in IssuerAndSerialNumber".into())
-        })?;
-        let issuer: Name = issuer_elm.decode().map_err(Error::from)?;
-
-        let serial_elm = iter.next().ok_or_else(|| {
-            Error::InvalidCountersignature("Missing serial number in IssuerAndSerialNumber".into())
-        })?;
-        let Element::Integer(int) = serial_elm else {
-            return Err(Error::InvalidCountersignature(
-                "Serial number must be INTEGER".into(),
-            ));
         };
-        let serial_number = CertificateSerialNumber::from(int.clone());
+
+        let (issuer, serial_number) = match elements.as_slice() {
+            [issuer_elm, Element::Integer(int)] => {
+                let issuer: Name = issuer_elm.decode().map_err(Error::from)?;
+                let serial_number = CertificateSerialNumber::from(int.clone());
+                (issuer, serial_number)
+            }
+            [_, _] => {
+                return Err(Error::CountersignatureExpectedType {
+                    expected: "INTEGER for serial number",
+                    actual: format!("{:?}", elements[1]),
+                });
+            }
+            _ => {
+                return Err(Error::CountersignatureInvalidElementCount {
+                    expected: 2,
+                    actual: elements.len(),
+                });
+            }
+        };
 
         Ok(IssuerAndSerialNumber {
             issuer,
@@ -220,15 +214,17 @@ impl Decoder<Element, SignerIdentifier> for Element {
             } => {
                 // SubjectKeyIdentifier [0] IMPLICIT
                 let Element::OctetString(octet_string) = element.as_ref() else {
-                    return Err(Error::InvalidCountersignature(
-                        "SubjectKeyIdentifier must be OCTET STRING".into(),
-                    ));
+                    return Err(Error::CountersignatureExpectedType {
+                        expected: "OCTET STRING for SubjectKeyIdentifier",
+                        actual: format!("{:?}", element),
+                    });
                 };
                 Ok(SignerIdentifier::SubjectKeyIdentifier(octet_string.clone()))
             }
-            _ => Err(Error::InvalidCountersignature(
-                "SignerIdentifier must be SEQUENCE or [0] IMPLICIT".into(),
-            )),
+            _ => Err(Error::CountersignatureExpectedType {
+                expected: "SEQUENCE or [0] IMPLICIT for SignerIdentifier",
+                actual: format!("{:?}", self),
+            }),
         }
     }
 }
@@ -331,16 +327,17 @@ impl Decoder<Element, SignerInfo> for Element {
 
     fn decode(&self) -> Result<SignerInfo> {
         let Element::Sequence(elements) = self else {
-            return Err(Error::InvalidCountersignature(
-                "SignerInfo must be SEQUENCE".into(),
-            ));
+            return Err(Error::CountersignatureExpectedSequence(format!(
+                "SignerInfo: got {:?}",
+                self
+            )));
         };
 
         if elements.len() < 5 {
-            return Err(Error::InvalidCountersignature(format!(
-                "SignerInfo must have at least 5 elements, got {}",
-                elements.len()
-            )));
+            return Err(Error::CountersignatureInvalidElementCount {
+                expected: 5,
+                actual: elements.len(),
+            });
         }
 
         let mut iter = elements.iter();
@@ -348,33 +345,34 @@ impl Decoder<Element, SignerInfo> for Element {
         // version
         let version_elm = iter
             .next()
-            .ok_or_else(|| Error::InvalidCountersignature("Missing version".into()))?;
+            .ok_or(Error::CountersignatureMissingField("version"))?;
         let Element::Integer(version_int) = version_elm else {
-            return Err(Error::InvalidCountersignature(
-                "Version must be INTEGER".into(),
-            ));
+            return Err(Error::CountersignatureExpectedType {
+                expected: "INTEGER for version",
+                actual: format!("{:?}", version_elm),
+            });
         };
         let version = CMSVersion::try_from(version_int)?;
 
         // sid
         let sid_elm = iter
             .next()
-            .ok_or_else(|| Error::InvalidCountersignature("Missing sid".into()))?;
+            .ok_or(Error::CountersignatureMissingField("sid"))?;
         let sid: SignerIdentifier = sid_elm.decode()?;
 
         // digestAlgorithm
         let digest_alg_elm = iter
             .next()
-            .ok_or_else(|| Error::InvalidCountersignature("Missing digestAlgorithm".into()))?;
+            .ok_or(Error::CountersignatureMissingField("digestAlgorithm"))?;
         let digest_algorithm: AlgorithmIdentifier = digest_alg_elm.decode().map_err(Error::from)?;
 
         // Parse optional signed attributes, signature algorithm, signature, and optional unsigned attributes
         let mut signed_attrs = None;
 
         // Peek at next element to check for signed attributes [0] IMPLICIT
-        let next_elm = iter.next().ok_or_else(|| {
-            Error::InvalidCountersignature("Missing signatureAlgorithm or signature".into())
-        })?;
+        let next_elm = iter.next().ok_or(Error::CountersignatureMissingField(
+            "signatureAlgorithm or signature",
+        ))?;
 
         let (signature_algorithm, mut remaining_iter);
         if let Element::ContextSpecific {
@@ -382,9 +380,10 @@ impl Decoder<Element, SignerInfo> for Element {
         } = next_elm
         {
             let Element::Set(attrs_set) = element.as_ref() else {
-                return Err(Error::InvalidCountersignature(
-                    "Signed attributes must be SET".into(),
-                ));
+                return Err(Error::CountersignatureExpectedType {
+                    expected: "SET for signed attributes",
+                    actual: format!("{:?}", element),
+                });
             };
             let attrs = attrs_set
                 .iter()
@@ -393,9 +392,9 @@ impl Decoder<Element, SignerInfo> for Element {
             signed_attrs = Some(attrs);
 
             // Next element is signatureAlgorithm
-            let sig_alg_elm = iter.next().ok_or_else(|| {
-                Error::InvalidCountersignature("Missing signatureAlgorithm".into())
-            })?;
+            let sig_alg_elm = iter
+                .next()
+                .ok_or(Error::CountersignatureMissingField("signatureAlgorithm"))?;
             signature_algorithm = sig_alg_elm.decode().map_err(Error::from)?;
             remaining_iter = iter;
         } else {
@@ -407,11 +406,12 @@ impl Decoder<Element, SignerInfo> for Element {
         // signature
         let sig_elm = remaining_iter
             .next()
-            .ok_or_else(|| Error::InvalidCountersignature("Missing signature".into()))?;
+            .ok_or(Error::CountersignatureMissingField("signature"))?;
         let Element::OctetString(signature) = sig_elm else {
-            return Err(Error::InvalidCountersignature(
-                "Signature must be OCTET STRING".into(),
-            ));
+            return Err(Error::CountersignatureExpectedType {
+                expected: "OCTET STRING for signature",
+                actual: format!("{:?}", sig_elm),
+            });
         };
 
         // Optional unsigned attributes [1] IMPLICIT
@@ -421,9 +421,10 @@ impl Decoder<Element, SignerInfo> for Element {
         }) = remaining_iter.next()
         {
             let Element::Set(attrs_set) = element.as_ref() else {
-                return Err(Error::InvalidCountersignature(
-                    "Unsigned attributes must be SET".into(),
-                ));
+                return Err(Error::CountersignatureExpectedType {
+                    expected: "SET for unsigned attributes",
+                    actual: format!("{:?}", element),
+                });
             };
             let attrs = attrs_set
                 .iter()
@@ -521,25 +522,27 @@ impl Attribute for Countersignature {
         let elements = asn1_obj.elements();
         let first_element = elements
             .first()
-            .ok_or_else(|| Error::InvalidCountersignature("Empty ASN1Object".into()))?;
+            .ok_or(Error::AttributeEmptyAsn1Object("countersignature"))?;
 
         // The first element should be a SET
         let Element::Set(set) = first_element else {
-            return Err(Error::InvalidCountersignature(
-                "countersignature values must be a SET".into(),
-            ));
+            return Err(Error::CountersignatureExpectedType {
+                expected: "SET for countersignature values",
+                actual: format!("{:?}", first_element),
+            });
         };
 
         // Get the first SignerInfo from the SET
-        let signer_info_elm = set.first().ok_or_else(|| {
-            Error::InvalidCountersignature("countersignature values SET is empty".into())
-        })?;
+        let signer_info_elm = set
+            .first()
+            .ok_or(Error::AttributeEmptyValuesSet("countersignature"))?;
 
         // SignerInfo must be a SEQUENCE
         if !matches!(signer_info_elm, Element::Sequence(_)) {
-            return Err(Error::InvalidCountersignature(
-                "SignerInfo must be a SEQUENCE".into(),
-            ));
+            return Err(Error::CountersignatureExpectedSequence(format!(
+                "SignerInfo: got {:?}",
+                signer_info_elm
+            )));
         }
 
         Ok(Self {

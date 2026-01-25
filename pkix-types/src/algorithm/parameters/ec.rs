@@ -97,9 +97,15 @@ impl NamedCurve {
     }
 
     /// Get the OID for this named curve
-    #[allow(clippy::expect_used)]
-    pub fn oid(&self) -> ObjectIdentifier {
-        self.oid_str().parse().expect("Valid OID string")
+    ///
+    /// # Errors
+    /// This function returns an error if the OID string fails to parse.
+    /// In practice, this should never happen as all OID strings are statically defined
+    /// and known to be valid.
+    pub fn oid(&self) -> Result<ObjectIdentifier> {
+        self.oid_str()
+            .parse()
+            .map_err(|_| Error::InvalidOid(self.oid_str().to_string()))
     }
 }
 
@@ -155,8 +161,10 @@ impl TryFrom<&ObjectIdentifier> for NamedCurve {
     }
 }
 
-impl From<NamedCurve> for ObjectIdentifier {
-    fn from(curve: NamedCurve) -> Self {
+impl TryFrom<NamedCurve> for ObjectIdentifier {
+    type Error = Error;
+
+    fn try_from(curve: NamedCurve) -> Result<Self> {
         curve.oid()
     }
 }
@@ -191,7 +199,10 @@ impl EcParameters {
     }
 
     /// Get the OID for the named curve
-    pub fn oid(&self) -> ObjectIdentifier {
+    ///
+    /// # Errors
+    /// Returns an error if the OID string fails to parse (should never happen).
+    pub fn oid(&self) -> Result<ObjectIdentifier> {
         self.named_curve.oid()
     }
 }
@@ -213,7 +224,7 @@ impl TryFrom<&EcParameters> for RawAlgorithmParameter {
 
     fn try_from(params: &EcParameters) -> Result<Self> {
         Ok(Self::new(Element::ObjectIdentifier(
-            params.named_curve.oid(),
+            params.named_curve.oid()?,
         )))
     }
 }
@@ -275,7 +286,7 @@ mod tests {
     #[case(NamedCurve::Secp521r1)]
     #[allow(clippy::expect_used)]
     fn test_named_curve_from_oid(#[case] expected: NamedCurve) {
-        let oid = expected.oid();
+        let oid = expected.oid().expect("Valid OID");
         let curve = NamedCurve::try_from(&oid).expect("Valid named curve");
         assert_eq!(curve, expected);
     }

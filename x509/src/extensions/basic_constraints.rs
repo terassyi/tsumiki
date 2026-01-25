@@ -5,6 +5,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::error::Error;
 use crate::extensions::Extension;
 
@@ -29,20 +30,12 @@ impl Extension for BasicConstraints {
     fn parse(value: &OctetString) -> Result<Self, Error> {
         // OctetString -> ASN1Object -> Element (Sequence) -> BasicConstraints
         let asn1_obj = ASN1Object::try_from(value).map_err(Error::InvalidASN1)?;
-        let elements = asn1_obj.elements();
-
-        if elements.is_empty() {
-            return Err(Error::InvalidBasicConstraints("empty sequence".to_string()));
-        }
 
         // The first element should be a Sequence
-        if let Element::Sequence(_) = &elements[0] {
-            // Decode the Sequence into BasicConstraints
-            elements[0].decode()
-        } else {
-            Err(Error::InvalidBasicConstraints(
-                "expected Sequence".to_string(),
-            ))
+        match asn1_obj.elements() {
+            [elem @ Element::Sequence(_), ..] => elem.decode(),
+            [_, ..] => Err(error::Error::ExpectedSequence(error::Kind::BasicConstraints).into()),
+            [] => Err(error::Error::EmptySequence(error::Kind::BasicConstraints).into()),
         }
     }
 }
@@ -55,45 +48,28 @@ impl Decoder<Element, BasicConstraints> for Element {
     fn decode(&self) -> Result<BasicConstraints, Self::Error> {
         match self {
             Element::Sequence(elements) => {
-                let mut ca = false;
-                let mut path_len_constraint = None;
-
-                for elem in elements {
-                    match elem {
-                        Element::Boolean(b) => {
-                            ca = *b;
-                        }
-                        Element::Integer(i) => {
-                            // Convert Integer to u32
-                            let value: u64 = i.try_into().map_err(|_| {
-                                Error::InvalidBasicConstraints(
-                                    "pathLenConstraint: value out of range".to_string(),
-                                )
-                            })?;
-                            if value > u32::MAX as u64 {
-                                return Err(Error::InvalidBasicConstraints(
-                                    "pathLenConstraint: value too large for u32".to_string(),
-                                ));
+                let (ca, path_len_constraint) =
+                    elements
+                        .iter()
+                        .try_fold((false, None), |(ca, path_len), elem| match elem {
+                            Element::Boolean(b) => Ok((*b, path_len)),
+                            Element::Integer(i) => {
+                                let value = i
+                                    .to_u32()
+                                    .ok_or(error::Error::PathLenConstraintOutOfRange)?;
+                                Ok((ca, Some(value)))
                             }
-                            path_len_constraint = Some(value as u32);
-                        }
-                        _ => {
-                            return Err(Error::InvalidBasicConstraints(format!(
-                                "unexpected element: {:?}",
-                                elem
-                            )));
-                        }
-                    }
-                }
+                            _ => Err(error::Error::UnexpectedElementType(
+                                error::Kind::BasicConstraints,
+                            )),
+                        })?;
 
                 Ok(BasicConstraints {
                     ca,
                     path_len_constraint,
                 })
             }
-            _ => Err(Error::InvalidBasicConstraints(
-                "expected Sequence".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::BasicConstraints).into()),
         }
     }
 }
@@ -217,7 +193,7 @@ mod tests {
         // Test case: Not a Sequence
         case(
             Element::Boolean(true),
-            "expected Sequence"
+            "expected SEQUENCE"
         ),
         // Test case: Invalid element type in Sequence
         case(

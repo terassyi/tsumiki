@@ -5,6 +5,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::error::Error;
 use crate::extensions::Extension;
 use crate::extensions::general_name::GeneralName;
@@ -33,14 +34,12 @@ impl Decoder<OctetString, SubjectAltName> for OctetString {
     fn decode(&self) -> Result<SubjectAltName, Self::Error> {
         // SubjectAltName -> ASN1Object -> Element (Sequence) -> SubjectAltName
         let asn1_obj = ASN1Object::try_from(self).map_err(Error::InvalidASN1)?;
-        let elements = asn1_obj.elements();
-
-        if elements.is_empty() {
-            return Err(Error::InvalidSubjectAltName("empty sequence".to_string()));
-        }
 
         // The first element should be a Sequence (GeneralNames)
-        elements[0].decode()
+        match asn1_obj.elements() {
+            [elem, ..] => elem.decode(),
+            [] => Err(error::Error::EmptySequence(error::Kind::SubjectAltName).into()),
+        }
     }
 }
 
@@ -53,23 +52,20 @@ impl Decoder<Element, SubjectAltName> for Element {
         match self {
             Element::Sequence(elements) => {
                 if elements.is_empty() {
-                    return Err(Error::InvalidSubjectAltName(
-                        "empty sequence - at least one GeneralName required".to_string(),
-                    ));
+                    return Err(error::Error::AtLeastOneGeneralNameRequired(
+                        error::Kind::SubjectAltName,
+                    )
+                    .into());
                 }
 
-                let mut names = Vec::new();
-                for elem in elements {
-                    // Each element should be a context-specific tagged GeneralName
-                    let general_name: GeneralName = elem.decode()?;
-                    names.push(general_name);
-                }
+                let names = elements
+                    .iter()
+                    .map(|elem| elem.decode())
+                    .collect::<Result<Vec<GeneralName>, _>>()?;
 
                 Ok(SubjectAltName { names })
             }
-            _ => Err(Error::InvalidSubjectAltName(
-                "expected Sequence".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::SubjectAltName).into()),
         }
     }
 }
@@ -81,9 +77,9 @@ impl Encoder<SubjectAltName, Element> for SubjectAltName {
 
     fn encode(&self) -> Result<Element, Self::Error> {
         if self.names.is_empty() {
-            return Err(Error::InvalidSubjectAltName(
-                "at least one GeneralName required".to_string(),
-            ));
+            return Err(
+                error::Error::AtLeastOneGeneralNameRequired(error::Kind::SubjectAltName).into(),
+            );
         }
 
         let elements = self
@@ -275,12 +271,12 @@ mod tests {
         // Test case: Empty sequence
         case(
             Element::Sequence(vec![]),
-            "empty sequence - at least one GeneralName required"
+            "at least one GeneralName required"
         ),
         // Test case: Not a Sequence
         case(
             Element::OctetString(OctetString::from(vec![0x01, 0x02])),
-            "expected Sequence"
+            "expected SEQUENCE"
         ),
         // Test case: Invalid IP address length (3 bytes)
         case(
@@ -298,7 +294,7 @@ mod tests {
             Element::Sequence(vec![
                 Element::OctetString(OctetString::from(b"example.com".to_vec())),
             ]),
-            "GeneralName must be context-specific element"
+            "unexpected element type"
         ),
     )]
     fn test_subject_alt_name_decode_failure(input: Element, expected_error_msg: &str) {

@@ -8,60 +8,146 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// PKCS#9 error types
 #[derive(Debug, Error)]
 pub enum Error {
-    /// Invalid PKCS#9 attribute structure
-    #[error("Invalid PKCS#9 attribute: {0}")]
-    InvalidAttribute(String),
+    // Attribute general errors
+    /// Attribute: expected SEQUENCE
+    #[error("Attribute: expected SEQUENCE")]
+    AttributeExpectedSequence,
 
-    /// Invalid contentType attribute
-    #[error("Invalid contentType: {0}")]
-    InvalidContentType(String),
+    /// Attribute: expected 2 elements (attributeType, attributeValues)
+    #[error("Attribute: expected 2 elements, got {0}")]
+    AttributeInvalidElementCount(usize),
 
-    /// Invalid messageDigest attribute
-    #[error("Invalid messageDigest: {0}")]
-    InvalidMessageDigest(String),
+    /// Attribute: expected OBJECT IDENTIFIER for attributeType
+    #[error("Attribute: expected OBJECT IDENTIFIER for attributeType")]
+    AttributeExpectedOid,
 
-    /// Invalid signingTime attribute
-    #[error("Invalid signingTime: {0}")]
-    InvalidSigningTime(String),
+    /// Attribute: expected SET for attributeValues
+    #[error("Attribute: expected SET for attributeValues")]
+    AttributeExpectedSet,
 
-    /// Invalid challengePassword attribute
-    #[error("Invalid challengePassword: {0}")]
-    InvalidChallengePassword(String),
+    /// Attribute: empty ASN1Object
+    #[error("{0}: empty ASN1Object")]
+    AttributeEmptyAsn1Object(&'static str),
 
-    /// Invalid unstructuredName attribute
-    #[error("Invalid unstructuredName: {0}")]
-    InvalidUnstructuredName(String),
+    /// Attribute: values SET is empty
+    #[error("{0}: values SET is empty")]
+    AttributeEmptyValuesSet(&'static str),
 
-    /// Invalid unstructuredAddress attribute
-    #[error("Invalid unstructuredAddress: {0}")]
-    InvalidUnstructuredAddress(String),
+    /// Attribute: expected exactly one value, got {actual}
+    #[error("{attr}: expected exactly one value, got {actual}")]
+    AttributeInvalidValueCount { attr: &'static str, actual: usize },
 
-    /// Invalid smimeCapabilities attribute
-    #[error("Invalid smimeCapabilities: {0}")]
-    InvalidSmimeCapabilities(String),
+    /// Attribute: expected element type
+    #[error("{attr}: expected {expected}")]
+    AttributeExpectedElementType {
+        attr: &'static str,
+        expected: &'static str,
+    },
 
-    /// Invalid countersignature attribute
-    #[error("Invalid countersignature: {0}")]
-    InvalidCountersignature(String),
+    /// Attributes: expected SET
+    #[error("Attributes: must be a SET")]
+    AttributesExpectedSet,
 
-    /// Invalid extensionRequest attribute
-    #[error("Invalid extensionRequest: {0}")]
-    InvalidExtensionRequest(String),
+    /// Invalid contentType attribute - expected OBJECT IDENTIFIER
+    #[error("invalid contentType: expected OBJECT IDENTIFIER")]
+    InvalidContentTypeExpectedOid,
 
-    /// Invalid friendlyName attribute
-    #[error("Invalid friendlyName: {0}")]
-    InvalidFriendlyName(String),
+    /// Invalid messageDigest attribute - expected OCTET STRING
+    #[error("invalid messageDigest: expected OCTET STRING")]
+    InvalidMessageDigestExpectedOctetString,
 
-    /// Invalid localKeyId attribute
-    #[error("Invalid localKeyId: {0}")]
-    InvalidLocalKeyId(String),
+    // signingTime errors
+    /// signingTime: invalid RFC3339 format
+    #[error("signingTime: invalid RFC3339 format: {0}")]
+    SigningTimeInvalidRfc3339(String),
+
+    /// signingTime: invalid date/time from UTCTime
+    #[error("signingTime: invalid date/time from UTCTime")]
+    SigningTimeInvalidDateTime,
+
+    /// signingTime: expected UTCTime or GeneralizedTime
+    #[error("signingTime: expected UTCTime or GeneralizedTime")]
+    SigningTimeExpectedTime,
+
+    // challengePassword errors
+    /// challengePassword: invalid encoding
+    #[error("challengePassword: invalid encoding: {0}")]
+    ChallengePasswordInvalidEncoding(String),
+
+    // unstructuredName errors
+    /// unstructuredName: expected IA5String or DirectoryString
+    #[error("unstructuredName: expected IA5String or DirectoryString, got {0}")]
+    UnstructuredNameInvalidType(String),
+
+    // unstructuredAddress errors
+    /// unstructuredAddress: expected DirectoryString
+    #[error("unstructuredAddress: expected DirectoryString, got {0}")]
+    UnstructuredAddressInvalidType(String),
+
+    // smimeCapabilities errors
+    /// smimeCapabilities: expected SEQUENCE for SMIMECapability
+    #[error("smimeCapabilities: expected SEQUENCE for SMIMECapability")]
+    SmimeCapabilitiesExpectedSequence,
+
+    /// smimeCapabilities: expected OBJECT IDENTIFIER for capabilityID
+    #[error("smimeCapabilities: expected OBJECT IDENTIFIER for capabilityID")]
+    SmimeCapabilitiesExpectedOid,
+
+    /// smimeCapabilities: expected 1 or 2 elements in SMIMECapability
+    #[error("smimeCapabilities: expected 1 or 2 elements, got {0}")]
+    SmimeCapabilitiesInvalidElementCount(usize),
+
+    // countersignature errors
+    /// countersignature: expected SEQUENCE for SignerInfo
+    #[error("countersignature: expected SEQUENCE for SignerInfo, got {0}")]
+    CountersignatureExpectedSequence(String),
+
+    /// countersignature: invalid version value
+    #[error("countersignature: invalid version value")]
+    CountersignatureInvalidVersion,
+
+    /// countersignature: missing required field
+    #[error("countersignature: missing {0}")]
+    CountersignatureMissingField(&'static str),
+
+    /// countersignature: expected element type
+    #[error("countersignature: expected {expected}, got {actual}")]
+    CountersignatureExpectedType {
+        expected: &'static str,
+        actual: String,
+    },
+
+    /// countersignature: invalid element count
+    #[error("countersignature: expected {expected} elements, got {actual}")]
+    CountersignatureInvalidElementCount { expected: usize, actual: usize },
+
+    // extensionRequest errors
+    /// extensionRequest: expected SEQUENCE for Extensions
+    #[error("extensionRequest: expected SEQUENCE for Extensions")]
+    ExtensionRequestExpectedSequence,
+
+    /// extensionRequest: expected exactly one value
+    #[error("extensionRequest: expected exactly one value, got {0}")]
+    ExtensionRequestInvalidValueCount(usize),
+
+    /// Invalid friendlyName attribute - expected BMPString
+    #[error("invalid friendlyName: expected BMPString")]
+    InvalidFriendlyNameExpectedBmpString,
+
+    /// Invalid friendlyName attribute - BMPString conversion failed
+    #[error("invalid friendlyName: BMPString conversion failed: {0}")]
+    InvalidFriendlyNameBmpStringConversion(String),
+
+    /// Invalid localKeyId attribute - expected OCTET STRING
+    #[error("invalid localKeyId: expected OCTET STRING")]
+    InvalidLocalKeyIdExpectedOctetString,
 
     /// Empty attribute name or value
     #[error("{0} cannot be empty")]
     EmptyValue(String),
 
     /// Value exceeds maximum length
-    #[error("Value too long: {actual} characters (max: {max})")]
+    #[error("value too long: {actual} characters (max: {max})")]
     ValueTooLong { max: usize, actual: usize },
 
     /// OID mismatch between expected and actual
@@ -81,6 +167,6 @@ pub enum Error {
     PkixTypesError(#[from] pkix_types::Error),
 
     /// Unsupported attribute type
-    #[error("Unsupported attribute type: {0}")]
+    #[error("unsupported attribute type: {0}")]
     UnsupportedAttribute(String),
 }

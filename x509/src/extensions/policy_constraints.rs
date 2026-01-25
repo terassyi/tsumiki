@@ -5,6 +5,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::error::Error;
 use crate::extensions::Extension;
 
@@ -58,13 +59,11 @@ impl Extension for PolicyConstraints {
 
     fn parse(value: &OctetString) -> Result<Self, Error> {
         let asn1_obj = ASN1Object::try_from(value).map_err(Error::InvalidASN1)?;
-        let elements = asn1_obj.elements();
 
-        if elements.is_empty() {
-            return Err(Error::InvalidPolicyConstraints("empty content".to_string()));
+        match asn1_obj.elements() {
+            [elem, ..] => elem.decode(),
+            [] => Err(error::Error::EmptyContent(error::Kind::PolicyConstraints).into()),
         }
-
-        elements[0].decode()
     }
 }
 
@@ -77,69 +76,55 @@ impl Decoder<Element, PolicyConstraints> for Element {
         match self {
             Element::Sequence(elements) => {
                 if elements.is_empty() {
-                    return Err(Error::InvalidPolicyConstraints(
-                        "PolicyConstraints must have at least one field".to_string(),
-                    ));
+                    return Err(error::Error::EmptyContent(error::Kind::PolicyConstraints).into());
                 }
 
-                let mut require_explicit_policy = None;
-                let mut inhibit_policy_mapping = None;
-
-                for elem in elements {
-                    match elem {
+                let (require_explicit_policy, inhibit_policy_mapping) = elements.iter().try_fold(
+                    (None, None),
+                    |(req_explicit, inhibit_mapping), elem| match elem {
                         Element::ContextSpecific { slot, element, .. } => match slot {
                             0 => {
                                 // requireExplicitPolicy [0]
                                 if let Element::Integer(int) = element.as_ref() {
-                                    let value = int.to_u32().ok_or_else(|| {
-                                        Error::InvalidPolicyConstraints(
-                                            "requireExplicitPolicy value out of range for u32"
-                                                .to_string(),
-                                        )
-                                    })?;
-                                    require_explicit_policy = Some(value);
+                                    let value =
+                                        int.to_u32().ok_or(error::Error::ValueOutOfRangeU32(
+                                            error::Kind::PolicyConstraints,
+                                        ))?;
+                                    Ok((Some(value), inhibit_mapping))
                                 } else {
-                                    return Err(Error::InvalidPolicyConstraints(
-                                        "requireExplicitPolicy must be Integer".to_string(),
-                                    ));
+                                    Err(error::Error::ExpectedInteger(
+                                        error::Kind::PolicyConstraints,
+                                    ))
                                 }
                             }
                             1 => {
                                 // inhibitPolicyMapping [1]
                                 if let Element::Integer(int) = element.as_ref() {
-                                    let value = int.to_u32().ok_or_else(|| {
-                                        Error::InvalidPolicyConstraints(
-                                            "inhibitPolicyMapping value out of range for u32"
-                                                .to_string(),
-                                        )
-                                    })?;
-                                    inhibit_policy_mapping = Some(value);
+                                    let value =
+                                        int.to_u32().ok_or(error::Error::ValueOutOfRangeU32(
+                                            error::Kind::PolicyConstraints,
+                                        ))?;
+                                    Ok((req_explicit, Some(value)))
                                 } else {
-                                    return Err(Error::InvalidPolicyConstraints(
-                                        "inhibitPolicyMapping must be Integer".to_string(),
-                                    ));
+                                    Err(error::Error::ExpectedInteger(
+                                        error::Kind::PolicyConstraints,
+                                    ))
                                 }
                             }
-                            _ => {
-                                return Err(Error::InvalidPolicyConstraints(format!(
-                                    "unexpected context-specific tag: {}",
-                                    slot
-                                )));
-                            }
+                            _ => Err(error::Error::ExpectedContextTag {
+                                kind: error::Kind::PolicyConstraints,
+                                expected: 0,
+                            }),
                         },
-                        _ => {
-                            return Err(Error::InvalidPolicyConstraints(
-                                "expected context-specific element".to_string(),
-                            ));
-                        }
-                    }
-                }
+                        _ => Err(error::Error::UnexpectedElementType(
+                            error::Kind::PolicyConstraints,
+                        )),
+                    },
+                )?;
 
                 // At least one field must be present
                 if require_explicit_policy.is_none() && inhibit_policy_mapping.is_none() {
-                    return Err(Error::InvalidPolicyConstraints(
-                        "at least one field must be present".to_string(),
-                    ));
+                    return Err(error::Error::EmptyContent(error::Kind::PolicyConstraints).into());
                 }
 
                 Ok(PolicyConstraints {
@@ -147,9 +132,7 @@ impl Decoder<Element, PolicyConstraints> for Element {
                     inhibit_policy_mapping,
                 })
             }
-            _ => Err(Error::InvalidPolicyConstraints(
-                "expected Sequence".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::PolicyConstraints).into()),
         }
     }
 }
@@ -161,9 +144,7 @@ impl Encoder<PolicyConstraints, Element> for PolicyConstraints {
 
     fn encode(&self) -> Result<Element, Self::Error> {
         if self.require_explicit_policy.is_none() && self.inhibit_policy_mapping.is_none() {
-            return Err(Error::InvalidPolicyConstraints(
-                "at least one field must be present".to_string(),
-            ));
+            return Err(error::Error::EmptyContent(error::Kind::PolicyConstraints).into());
         }
 
         let require_elem = self.require_explicit_policy.map(|value| {
@@ -241,24 +222,19 @@ mod tests {
         #[case] inhibit_mapping: Option<u32>,
         #[case] _description: &str,
     ) {
-        let mut elements = Vec::new();
+        let require_elem = require_explicit.map(|value| Element::ContextSpecific {
+            constructed: false,
+            slot: 0,
+            element: Box::new(Element::Integer(Integer::from(vec![value as u8]))),
+        });
 
-        if let Some(value) = require_explicit {
-            elements.push(Element::ContextSpecific {
-                constructed: false,
-                slot: 0,
-                element: Box::new(Element::Integer(Integer::from(vec![value as u8]))),
-            });
-        }
+        let inhibit_elem = inhibit_mapping.map(|value| Element::ContextSpecific {
+            constructed: false,
+            slot: 1,
+            element: Box::new(Element::Integer(Integer::from(vec![value as u8]))),
+        });
 
-        if let Some(value) = inhibit_mapping {
-            elements.push(Element::ContextSpecific {
-                constructed: false,
-                slot: 1,
-                element: Box::new(Element::Integer(Integer::from(vec![value as u8]))),
-            });
-        }
-
+        let elements: Vec<_> = require_elem.into_iter().chain(inhibit_elem).collect();
         let elem = Element::Sequence(elements);
         let result: Result<PolicyConstraints, _> = elem.decode();
 
@@ -278,8 +254,8 @@ mod tests {
         assert!(result.is_err(), "Expected error but got: {:?}", result);
         let err_str = format!("{:?}", result.unwrap_err());
         assert!(
-            err_str.contains("at least one field"),
-            "Error message should mention 'at least one field': '{}'",
+            err_str.contains("EmptyContent"),
+            "Error message should mention 'EmptyContent': '{}'",
             err_str
         );
     }
@@ -291,8 +267,8 @@ mod tests {
         let result: Result<PolicyConstraints, Error> = elem.decode();
 
         assert!(result.is_err());
-        let err_str = format!("{:?}", result.unwrap_err());
-        assert!(err_str.contains("expected Sequence"));
+        let err_str = format!("{}", result.unwrap_err());
+        assert!(err_str.contains("expected SEQUENCE"));
     }
 
     #[test]
@@ -307,7 +283,7 @@ mod tests {
 
         assert!(result.is_err());
         let err_str = format!("{:?}", result.unwrap_err());
-        assert!(err_str.contains("unexpected context-specific tag"));
+        assert!(err_str.contains("ExpectedContextTag"));
     }
 
     #[test]
@@ -318,7 +294,7 @@ mod tests {
 
         assert!(result.is_err());
         let err_str = format!("{:?}", result.unwrap_err());
-        assert!(err_str.contains("expected context-specific element"));
+        assert!(err_str.contains("UnexpectedElementType"));
     }
 
     #[test]
@@ -333,7 +309,7 @@ mod tests {
 
         assert!(result.is_err());
         let err_str = format!("{:?}", result.unwrap_err());
-        assert!(err_str.contains("must be Integer"));
+        assert!(err_str.contains("ExpectedInteger"));
     }
 
     #[test]

@@ -5,6 +5,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::error::Error;
 use crate::extensions::Extension;
 
@@ -42,15 +43,11 @@ impl Extension for KeyUsage {
     fn parse(value: &OctetString) -> Result<Self, Error> {
         // OctetString -> ASN1Object -> Element (BitString) -> KeyUsage
         let asn1_obj = ASN1Object::try_from(value).map_err(Error::InvalidASN1)?;
-        let elements = asn1_obj.elements();
-
-        if elements.is_empty() {
-            return Err(Error::InvalidKeyUsage("empty sequence".to_string()));
-        }
-
         // The first element should be a BitString
-        let element = &elements[0];
-        element.decode()
+        match asn1_obj.elements() {
+            [elem, ..] => elem.decode(),
+            [] => Err(error::Error::EmptySequence(error::Kind::KeyUsage).into()),
+        }
     }
 }
 
@@ -91,7 +88,7 @@ impl Decoder<Element, KeyUsage> for Element {
                     decipher_only: get_bit(8),
                 })
             }
-            _ => Err(Error::InvalidKeyUsage("expected BitString".to_string())),
+            _ => Err(error::Error::ExpectedBitString(error::Kind::KeyUsage).into()),
         }
     }
 }
@@ -106,34 +103,20 @@ impl fmt::Display for KeyUsage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let ext_name = self.oid_name().unwrap_or("keyUsage");
         writeln!(f, "            X509v3 {}: critical", ext_name)?;
-        let mut usages = Vec::new();
-        if self.digital_signature {
-            usages.push("Digital Signature");
-        }
-        if self.content_commitment {
-            usages.push("Content Commitment");
-        }
-        if self.key_encipherment {
-            usages.push("Key Encipherment");
-        }
-        if self.data_encipherment {
-            usages.push("Data Encipherment");
-        }
-        if self.key_agreement {
-            usages.push("Key Agreement");
-        }
-        if self.key_cert_sign {
-            usages.push("Certificate Sign");
-        }
-        if self.crl_sign {
-            usages.push("CRL Sign");
-        }
-        if self.encipher_only {
-            usages.push("Encipher Only");
-        }
-        if self.decipher_only {
-            usages.push("Decipher Only");
-        }
+        let usages: Vec<_> = [
+            (self.digital_signature, "Digital Signature"),
+            (self.content_commitment, "Content Commitment"),
+            (self.key_encipherment, "Key Encipherment"),
+            (self.data_encipherment, "Data Encipherment"),
+            (self.key_agreement, "Key Agreement"),
+            (self.key_cert_sign, "Certificate Sign"),
+            (self.crl_sign, "CRL Sign"),
+            (self.encipher_only, "Encipher Only"),
+            (self.decipher_only, "Decipher Only"),
+        ]
+        .into_iter()
+        .filter_map(|(enabled, name)| enabled.then_some(name))
+        .collect();
         writeln!(f, "                {}", usages.join(", "))?;
         Ok(())
     }
@@ -270,12 +253,12 @@ mod tests {
         // Test case: Not a BitString
         case(
             Element::Boolean(true),
-            "expected BitString"
+            "expected BIT STRING"
         ),
         // Test case: Sequence instead of BitString
         case(
             Element::Sequence(vec![]),
-            "expected BitString"
+            "expected BIT STRING"
         ),
     )]
     fn test_key_usage_decode_failure(input: Element, expected_error_msg: &str) {

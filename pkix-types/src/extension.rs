@@ -72,56 +72,44 @@ impl Decoder<Element, Extension> for Element {
     type Error = Error;
 
     fn decode(&self) -> Result<Extension> {
-        match self {
-            Element::Sequence(elements) => {
-                if elements.len() < 2 || elements.len() > 3 {
-                    return Err(Error::InvalidExtension(format!(
-                        "expected 2 or 3 elements in Extension sequence, got {}",
-                        elements.len()
-                    )));
-                }
+        let Element::Sequence(elements) = self else {
+            return Err(Error::ExtensionExpectedSequence);
+        };
 
-                // First element: extnID (OBJECT IDENTIFIER)
-                let id = if let Element::ObjectIdentifier(oid) = &elements[0] {
-                    oid.clone()
-                } else {
-                    return Err(Error::InvalidExtension(
-                        "expected ObjectIdentifier for extnID".to_string(),
-                    ));
-                };
-
-                // Second and third elements: critical (BOOLEAN) and extnValue (OCTET STRING)
-                // critical has DEFAULT FALSE, so it may be omitted
-                let (critical, extn_value_element) = if elements.len() == 3 {
-                    // critical is present
-                    let crit = if let Element::Boolean(b) = &elements[1] {
-                        *b
-                    } else {
-                        return Err(Error::InvalidExtension(
-                            "expected Boolean for critical".to_string(),
-                        ));
-                    };
-                    (crit, &elements[2])
-                } else {
-                    // critical is omitted, defaults to FALSE
-                    (false, &elements[1])
-                };
-
-                // extnValue (OCTET STRING)
-                let value = if let Element::OctetString(octets) = extn_value_element {
-                    octets.clone()
-                } else {
-                    return Err(Error::InvalidExtension(
-                        "expected OctetString for extnValue".to_string(),
-                    ));
-                };
-
-                Ok(Extension::new(id, critical, value))
-            }
-            _ => Err(Error::InvalidExtension(
-                "expected Sequence for Extension".to_string(),
-            )),
+        // Extension ::= SEQUENCE {
+        //     extnID      OBJECT IDENTIFIER,
+        //     critical    BOOLEAN DEFAULT FALSE,
+        //     extnValue   OCTET STRING
+        // }
+        // Validate element count first
+        if elements.len() < 2 || elements.len() > 3 {
+            return Err(Error::ExtensionInvalidElementCount(elements.len()));
         }
+
+        let (id, critical, value) = match elements.as_slice() {
+            // With critical flag
+            [Element::ObjectIdentifier(oid), Element::Boolean(crit), Element::OctetString(octets)] => {
+                (oid.clone(), *crit, octets.clone())
+            }
+            // Without critical flag (defaults to FALSE)
+            [Element::ObjectIdentifier(oid), Element::OctetString(octets)] => {
+                (oid.clone(), false, octets.clone())
+            }
+            // Wrong type for extnValue
+            [Element::ObjectIdentifier(_), Element::Boolean(_), _] => {
+                return Err(Error::ExtensionExpectedOctetString);
+            }
+            // Wrong type for critical or extnValue
+            [Element::ObjectIdentifier(_), _] | [Element::ObjectIdentifier(_), _, _] => {
+                return Err(Error::ExtensionInvalidCriticalOrValue);
+            }
+            // Wrong type for extnID
+            _ => {
+                return Err(Error::ExtensionExpectedOidForExtnId);
+            }
+        };
+
+        Ok(Extension::new(id, critical, value))
     }
 }
 
@@ -132,14 +120,13 @@ impl Encoder<Extension, Element> for Extension {
     type Error = Error;
 
     fn encode(&self) -> Result<Element> {
-        let mut elements = vec![Element::ObjectIdentifier(self.oid().clone())];
-
         // Only include critical field if it's true (since DEFAULT FALSE)
-        if self.is_critical() {
-            elements.push(Element::Boolean(true));
-        }
+        let critical_elem = self.is_critical().then_some(Element::Boolean(true));
 
-        elements.push(Element::OctetString(self.value().clone()));
+        let elements: Vec<_> = std::iter::once(Element::ObjectIdentifier(self.oid().clone()))
+            .chain(critical_elem)
+            .chain(std::iter::once(Element::OctetString(self.value().clone())))
+            .collect();
 
         Ok(Element::Sequence(elements))
     }
@@ -180,15 +167,15 @@ mod tests {
         let ext = Extension::new(oid.clone(), true, value.clone());
 
         let element = ext.encode().unwrap();
-        match &element {
-            Element::Sequence(elements) => {
-                assert_eq!(elements.len(), 3);
-                assert!(matches!(&elements[0], Element::ObjectIdentifier(_)));
-                assert_eq!(&elements[1], &Element::Boolean(true));
-                assert!(matches!(&elements[2], Element::OctetString(_)));
-            }
-            _ => panic!("expected Sequence"),
-        }
+        let Element::Sequence(elements) = &element else {
+            panic!("expected Sequence");
+        };
+        let [oid_elem, critical_elem, value_elem] = elements.as_slice() else {
+            panic!("expected 3 elements, got {}", elements.len());
+        };
+        assert!(matches!(oid_elem, Element::ObjectIdentifier(_)));
+        assert_eq!(critical_elem, &Element::Boolean(true));
+        assert!(matches!(value_elem, Element::OctetString(_)));
     }
 
     #[test]
@@ -198,15 +185,15 @@ mod tests {
         let ext = Extension::new(oid, false, value);
 
         let element = ext.encode().unwrap();
-        match &element {
-            Element::Sequence(elements) => {
-                // critical field should be omitted when false (DEFAULT FALSE)
-                assert_eq!(elements.len(), 2);
-                assert!(matches!(&elements[0], Element::ObjectIdentifier(_)));
-                assert!(matches!(&elements[1], Element::OctetString(_)));
-            }
-            _ => panic!("expected Sequence"),
-        }
+        // critical field should be omitted when false (DEFAULT FALSE)
+        let Element::Sequence(elements) = &element else {
+            panic!("expected Sequence");
+        };
+        let [oid_elem, value_elem] = elements.as_slice() else {
+            panic!("expected 2 elements, got {}", elements.len());
+        };
+        assert!(matches!(oid_elem, Element::ObjectIdentifier(_)));
+        assert!(matches!(value_elem, Element::OctetString(_)));
     }
 
     #[test]

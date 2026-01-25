@@ -19,13 +19,13 @@
 //! The message-digest attribute type is required in these cases if there
 //! are any PKCS #7 authenticated attributes present.
 
-use asn1::{ASN1Object, Element, OctetString};
+use asn1::{Element, OctetString};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
 use std::fmt;
 
 use crate::pkcs9::error::{Error, Result};
 
-use super::Attribute;
+use super::{Attribute, extract_single_value};
 
 /// messageDigest attribute
 ///
@@ -132,41 +132,21 @@ impl Attribute for MessageDigest {
     const OID: &'static str = "1.2.840.113549.1.9.4";
 
     fn parse(values: &OctetString) -> Result<Self> {
-        let asn1_obj = ASN1Object::try_from(values).map_err(Error::from)?;
-        let elements = asn1_obj.elements();
-        if elements.is_empty() {
-            return Err(Error::InvalidMessageDigest("Empty ASN1Object".into()));
-        }
-
-        // The first element should be a SET
-        let Element::Set(set) = &elements[0] else {
-            return Err(Error::InvalidMessageDigest(
-                "Expected SET in messageDigest values".into(),
-            ));
-        };
-
-        // messageDigest is SINGLE VALUE, so the SET should contain exactly one element
-        if set.len() != 1 {
-            return Err(Error::InvalidMessageDigest(format!(
-                "messageDigest must have exactly one value, got {}",
-                set.len()
-            )));
-        }
+        let value = extract_single_value(values, "messageDigest")?;
 
         // The value should be an OCTET STRING
-        let Element::OctetString(octet_string) = &set[0] else {
-            return Err(Error::InvalidMessageDigest(
-                "messageDigest value must be OCTET STRING".into(),
-            ));
+        let Element::OctetString(octet_string) = value else {
+            return Err(Error::InvalidMessageDigestExpectedOctetString);
         };
 
-        Self::new(octet_string.clone())
+        Self::new(octet_string)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use asn1::ASN1Object;
     use rstest::rstest;
     use tsumiki::encoder::Encoder;
 

@@ -257,24 +257,26 @@ impl Attribute for SMIMECapabilities {
         let elements = asn1_obj.elements();
         let first_element = elements
             .first()
-            .ok_or_else(|| Error::InvalidSmimeCapabilities("Empty ASN1Object".into()))?;
+            .ok_or(Error::AttributeEmptyAsn1Object("smimeCapabilities"))?;
 
         // The first element should be a SET
         let Element::Set(set) = first_element else {
-            return Err(Error::InvalidSmimeCapabilities(
-                "smimeCapabilities values must be a SET".into(),
-            ));
+            return Err(Error::AttributeExpectedElementType {
+                attr: "smimeCapabilities",
+                expected: "SET",
+            });
         };
 
         // Get the SEQUENCE OF SMIMECapability from the SET
-        let first_set_element = set.first().ok_or_else(|| {
-            Error::InvalidSmimeCapabilities("smimeCapabilities values SET is empty".into())
-        })?;
+        let first_set_element = set
+            .first()
+            .ok_or(Error::AttributeEmptyValuesSet("smimeCapabilities"))?;
 
         let Element::Sequence(seq) = first_set_element else {
-            return Err(Error::InvalidSmimeCapabilities(
-                "smimeCapabilities must contain a SEQUENCE".into(),
-            ));
+            return Err(Error::AttributeExpectedElementType {
+                attr: "smimeCapabilities",
+                expected: "SEQUENCE",
+            });
         };
 
         // Parse each SMIMECapability using iterator
@@ -282,31 +284,20 @@ impl Attribute for SMIMECapabilities {
             .iter()
             .map(|elem| {
                 let Element::Sequence(cap_seq) = elem else {
-                    return Err(Error::InvalidSmimeCapabilities(
-                        "Each SMIMECapability must be a SEQUENCE".into(),
-                    ));
+                    return Err(Error::SmimeCapabilitiesExpectedSequence);
                 };
 
-                let mut cap_iter = cap_seq.iter();
-
-                // First element is the capability ID (OID)
-                let capability_id = cap_iter
-                    .next()
-                    .ok_or_else(|| {
-                        Error::InvalidSmimeCapabilities("SMIMECapability SEQUENCE is empty".into())
-                    })
-                    .and_then(|elem| {
-                        if let Element::ObjectIdentifier(oid) = elem {
-                            Ok(oid.clone())
-                        } else {
-                            Err(Error::InvalidSmimeCapabilities(
-                                "SMIMECapability must start with an OID".into(),
-                            ))
-                        }
-                    })?;
-
-                // Optional second element is parameters
-                let parameters = cap_iter.next().cloned();
+                // First element is the capability ID (OID), optional second is parameters
+                let (capability_id, parameters) = match cap_seq.as_slice() {
+                    [Element::ObjectIdentifier(oid)] => (oid.clone(), None),
+                    [Element::ObjectIdentifier(oid), params] => (oid.clone(), Some(params.clone())),
+                    [_, ..] => {
+                        return Err(Error::SmimeCapabilitiesExpectedOid);
+                    }
+                    [] => {
+                        return Err(Error::SmimeCapabilitiesInvalidElementCount(0));
+                    }
+                };
 
                 Ok(SMIMECapability {
                     capability_id,
@@ -378,10 +369,9 @@ mod tests {
         // Create a SET containing a SEQUENCE of SMIMECapability
         let oid = ObjectIdentifier::from_str(oid_str).unwrap();
 
-        let mut cap_elements = vec![Element::ObjectIdentifier(oid.clone())];
-        if has_params {
-            cap_elements.push(Element::Null);
-        }
+        let cap_elements: Vec<_> = std::iter::once(Element::ObjectIdentifier(oid.clone()))
+            .chain(has_params.then_some(Element::Null))
+            .collect();
 
         let capability = Element::Sequence(cap_elements);
         let capabilities_seq = Element::Sequence(vec![capability]);
@@ -411,10 +401,9 @@ mod tests {
             .zip(has_params.iter())
             .map(|(oid_str, &has_param)| {
                 let oid = ObjectIdentifier::from_str(oid_str).unwrap();
-                let mut elements = vec![Element::ObjectIdentifier(oid)];
-                if has_param {
-                    elements.push(Element::Null);
-                }
+                let elements: Vec<_> = std::iter::once(Element::ObjectIdentifier(oid))
+                    .chain(has_param.then_some(Element::Null))
+                    .collect();
                 Element::Sequence(elements)
             })
             .collect();
@@ -440,11 +429,11 @@ mod tests {
     }
 
     #[rstest]
-    #[case(vec![], "smimeCapabilities values SET is empty")]
-    #[case(vec![Element::Null], "smimeCapabilities must contain a SEQUENCE")]
-    #[case(vec![Element::Sequence(vec![Element::Null])], "Each SMIMECapability must be a SEQUENCE")]
-    #[case(vec![Element::Sequence(vec![Element::Sequence(vec![])])], "SMIMECapability SEQUENCE is empty")]
-    #[case(vec![Element::Sequence(vec![Element::Sequence(vec![Element::Null])])], "SMIMECapability must start with an OID")]
+    #[case(vec![], "AttributeEmptyValuesSet")]
+    #[case(vec![Element::Null], "AttributeExpectedElementType")]
+    #[case(vec![Element::Sequence(vec![Element::Null])], "SmimeCapabilitiesExpectedSequence")]
+    #[case(vec![Element::Sequence(vec![Element::Sequence(vec![])])], "SmimeCapabilitiesInvalidElementCount")]
+    #[case(vec![Element::Sequence(vec![Element::Sequence(vec![Element::Null])])], "SmimeCapabilitiesExpectedOid")]
     fn test_smime_capabilities_parse_errors(
         #[case] set_elements: Vec<Element>,
         #[case] error_msg: &str,

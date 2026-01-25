@@ -2,7 +2,7 @@
 //!
 //! This module is only compiled when the `rustls` feature is enabled.
 
-use asn1::ASN1Object;
+use asn1::{ASN1Object, Element};
 use rustls_pki_types::{PrivateKeyDer, PrivatePkcs1KeyDer, PrivatePkcs8KeyDer, PrivateSec1KeyDer};
 use tsumiki::decoder::Decoder;
 use tsumiki::encoder::Encoder;
@@ -14,6 +14,28 @@ use crate::private_key::PrivateKey;
 use crate::sec1::{self, ECPrivateKey};
 
 // ============================================================================
+// Helper functions for common conversion patterns
+// ============================================================================
+
+/// Decodes DER bytes into an ASN.1 element.
+fn decode_der_to_element(der_bytes: &[u8]) -> Result<Element> {
+    let der = der_bytes.decode()?;
+    let asn1_obj = der.decode()?;
+    asn1_obj
+        .elements()
+        .first()
+        .cloned()
+        .ok_or(Error::Sec1(sec1::Error::EmptyAsn1Object))
+}
+
+/// Encodes an ASN.1 element into DER bytes.
+fn encode_element_to_der(element: Element) -> Result<Vec<u8>> {
+    let asn1_obj = ASN1Object::new(vec![element]);
+    let der = asn1_obj.encode()?;
+    Ok(der.encode()?)
+}
+
+// ============================================================================
 // PKCS#1 RSAPrivateKey <-> PrivatePkcs1KeyDer
 // ============================================================================
 
@@ -22,12 +44,7 @@ impl TryFrom<PrivatePkcs1KeyDer<'_>> for RSAPrivateKey {
     type Error = Error;
 
     fn try_from(key_der: PrivatePkcs1KeyDer<'_>) -> Result<Self> {
-        let der_bytes = key_der.secret_pkcs1_der();
-        let der = der_bytes.decode()?;
-        let asn1_obj = der.decode()?;
-        let element = asn1_obj.elements().first().ok_or_else(|| {
-            Error::Pkcs1(pkcs1::Error::InvalidStructure("empty ASN.1 object".into()))
-        })?;
+        let element = decode_der_to_element(key_der.secret_pkcs1_der())?;
         element.decode().map_err(Error::Pkcs1)
     }
 }
@@ -38,9 +55,7 @@ impl TryFrom<&RSAPrivateKey> for PrivatePkcs1KeyDer<'static> {
 
     fn try_from(key: &RSAPrivateKey) -> Result<Self> {
         let element = key.encode().map_err(Error::Pkcs1)?;
-        let asn1_obj = ASN1Object::new(vec![element]);
-        let der = asn1_obj.encode()?;
-        let bytes = der.encode()?;
+        let bytes = encode_element_to_der(element)?;
         Ok(PrivatePkcs1KeyDer::from(bytes))
     }
 }
@@ -63,13 +78,7 @@ impl TryFrom<PrivateSec1KeyDer<'_>> for ECPrivateKey {
     type Error = Error;
 
     fn try_from(key_der: PrivateSec1KeyDer<'_>) -> Result<Self> {
-        let der_bytes = key_der.secret_sec1_der();
-        let der = der_bytes.decode()?;
-        let asn1_obj = der.decode()?;
-        let element = asn1_obj
-            .elements()
-            .first()
-            .ok_or(sec1::Error::EmptyAsn1Object)?;
+        let element = decode_der_to_element(key_der.secret_sec1_der())?;
         element.decode().map_err(Error::Sec1)
     }
 }
@@ -80,9 +89,7 @@ impl TryFrom<&ECPrivateKey> for PrivateSec1KeyDer<'static> {
 
     fn try_from(key: &ECPrivateKey) -> Result<Self> {
         let element = key.encode().map_err(Error::Sec1)?;
-        let asn1_obj = ASN1Object::new(vec![element]);
-        let der = asn1_obj.encode()?;
-        let bytes = der.encode()?;
+        let bytes = encode_element_to_der(element)?;
         Ok(PrivateSec1KeyDer::from(bytes))
     }
 }
@@ -105,12 +112,7 @@ impl TryFrom<PrivatePkcs8KeyDer<'_>> for OneAsymmetricKey {
     type Error = Error;
 
     fn try_from(key_der: PrivatePkcs8KeyDer<'_>) -> Result<Self> {
-        let der_bytes = key_der.secret_pkcs8_der();
-        let der = der_bytes.decode()?;
-        let asn1_obj = der.decode()?;
-        let element = asn1_obj.elements().first().ok_or_else(|| {
-            Error::Pkcs8(pkcs8::Error::InvalidStructure("empty ASN.1 object".into()))
-        })?;
+        let element = decode_der_to_element(key_der.secret_pkcs8_der())?;
         element.decode().map_err(Error::Pkcs8)
     }
 }
@@ -121,9 +123,7 @@ impl TryFrom<&OneAsymmetricKey> for PrivatePkcs8KeyDer<'static> {
 
     fn try_from(key: &OneAsymmetricKey) -> Result<Self> {
         let element = key.encode().map_err(Error::Pkcs8)?;
-        let asn1_obj = ASN1Object::new(vec![element]);
-        let der = asn1_obj.encode()?;
-        let bytes = der.encode()?;
+        let bytes = encode_element_to_der(element)?;
         Ok(PrivatePkcs8KeyDer::from(bytes))
     }
 }
@@ -149,9 +149,9 @@ impl TryFrom<PrivateKeyDer<'_>> for RSAPrivateKey {
     fn try_from(key_der: PrivateKeyDer<'_>) -> Result<Self> {
         match key_der {
             PrivateKeyDer::Pkcs1(pkcs1) => RSAPrivateKey::try_from(pkcs1),
-            _ => Err(Error::Pkcs1(pkcs1::Error::InvalidStructure(
-                "expected PKCS#1 key".into(),
-            ))),
+            _ => Err(Error::Pkcs1(pkcs1::Error::UnexpectedKeyFormat {
+                expected: "PKCS#1",
+            })),
         }
     }
 }
@@ -177,9 +177,9 @@ impl TryFrom<PrivateKeyDer<'_>> for OneAsymmetricKey {
     fn try_from(key_der: PrivateKeyDer<'_>) -> Result<Self> {
         match key_der {
             PrivateKeyDer::Pkcs8(pkcs8) => OneAsymmetricKey::try_from(pkcs8),
-            _ => Err(Error::Pkcs8(pkcs8::Error::InvalidStructure(
-                "expected PKCS#8 key".into(),
-            ))),
+            _ => Err(Error::Pkcs8(pkcs8::Error::UnexpectedKeyFormat {
+                expected: "PKCS#8",
+            })),
         }
     }
 }
@@ -207,9 +207,9 @@ impl TryFrom<PrivateKeyDer<'_>> for PrivateKey {
                 let key = OneAsymmetricKey::try_from(pkcs8)?;
                 Ok(PrivateKey::Pkcs8(key))
             }
-            _ => Err(Error::Pkcs8(pkcs8::Error::InvalidStructure(
-                "unknown private key format".into(),
-            ))),
+            _ => Err(Error::Pkcs8(pkcs8::Error::UnexpectedKeyFormat {
+                expected: "PKCS#1, SEC1, or PKCS#8",
+            })),
         }
     }
 }

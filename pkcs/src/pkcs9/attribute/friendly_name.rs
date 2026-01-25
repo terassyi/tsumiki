@@ -15,13 +15,13 @@
 //! for the object it belongs to. This is commonly used in PKCS#12
 //! to provide human-readable names for certificates and private keys.
 
-use asn1::{ASN1Object, Element, OctetString};
+use asn1::{Element, OctetString};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
 use std::fmt;
 
 use crate::pkcs9::error::{Error, Result};
 
-use super::Attribute;
+use super::{Attribute, extract_single_value};
 
 /// friendlyName attribute
 ///
@@ -124,37 +124,16 @@ impl Attribute for FriendlyName {
     const OID: &'static str = "1.2.840.113549.1.9.20";
 
     fn parse(values: &OctetString) -> Result<Self> {
-        let asn1_obj = ASN1Object::try_from(values).map_err(Error::from)?;
-        let elements = asn1_obj.elements();
-        if elements.is_empty() {
-            return Err(Error::InvalidFriendlyName("Empty ASN1Object".into()));
-        }
-
-        // The first element should be a SET
-        let Element::Set(set_contents) = &elements[0] else {
-            return Err(Error::InvalidFriendlyName(
-                "Expected SET in friendlyName values".into(),
-            ));
-        };
-
-        // friendlyName is SINGLE VALUE, so the SET should contain exactly one element
-        if set_contents.len() != 1 {
-            return Err(Error::InvalidFriendlyName(format!(
-                "friendlyName must have exactly one value, got {}",
-                set_contents.len()
-            )));
-        }
+        let value = extract_single_value(values, "friendlyName")?;
 
         // The value should be a BMPString
-        let Element::BMPString(bmp_string) = &set_contents[0] else {
-            return Err(Error::InvalidFriendlyName(
-                "friendlyName value must be BMPString".into(),
-            ));
+        let Element::BMPString(bmp_string) = &value else {
+            return Err(Error::InvalidFriendlyNameExpectedBmpString);
         };
 
         let name = bmp_string
             .try_into_string()
-            .map_err(|e| Error::InvalidFriendlyName(format!("Invalid BMPString: {}", e)))?;
+            .map_err(|e| Error::InvalidFriendlyNameBmpStringConversion(e.to_string()))?;
         Self::new(name)
     }
 }

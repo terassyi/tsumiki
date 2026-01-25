@@ -35,7 +35,8 @@ pub(crate) fn output_ec_private_key(
             if let Some(curve) = private_key.parameters {
                 let curve_name = curve.oid_name().unwrap_or("unknown");
                 if config.show_oid {
-                    writeln!(output, "Curve: {} ({})", curve_name, curve.oid())?;
+                    let oid = curve.oid()?;
+                    writeln!(output, "Curve: {} ({})", curve_name, oid)?;
                 } else {
                     writeln!(output, "Curve: {}", curve_name)?;
                 }
@@ -61,7 +62,8 @@ pub(crate) fn output_ec_private_key(
                 // Show curve OID if not already showing it
                 if !config.show_oid {
                     if let Some(curve) = private_key.parameters {
-                        writeln!(output, "Curve OID: {}", curve.oid())?;
+                        let oid = curve.oid()?;
+                        writeln!(output, "Curve OID: {}", oid)?;
                     }
                 }
 

@@ -5,6 +5,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::error::Error;
 use crate::extensions::Extension;
 use crate::extensions::general_name::GeneralName;
@@ -54,33 +55,18 @@ impl Decoder<Element, AccessDescription> for Element {
 
     fn decode(&self) -> Result<AccessDescription, Self::Error> {
         match self {
-            Element::Sequence(elements) => {
-                if elements.len() != 2 {
-                    return Err(Error::InvalidAuthorityInfoAccess(format!(
-                        "AccessDescription must have exactly 2 elements, got {}",
-                        elements.len()
-                    )));
+            Element::Sequence(elements) => match elements.as_slice() {
+                [Element::ObjectIdentifier(oid), location_elem] => {
+                    let access_location: GeneralName = location_elem.decode()?;
+                    Ok(AccessDescription {
+                        access_method: oid.clone(),
+                        access_location,
+                    })
                 }
-
-                let access_method = match &elements[0] {
-                    Element::ObjectIdentifier(oid) => oid.clone(),
-                    _ => {
-                        return Err(Error::InvalidAuthorityInfoAccess(
-                            "accessMethod must be ObjectIdentifier".to_string(),
-                        ));
-                    }
-                };
-
-                let access_location: GeneralName = elements[1].decode()?;
-
-                Ok(AccessDescription {
-                    access_method,
-                    access_location,
-                })
-            }
-            _ => Err(Error::InvalidAuthorityInfoAccess(
-                "AccessDescription must be a Sequence".to_string(),
-            )),
+                [_, _] => Err(error::Error::AccessDescriptionExpectedOid.into()),
+                _ => Err(error::Error::AccessDescriptionInvalidStructure.into()),
+            },
+            _ => Err(error::Error::ExpectedSequence(error::Kind::AuthorityInfoAccess).into()),
         }
     }
 }
@@ -129,16 +115,12 @@ impl Decoder<OctetString, AuthorityInfoAccess> for OctetString {
 
     fn decode(&self) -> Result<AuthorityInfoAccess, Self::Error> {
         let asn1_obj = ASN1Object::try_from(self).map_err(Error::InvalidASN1)?;
-        let elements = asn1_obj.elements();
-
-        if elements.is_empty() {
-            return Err(Error::InvalidAuthorityInfoAccess(
-                "empty sequence".to_string(),
-            ));
-        }
 
         // The first element should be a Sequence
-        elements[0].decode()
+        match asn1_obj.elements() {
+            [elem, ..] => elem.decode(),
+            [] => Err(error::Error::EmptySequence(error::Kind::AuthorityInfoAccess).into()),
+        }
     }
 }
 
@@ -151,22 +133,17 @@ impl Decoder<Element, AuthorityInfoAccess> for Element {
         match self {
             Element::Sequence(elements) => {
                 if elements.is_empty() {
-                    return Err(Error::InvalidAuthorityInfoAccess(
-                        "at least one AccessDescription required".to_string(),
-                    ));
+                    return Err(error::Error::AuthorityInfoAccessEmpty.into());
                 }
 
-                let mut descriptors = Vec::new();
-                for elem in elements {
-                    let desc: AccessDescription = elem.decode()?;
-                    descriptors.push(desc);
-                }
+                let descriptors = elements
+                    .iter()
+                    .map(|elem| elem.decode())
+                    .collect::<Result<Vec<AccessDescription>, _>>()?;
 
                 Ok(AuthorityInfoAccess { descriptors })
             }
-            _ => Err(Error::InvalidAuthorityInfoAccess(
-                "expected Sequence".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::AuthorityInfoAccess).into()),
         }
     }
 }
@@ -178,9 +155,7 @@ impl Encoder<AuthorityInfoAccess, Element> for AuthorityInfoAccess {
 
     fn encode(&self) -> Result<Element, Self::Error> {
         if self.descriptors.is_empty() {
-            return Err(Error::InvalidAuthorityInfoAccess(
-                "at least one AccessDescription required".to_string(),
-            ));
+            return Err(error::Error::AuthorityInfoAccessEmpty.into());
         }
 
         let desc_elements = self
@@ -365,7 +340,7 @@ mod tests {
     )]
     #[case(
         Element::OctetString(OctetString::from(vec![0x01, 0x02])),
-        "expected Sequence"
+        "AuthorityInfoAccess: expected SEQUENCE"
     )]
     #[case(
         Element::Sequence(vec![
@@ -373,7 +348,7 @@ mod tests {
             Element::ObjectIdentifier(ObjectIdentifier::from_str(AuthorityInfoAccess::OCSP).unwrap()),
             ]),
         ]),
-        "AccessDescription must have exactly 2 elements"
+        "AccessDescription must be SEQUENCE with 2 elements"
     )]
     #[case(
         Element::Sequence(vec![
@@ -386,13 +361,13 @@ mod tests {
                 },
             ]),
         ]),
-        "accessMethod must be ObjectIdentifier"
+        "accessMethod must be OBJECT IDENTIFIER"
     )]
     #[case(
         Element::Sequence(vec![
         Element::OctetString(OctetString::from(vec![0x01])),
         ]),
-        "AccessDescription must be a Sequence"
+        "AuthorityInfoAccess: expected SEQUENCE"
     )]
     fn test_authority_info_access_decode_failure(input: Element, expected_error_msg: &str) {
         let result: Result<AuthorityInfoAccess, _> = input.decode();

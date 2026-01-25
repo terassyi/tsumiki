@@ -5,6 +5,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::error::Error;
 use crate::extensions::Extension;
 use crate::extensions::general_name::GeneralName;
@@ -168,15 +169,11 @@ impl Decoder<OctetString, CRLDistributionPoints> for OctetString {
 
     fn decode(&self) -> Result<CRLDistributionPoints, Self::Error> {
         let asn1_obj = ASN1Object::try_from(self).map_err(Error::InvalidASN1)?;
-        let elements = asn1_obj.elements();
 
-        if elements.is_empty() {
-            return Err(Error::InvalidCRLDistributionPoints(
-                "empty sequence".to_string(),
-            ));
+        match asn1_obj.elements() {
+            [elem, ..] => elem.decode(),
+            [] => Err(error::Error::EmptySequence(error::Kind::CRLDistributionPoints).into()),
         }
-
-        elements[0].decode()
     }
 }
 
@@ -189,24 +186,19 @@ impl Decoder<Element, CRLDistributionPoints> for Element {
         match self {
             Element::Sequence(elements) => {
                 if elements.is_empty() {
-                    return Err(Error::InvalidCRLDistributionPoints(
-                        "empty sequence - at least one DistributionPoint required".to_string(),
-                    ));
+                    return Err(error::Error::CrlDistributionPointsEmpty.into());
                 }
 
-                let mut distribution_points = Vec::new();
-                for elem in elements {
-                    let dp: DistributionPoint = elem.decode()?;
-                    distribution_points.push(dp);
-                }
+                let distribution_points = elements
+                    .iter()
+                    .map(|elem| elem.decode())
+                    .collect::<Result<Vec<DistributionPoint>, _>>()?;
 
                 Ok(CRLDistributionPoints {
                     distribution_points,
                 })
             }
-            _ => Err(Error::InvalidCRLDistributionPoints(
-                "expected Sequence".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::CRLDistributionPoints).into()),
         }
     }
 }
@@ -218,9 +210,7 @@ impl Encoder<CRLDistributionPoints, Element> for CRLDistributionPoints {
 
     fn encode(&self) -> Result<Element, Self::Error> {
         if self.distribution_points.is_empty() {
-            return Err(Error::InvalidCRLDistributionPoints(
-                "at least one DistributionPoint required".to_string(),
-            ));
+            return Err(error::Error::CrlDistributionPointsEmpty.into());
         }
 
         let dp_elements = self
@@ -241,55 +231,53 @@ impl Decoder<Element, DistributionPoint> for Element {
     fn decode(&self) -> Result<DistributionPoint, Self::Error> {
         match self {
             Element::Sequence(elements) => {
-                let mut distribution_point = None;
-                let mut reasons = None;
-                let mut crl_issuer = None;
-
-                for elem in elements {
-                    match elem {
-                        Element::ContextSpecific { slot, element, .. } => match slot {
-                            0 => {
-                                // distributionPoint [0] DistributionPointName
-                                distribution_point = Some(element.as_ref().decode()?);
-                            }
-                            1 => {
-                                // reasons [1] ReasonFlags (BIT STRING)
-                                if let Element::BitString(bit_string) = element.as_ref() {
-                                    reasons = Some(bit_string.clone().into());
-                                } else {
-                                    return Err(Error::InvalidCRLDistributionPoints(
-                                        "reasons must be BIT STRING".to_string(),
-                                    ));
+                let (distribution_point, reasons, crl_issuer) = elements.iter().try_fold(
+                    (None, None, None),
+                    |(dp, reasons, issuer), elem| -> Result<_, Error> {
+                        match elem {
+                            Element::ContextSpecific { slot, element, .. } => match slot {
+                                0 => {
+                                    // distributionPoint [0] DistributionPointName
+                                    Ok((Some(element.as_ref().decode()?), reasons, issuer))
                                 }
-                            }
-                            2 => {
-                                // cRLIssuer [2] GeneralNames
-                                if let Element::Sequence(names) = element.as_ref() {
-                                    let mut general_names = Vec::new();
-                                    for name_elem in names {
-                                        general_names.push(name_elem.decode()?);
+                                1 => {
+                                    // reasons [1] ReasonFlags (BIT STRING)
+                                    if let Element::BitString(bit_string) = element.as_ref() {
+                                        Ok((dp, Some(bit_string.clone().into()), issuer))
+                                    } else {
+                                        Err(error::Error::ExpectedBitString(
+                                            error::Kind::CRLDistributionPoints,
+                                        )
+                                        .into())
                                     }
-                                    crl_issuer = Some(general_names);
-                                } else {
-                                    return Err(Error::InvalidCRLDistributionPoints(
-                                        "cRLIssuer must be Sequence of GeneralName".to_string(),
-                                    ));
                                 }
-                            }
-                            _ => {
-                                return Err(Error::InvalidCRLDistributionPoints(format!(
-                                    "unexpected context-specific tag: {}",
-                                    slot
-                                )));
-                            }
-                        },
-                        _ => {
-                            return Err(Error::InvalidCRLDistributionPoints(
-                                "expected context-specific element".to_string(),
-                            ));
+                                2 => {
+                                    // cRLIssuer [2] GeneralNames
+                                    if let Element::Sequence(names) = element.as_ref() {
+                                        let general_names = names
+                                            .iter()
+                                            .map(|e| e.decode())
+                                            .collect::<Result<Vec<GeneralName>, Error>>(
+                                        )?;
+                                        Ok((dp, reasons, Some(general_names)))
+                                    } else {
+                                        Err(error::Error::ExpectedSequence(
+                                            error::Kind::CRLDistributionPoints,
+                                        )
+                                        .into())
+                                    }
+                                }
+                                _ => {
+                                    Err(error::Error::CrlDistributionPointsUnknownTag(*slot).into())
+                                }
+                            },
+                            _ => Err(error::Error::UnexpectedElementType(
+                                error::Kind::CRLDistributionPoints,
+                            )
+                            .into()),
                         }
-                    }
-                }
+                    },
+                )?;
 
                 Ok(DistributionPoint {
                     distribution_point,
@@ -297,9 +285,7 @@ impl Decoder<Element, DistributionPoint> for Element {
                     crl_issuer,
                 })
             }
-            _ => Err(Error::InvalidCRLDistributionPoints(
-                "expected Sequence for DistributionPoint".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::CRLDistributionPoints).into()),
         }
     }
 }
@@ -385,10 +371,10 @@ impl Decoder<Element, DistributionPointName> for Element {
                         match element.as_ref() {
                             Element::Sequence(names) => {
                                 // Case 1: Parser created an explicit Sequence
-                                let mut general_names = Vec::new();
-                                for name_elem in names {
-                                    general_names.push(name_elem.decode()?);
-                                }
+                                let general_names = names
+                                    .iter()
+                                    .map(|e| e.decode())
+                                    .collect::<Result<Vec<GeneralName>, _>>()?;
                                 Ok(DistributionPointName::FullName(general_names))
                             }
                             // Case 2: element is a single GeneralName (single element sequence)
@@ -399,9 +385,10 @@ impl Decoder<Element, DistributionPointName> for Element {
                             }
                         }
                     } else {
-                        Err(Error::InvalidCRLDistributionPoints(
-                            "fullName must be constructed (contain Sequence)".to_string(),
-                        ))
+                        Err(
+                            error::Error::ExpectedSequence(error::Kind::CRLDistributionPoints)
+                                .into(),
+                        )
                     }
                 }
                 1 => {
@@ -409,14 +396,11 @@ impl Decoder<Element, DistributionPointName> for Element {
                     let rdn: RelativeDistinguishedName = element.decode()?;
                     Ok(DistributionPointName::NameRelativeToCRLIssuer(rdn))
                 }
-                _ => Err(Error::InvalidCRLDistributionPoints(format!(
-                    "unexpected context-specific tag for DistributionPointName: {}",
-                    slot
-                ))),
+                _ => Err(error::Error::CrlDistributionPointsUnknownTag(*slot).into()),
             },
-            _ => Err(Error::InvalidCRLDistributionPoints(
-                "expected context-specific element for DistributionPointName".to_string(),
-            )),
+            _ => {
+                Err(error::Error::UnexpectedElementType(error::Kind::CRLDistributionPoints).into())
+            }
         }
     }
 }
@@ -714,12 +698,12 @@ mod tests {
         // Test case: Empty sequence
         case(
             Element::Sequence(vec![]),
-            "empty sequence"
+            "at least one DistributionPoint required"
         ),
         // Test case: Not a Sequence
         case(
             Element::Boolean(true),
-            "expected Sequence"
+            "expected SEQUENCE"
         ),
     )]
     fn test_crl_distribution_points_decode_failure(input: Element, expected_error_msg: &str) {

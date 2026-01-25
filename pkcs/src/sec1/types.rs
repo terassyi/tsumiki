@@ -148,7 +148,7 @@ impl PrivateKeyExt for ECPrivateKey {
         // Build AlgorithmIdentifier for EC with curve OID as parameter
         let ec_oid = AlgorithmIdentifier::OID_EC_PUBLIC_KEY.parse().ok()?;
         let curve_param = AlgorithmParameters::Other(RawAlgorithmParameter::new(
-            Element::ObjectIdentifier(curve.oid()),
+            Element::ObjectIdentifier(curve.oid().ok()?),
         ));
         let algorithm = AlgorithmIdentifier::new_with_params(ec_oid, curve_param);
 
@@ -170,22 +170,20 @@ impl Decoder<Element, ECPrivateKey> for Element {
             _ => return Err(Error::ExpectedSequence),
         };
 
-        let mut iter = elements.iter();
+        // First two elements are required: version and privateKey
+        let (version, private_key, rest) = match elements.as_slice() {
+            [version_elem, Element::OctetString(octets), rest @ ..] => {
+                (version_elem.decode()?, octets.clone(), rest)
+            }
+            [_, _, ..] => return Err(Error::ExpectedOctetString),
+            _ => {
+                return Err(Error::MissingRequiredFields);
+            }
+        };
 
-        let version = iter
-            .next()
-            .ok_or_else(|| Error::InsufficientElements("missing version".into()))?
-            .decode()?;
-
-        let private_key = iter
-            .next()
-            .ok_or_else(|| Error::InsufficientElements("missing privateKey".into()))
-            .and_then(|e| match e {
-                Element::OctetString(octets) => Ok(octets.clone()),
-                _ => Err(Error::ExpectedOctetString),
-            })?;
-
-        let parameters = iter
+        // Optional fields: parameters [0] and publicKey [1]
+        let parameters = rest
+            .iter()
             .find_map(|e| match e {
                 Element::ContextSpecific {
                     slot: 0,
@@ -196,13 +194,13 @@ impl Decoder<Element, ECPrivateKey> for Element {
             })
             .map(|inner| match inner.as_ref() {
                 Element::ObjectIdentifier(oid) => {
-                    NamedCurve::try_from(oid).map_err(|_| Error::UnknownCurve(oid.to_string()))
+                    NamedCurve::try_from(oid).map_err(|_| Error::UnknownCurveOid(oid.clone()))
                 }
-                _ => Err(Error::UnknownCurve("invalid parameters".into())),
+                _ => Err(Error::InvalidParametersExpectedOid),
             })
             .transpose()?;
 
-        let public_key = iter.find_map(|e| match e {
+        let public_key = rest.iter().find_map(|e| match e {
             Element::ContextSpecific {
                 slot: 1,
                 element: inner,
@@ -234,26 +232,32 @@ impl Encoder<ECPrivateKey, Element> for ECPrivateKey {
             Element::OctetString(self.private_key.clone()),
         ];
 
-        let elements = [
-            self.parameters.map(|curve| Element::ContextSpecific {
-                slot: 0,
-                constructed: true,
-                element: Box::new(Element::ObjectIdentifier(curve.oid())),
-            }),
-            self.public_key
-                .as_ref()
-                .map(|pubkey| Element::ContextSpecific {
-                    slot: 1,
+        let params_elem = self
+            .parameters
+            .map(|curve| -> Result<_> {
+                let oid = curve.oid()?;
+                Ok(Element::ContextSpecific {
+                    slot: 0,
                     constructed: true,
-                    element: Box::new(Element::BitString(pubkey.clone())),
-                }),
-        ]
-        .into_iter()
-        .flatten()
-        .fold(base_elements, |mut acc, elem| {
-            acc.push(elem);
-            acc
-        });
+                    element: Box::new(Element::ObjectIdentifier(oid)),
+                })
+            })
+            .transpose()?;
+
+        let pubkey_elem = self
+            .public_key
+            .as_ref()
+            .map(|pubkey| Element::ContextSpecific {
+                slot: 1,
+                constructed: true,
+                element: Box::new(Element::BitString(pubkey.clone())),
+            });
+
+        let elements: Vec<_> = base_elements
+            .into_iter()
+            .chain(params_elem)
+            .chain(pubkey_elem)
+            .collect();
 
         Ok(Element::Sequence(elements))
     }
@@ -436,10 +440,10 @@ Qfy9psRxxxXzssiOv+KVS4Lh1VxPde57p20Rg7kH8g==
     }
 
     #[test]
-    fn test_error_insufficient_elements() {
+    fn test_error_missing_required_fields() {
         let element = Element::Sequence(vec![Element::Integer(Integer::from(BigInt::from(1)))]);
         let result: Result<ECPrivateKey> = element.decode();
-        assert!(matches!(result, Err(Error::InsufficientElements(_))));
+        assert!(matches!(result, Err(Error::MissingRequiredFields)));
     }
 
     #[test]

@@ -38,36 +38,32 @@ impl Decoder<Element, EncryptedPrivateKeyInfo> for Element {
 
     fn decode(&self) -> Result<EncryptedPrivateKeyInfo> {
         // EncryptedPrivateKeyInfo is a SEQUENCE with 2 elements
-        match self {
-            Element::Sequence(elements) => {
-                if elements.len() != 2 {
-                    return Err(Error::InvalidStructure(
-                        "EncryptedPrivateKeyInfo must have 2 elements".into(),
-                    ));
-                }
+        let Element::Sequence(elements) = self else {
+            return Err(Error::ExpectedSequence);
+        };
 
-                // 1. encryptionAlgorithm (AlgorithmIdentifier)
-                let encryption_algorithm: AlgorithmIdentifier = elements[0].decode()?;
-
-                // 2. encryptedData (OCTET STRING)
-                let encrypted_data = match &elements[1] {
-                    Element::OctetString(data) => data.clone(),
-                    _ => {
-                        return Err(Error::InvalidStructure(
-                            "encryptedData must be OCTET STRING".into(),
-                        ));
-                    }
-                };
-
-                Ok(EncryptedPrivateKeyInfo {
-                    encryption_algorithm,
-                    encrypted_data,
-                })
+        let (alg_elem, data_elem) = match elements.as_slice() {
+            [alg, Element::OctetString(data)] => (alg, data),
+            [_, _] => {
+                return Err(Error::ExpectedOctetString {
+                    field: "encryptedData",
+                });
             }
-            _ => Err(Error::InvalidStructure(
-                "EncryptedPrivateKeyInfo must be a SEQUENCE".into(),
-            )),
-        }
+            _ => {
+                return Err(Error::InvalidElementCount {
+                    expected: "2",
+                    actual: elements.len(),
+                });
+            }
+        };
+
+        // 1. encryptionAlgorithm (AlgorithmIdentifier)
+        let encryption_algorithm: AlgorithmIdentifier = alg_elem.decode()?;
+
+        Ok(EncryptedPrivateKeyInfo {
+            encryption_algorithm,
+            encrypted_data: data_elem.clone(),
+        })
     }
 }
 
@@ -78,11 +74,8 @@ impl Decoder<ASN1Object, EncryptedPrivateKeyInfo> for ASN1Object {
     type Error = Error;
 
     fn decode(&self) -> Result<EncryptedPrivateKeyInfo> {
-        if self.elements().is_empty() {
-            return Err(Error::InvalidStructure("ASN1Object has no elements".into()));
-        }
-        // Decode from the first element
-        self.elements()[0].decode()
+        let first = self.elements().first().ok_or(Error::EmptyAsn1Object)?;
+        first.decode()
     }
 }
 
