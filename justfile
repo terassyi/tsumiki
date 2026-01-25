@@ -52,8 +52,12 @@ e2e:
 e2ev:
     cargo test --package tsumiki-cli --test '*' -- --nocapture
 
+# Run doc tests
+test-doc:
+    cargo test --all-features --doc
+
 # Run all tests (unit + e2e)
-test-all: test e2e
+test-all: test e2e test-doc
 
 # Run rustls integration test (mTLS connection)
 test-rustls-integration:

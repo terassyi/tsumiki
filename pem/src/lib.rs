@@ -192,7 +192,7 @@ impl Decoder<&str, Pem> for &str {
 ///
 /// # Example
 /// ```
-/// use pem::parse_many;
+/// use tsumiki_pem::parse_many;
 ///
 /// let pem_data = "-----BEGIN CERTIFICATE-----\nAAA=\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nBBB=\n-----END CERTIFICATE-----";
 /// let pems = parse_many(pem_data).unwrap();
