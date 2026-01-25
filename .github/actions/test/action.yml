@@ -1,12 +1,6 @@
 name: 'Test'
 description: 'Run format check, clippy, and unit tests'
 
-inputs:
-  toolchain:
-    description: 'Rust toolchain version'
-    required: false
-    default: 'stable'
-
 runs:
   using: 'composite'
   steps:
@@ -14,9 +8,8 @@ runs:
       uses: rui314/setup-mold@v1
 
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@f7ccc83f9ed1e5b9c81d8a67d7ad1a747e22a561 # master
+      uses: dtolnay/rust-toolchain@stable
       with:
-        toolchain: ${{ inputs.toolchain }}
         components: rustfmt, clippy
 
     - name: Cache cargo
