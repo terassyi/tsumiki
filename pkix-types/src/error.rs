@@ -8,45 +8,51 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// PKIX types error types
 #[derive(Debug, Error)]
 pub enum Error {
-    /// Invalid DirectoryString
-    #[error("Invalid DirectoryString: {0}")]
-    InvalidDirectoryString(String),
+    // DirectoryString errors
+    #[error("DirectoryString: invalid UTF-8 in OctetString")]
+    DirectoryStringInvalidUtf8,
+    #[error("DirectoryString: expected string type")]
+    DirectoryStringExpectedStringType,
 
-    /// Invalid AlgorithmIdentifier
-    #[error("Invalid AlgorithmIdentifier: {0}")]
-    InvalidAlgorithmIdentifier(String),
+    // Extension errors
+    #[error("Extension: expected SEQUENCE")]
+    ExtensionExpectedSequence,
+    #[error("Extension: expected 2 or 3 elements, got {0}")]
+    ExtensionInvalidElementCount(usize),
+    #[error("Extension: expected OCTET STRING for extnValue")]
+    ExtensionExpectedOctetString,
+    #[error("Extension: expected BOOLEAN for critical or OCTET STRING for extnValue")]
+    ExtensionInvalidCriticalOrValue,
+    #[error("Extension: expected OBJECT IDENTIFIER for extnID")]
+    ExtensionExpectedOidForExtnId,
 
-    /// Invalid Extension
-    #[error("Invalid Extension: {0}")]
-    InvalidExtension(String),
+    // Name errors
+    #[error("Name: expected SEQUENCE")]
+    NameExpectedSequence,
 
-    /// Invalid Name
-    #[error("Invalid Name: {0}")]
-    InvalidName(String),
+    // RelativeDistinguishedName errors
+    #[error("RelativeDistinguishedName: expected SET")]
+    RdnExpectedSet,
 
-    /// Invalid RelativeDistinguishedName
-    #[error("Invalid RelativeDistinguishedName: {0}")]
-    InvalidRelativeDistinguishedName(String),
+    // AttributeTypeAndValue errors
+    #[error("AttributeTypeAndValue: expected SEQUENCE")]
+    AttributeTypeAndValueExpectedSequence,
+    #[error("AttributeTypeAndValue: expected OBJECT IDENTIFIER for attribute type")]
+    AttributeTypeAndValueExpectedOid,
+    #[error("AttributeTypeAndValue: expected 2 elements")]
+    AttributeTypeAndValueInvalidElementCount,
 
-    /// Invalid AttributeTypeAndValue
-    #[error("Invalid AttributeTypeAndValue: {0}")]
-    InvalidAttributeTypeAndValue(String),
+    // CertificateSerialNumber errors
+    #[error("CertificateSerialNumber: expected INTEGER")]
+    CertificateSerialNumberExpectedInteger,
 
-    /// Invalid CertificateSerialNumber
-    #[error("Invalid CertificateSerialNumber: {0}")]
-    InvalidCertificateSerialNumber(String),
-
-    /// Invalid KeyIdentifier
-    #[error("Invalid KeyIdentifier: {0}")]
-    InvalidKeyIdentifier(String),
-
-    /// Invalid SubjectPublicKeyInfo
-    #[error("Invalid SubjectPublicKeyInfo: {0}")]
-    InvalidSubjectPublicKeyInfo(String),
-
-    /// Invalid encoding
-    #[error("Invalid encoding: {0}")]
-    InvalidEncoding(String),
+    // SubjectPublicKeyInfo errors
+    #[error("SubjectPublicKeyInfo: expected SEQUENCE")]
+    SubjectPublicKeyInfoExpectedSequence,
+    #[error("SubjectPublicKeyInfo: expected BIT STRING for subject public key")]
+    SubjectPublicKeyInfoExpectedBitString,
+    #[error("SubjectPublicKeyInfo: expected 2 elements, got {0}")]
+    SubjectPublicKeyInfoInvalidElementCount(usize),
 
     /// Algorithm error
     #[error(transparent)]

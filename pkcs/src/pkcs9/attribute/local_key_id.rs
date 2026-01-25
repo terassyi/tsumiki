@@ -15,13 +15,13 @@
 //! for a key or certificate. This is commonly used in PKCS#12
 //! to link private keys with their corresponding certificates.
 
-use asn1::{ASN1Object, Element, OctetString};
+use asn1::{Element, OctetString};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
 use std::fmt;
 
 use crate::pkcs9::error::{Error, Result};
 
-use super::Attribute;
+use super::{Attribute, extract_single_value};
 
 /// localKeyId attribute
 ///
@@ -129,36 +129,15 @@ impl Attribute for LocalKeyId {
     const OID: &'static str = "1.2.840.113549.1.9.21";
 
     fn parse(values: &OctetString) -> Result<Self> {
-        let asn1_obj = ASN1Object::try_from(values).map_err(Error::from)?;
-        let elements = asn1_obj.elements();
-        if elements.is_empty() {
-            return Err(Error::InvalidLocalKeyId("Empty ASN1Object".into()));
-        }
-
-        // The first element should be a SET
-        let Element::Set(set_contents) = &elements[0] else {
-            return Err(Error::InvalidLocalKeyId(
-                "Expected SET in localKeyId values".into(),
-            ));
-        };
-
-        // localKeyId is SINGLE VALUE, so the SET should contain exactly one element
-        if set_contents.len() != 1 {
-            return Err(Error::InvalidLocalKeyId(format!(
-                "localKeyId must have exactly one value, got {}",
-                set_contents.len()
-            )));
-        }
+        let value = extract_single_value(values, "localKeyId")?;
 
         // The value should be an OCTET STRING
-        let Element::OctetString(octet_string) = &set_contents[0] else {
-            return Err(Error::InvalidLocalKeyId(
-                "localKeyId value must be OCTET STRING".into(),
-            ));
+        let Element::OctetString(octet_string) = value else {
+            return Err(Error::InvalidLocalKeyIdExpectedOctetString);
         };
 
         Ok(Self {
-            key_id: octet_string.clone(),
+            key_id: octet_string,
         })
     }
 }
@@ -166,7 +145,7 @@ impl Attribute for LocalKeyId {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::ObjectIdentifier;
+    use asn1::{ASN1Object, Element, ObjectIdentifier};
     use rstest::rstest;
     use std::str::FromStr;
     use tsumiki::decoder::Decoder;

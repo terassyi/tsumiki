@@ -35,12 +35,12 @@
 //!   the number of seconds is zero.
 //! - GeneralizedTime values must not include fractional seconds.
 
-use asn1::{ASN1Object, Element, OctetString};
+use asn1::{Element, OctetString};
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
 use std::fmt;
 
-use super::Attribute;
+use super::{Attribute, extract_single_value};
 use crate::pkcs9::error::{Error, Result};
 
 /// signingTime attribute
@@ -71,7 +71,7 @@ impl SigningTime {
     /// Parse from RFC 3339 string
     pub fn from_rfc3339(s: &str) -> Result<Self> {
         let time = DateTime::parse_from_rfc3339(s)
-            .map_err(|e| Error::InvalidSigningTime(format!("Invalid RFC3339: {}", e)))?
+            .map_err(|e| Error::SigningTimeInvalidRfc3339(e.to_string()))?
             .with_timezone(&Utc);
         Ok(Self { time })
     }
@@ -145,29 +145,10 @@ impl Attribute for SigningTime {
     const OID: &'static str = "1.2.840.113549.1.9.5";
 
     fn parse(values: &OctetString) -> Result<Self> {
-        let asn1_obj = ASN1Object::try_from(values).map_err(Error::from)?;
-        let elements = asn1_obj.elements();
-        if elements.is_empty() {
-            return Err(Error::InvalidSigningTime("Empty ASN1Object".into()));
-        }
-
-        // The first element should be a SET
-        let Element::Set(set_contents) = &elements[0] else {
-            return Err(Error::InvalidSigningTime(
-                "Expected SET in signingTime values".into(),
-            ));
-        };
-
-        // signingTime is SINGLE VALUE, so the SET should contain exactly one element
-        if set_contents.len() != 1 {
-            return Err(Error::InvalidSigningTime(format!(
-                "signingTime must have exactly one value, got {}",
-                set_contents.len()
-            )));
-        }
+        let value = extract_single_value(values, "signingTime")?;
 
         // The value should be either UTCTime or GeneralizedTime
-        let time = match &set_contents[0] {
+        let time = match &value {
             Element::UTCTime(naive_time) => {
                 // Convert NaiveDateTime to DateTime<Utc>
                 // Need to interpret the year based on RFC 5652 rules
@@ -187,16 +168,14 @@ impl Attribute for SigningTime {
                     naive_time.second(),
                 )
                 .single()
-                .ok_or_else(|| Error::InvalidSigningTime("Invalid date/time from UTCTime".into()))?
+                .ok_or(Error::SigningTimeInvalidDateTime)?
             }
             Element::GeneralizedTime(naive_time) => {
                 // Convert NaiveDateTime to DateTime<Utc>
                 DateTime::from_naive_utc_and_offset(*naive_time, Utc)
             }
             _ => {
-                return Err(Error::InvalidSigningTime(
-                    "signingTime value must be UTCTime or GeneralizedTime".into(),
-                ));
+                return Err(Error::SigningTimeExpectedTime);
             }
         };
 
@@ -207,7 +186,7 @@ impl Attribute for SigningTime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::ObjectIdentifier;
+    use asn1::{ASN1Object, Element, ObjectIdentifier};
     use chrono::{Datelike, NaiveDateTime, Timelike};
     use rstest::rstest;
     use std::str::FromStr;

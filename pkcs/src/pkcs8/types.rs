@@ -190,67 +190,70 @@ impl Decoder<Element, OneAsymmetricKey> for Element {
 
     fn decode(&self) -> Result<OneAsymmetricKey> {
         // OneAsymmetricKey is a SEQUENCE
-        match self {
-            Element::Sequence(elements) => {
-                if elements.len() < 3 {
-                    return Err(Error::InvalidStructure(
-                        "OneAsymmetricKey must have at least 3 elements".into(),
-                    ));
-                }
+        let Element::Sequence(elements) = self else {
+            return Err(Error::ExpectedSequence);
+        };
 
-                // 1. version (INTEGER)
-                let Element::Integer(int) = &elements[0] else {
-                    return Err(Error::InvalidStructure("Invalid version".into()));
-                };
-                let version_int = int.to_i64().ok_or(Error::InvalidVersion(0))?;
-                let version = Version::try_from(version_int)?;
-
-                // 2. privateKeyAlgorithm (AlgorithmIdentifier)
-                let private_key_algorithm = elements[1].decode()?;
-
-                // 3. privateKey (OCTET STRING)
-                let Element::OctetString(private_key) = &elements[2] else {
-                    return Err(Error::InvalidStructure(
-                        "privateKey must be OCTET STRING".into(),
-                    ));
-                };
-
-                // Optional: attributes [0] and publicKey [1]
-                let (attributes, public_key) =
-                    elements[3..]
-                        .iter()
-                        .fold((None, None), |(attrs, pubkey), elem| match elem {
-                            Element::ContextSpecific {
-                                slot: 0, element, ..
-                            } if matches!(element.as_ref(), Element::Set(_)) => {
-                                (element.decode().ok(), pubkey)
-                            }
-                            Element::ContextSpecific {
-                                slot: 1, element, ..
-                            } => {
-                                let new_pubkey = if let Element::BitString(bits) = element.as_ref()
-                                {
-                                    Some(bits.clone())
-                                } else {
-                                    pubkey
-                                };
-                                (attrs, new_pubkey)
-                            }
-                            _ => (attrs, pubkey),
-                        });
-
-                Ok(OneAsymmetricKey {
-                    version,
-                    private_key_algorithm,
-                    private_key: private_key.clone(),
-                    attributes,
-                    public_key,
-                })
+        // Extract required fields using slice pattern
+        let (version_elem, algorithm_elem, private_key, rest) = match elements.as_slice() {
+            [
+                Element::Integer(int),
+                alg,
+                Element::OctetString(pk),
+                rest @ ..,
+            ] => (int, alg, pk, rest),
+            [Element::Integer(_), _, _, ..] => {
+                return Err(Error::ExpectedOctetString {
+                    field: "privateKey",
+                });
             }
-            _ => Err(Error::InvalidStructure(
-                "OneAsymmetricKey must be a SEQUENCE".into(),
-            )),
-        }
+            [Element::Integer(_), ..] => {
+                return Err(Error::InvalidElementCount {
+                    expected: "at least 3",
+                    actual: elements.len(),
+                });
+            }
+            _ => {
+                return Err(Error::ExpectedVersionInteger);
+            }
+        };
+
+        // 1. version (INTEGER)
+        let version_int = version_elem.to_i64().ok_or(Error::InvalidVersion(0))?;
+        let version = Version::try_from(version_int)?;
+
+        // 2. privateKeyAlgorithm (AlgorithmIdentifier)
+        let private_key_algorithm = algorithm_elem.decode()?;
+
+        // Optional: attributes [0] and publicKey [1]
+        let (attributes, public_key) =
+            rest.iter()
+                .fold((None, None), |(attrs, pubkey), elem| match elem {
+                    Element::ContextSpecific {
+                        slot: 0, element, ..
+                    } if matches!(element.as_ref(), Element::Set(_)) => {
+                        (element.decode().ok(), pubkey)
+                    }
+                    Element::ContextSpecific {
+                        slot: 1, element, ..
+                    } => {
+                        let new_pubkey = if let Element::BitString(bits) = element.as_ref() {
+                            Some(bits.clone())
+                        } else {
+                            pubkey
+                        };
+                        (attrs, new_pubkey)
+                    }
+                    _ => (attrs, pubkey),
+                });
+
+        Ok(OneAsymmetricKey {
+            version,
+            private_key_algorithm,
+            private_key: private_key.clone(),
+            attributes,
+            public_key,
+        })
     }
 }
 
@@ -304,11 +307,8 @@ impl Decoder<ASN1Object, OneAsymmetricKey> for ASN1Object {
     type Error = Error;
 
     fn decode(&self) -> Result<OneAsymmetricKey> {
-        if self.elements().is_empty() {
-            return Err(Error::InvalidStructure("ASN1Object has no elements".into()));
-        }
-        // Decode from the first element
-        self.elements()[0].decode()
+        let first = self.elements().first().ok_or(Error::EmptyAsn1Object)?;
+        first.decode()
     }
 }
 
@@ -879,9 +879,9 @@ impl Encoder<PublicKey, Element> for PublicKey {
     type Error = Error;
 
     fn encode(&self) -> Result<Element> {
-        self.0.encode().map_err(|e| {
-            Error::InvalidStructure(format!("Failed to encode SubjectPublicKeyInfo: {:?}", e))
-        })
+        self.0
+            .encode()
+            .map_err(|_| Error::SubjectPublicKeyInfoEncodingFailed)
     }
 }
 
@@ -899,11 +899,8 @@ impl Decoder<Pem, PublicKey> for Pem {
         let asn1_obj: asn1::ASN1Object = der.decode()?;
 
         // Decode from the first element of ASN1Object
-        if asn1_obj.elements().is_empty() {
-            return Err(Error::InvalidStructure("ASN1Object has no elements".into()));
-        }
-
-        asn1_obj.elements()[0].decode()
+        let first = asn1_obj.elements().first().ok_or(Error::EmptyAsn1Object)?;
+        first.decode()
     }
 }
 

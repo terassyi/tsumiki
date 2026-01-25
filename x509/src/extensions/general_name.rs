@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::DirectoryString;
 use crate::Name;
 use crate::error::Error;
@@ -113,17 +114,13 @@ impl GeneralName {
                 match element {
                     Element::Sequence(seq) => {
                         if seq.len() < 2 {
-                            return Err(Error::InvalidGeneralName(
-                                "otherName requires at least 2 elements".to_string(),
-                            ));
+                            return Err(error::Error::OtherNameInvalidElementCount.into());
                         }
                         // First: type-id (OBJECT IDENTIFIER)
                         let type_id = match &seq[0] {
                             Element::ObjectIdentifier(oid) => oid.clone(),
                             _ => {
-                                return Err(Error::InvalidGeneralName(
-                                    "otherName type-id must be ObjectIdentifier".to_string(),
-                                ));
+                                return Err(error::Error::OtherNameExpectedOid.into());
                             }
                         };
                         // Second: [0] EXPLICIT value
@@ -148,16 +145,12 @@ impl GeneralName {
                                 }
                             }
                             _ => {
-                                return Err(Error::InvalidGeneralName(
-                                    "otherName value must be [0] EXPLICIT".to_string(),
-                                ));
+                                return Err(error::Error::OtherNameExpectedExplicitTag.into());
                             }
                         };
                         Ok(GeneralName::OtherName(OtherName { type_id, value }))
                     }
-                    _ => Err(Error::InvalidGeneralName(
-                        "otherName must be Sequence".to_string(),
-                    )),
+                    _ => Err(error::Error::ExpectedSequence(error::Kind::GeneralName).into()),
                 }
             }
             1 => {
@@ -181,9 +174,7 @@ impl GeneralName {
                             format!("{:?}", element).into_bytes(),
                         ))
                     }
-                    _ => Err(Error::InvalidGeneralName(
-                        "x400Address must be ORAddress".to_string(),
-                    )),
+                    _ => Err(error::Error::UnexpectedElementType(error::Kind::GeneralName).into()),
                 }
             }
             4 => {
@@ -194,65 +185,50 @@ impl GeneralName {
                         let name: Name = element.decode()?;
                         Ok(GeneralName::DirectoryName(name))
                     }
-                    _ => Err(Error::InvalidGeneralName(
-                        "directoryName must be Sequence (Name)".to_string(),
-                    )),
+                    _ => Err(error::Error::ExpectedSequence(error::Kind::GeneralName).into()),
                 }
             }
             5 => {
                 // ediPartyName [5] IMPLICIT EDIPartyName (SEQUENCE)
                 match element {
                     Element::Sequence(seq) => {
-                        let mut name_assigner = None;
-                        let mut party_name = None;
-
-                        for elem in seq {
-                            match elem {
+                        let (name_assigner, party_name) = seq.iter().try_fold(
+                            (None, None),
+                            |(assigner, party), elem| match elem {
                                 Element::ContextSpecific {
                                     slot: 0, element, ..
                                 } => {
                                     // nameAssigner [0]
                                     let dir_string: DirectoryString =
                                         element.as_ref().decode().map_err(|_| {
-                                            Error::InvalidGeneralName(
-                                                "invalid nameAssigner".to_string(),
-                                            )
+                                            error::Error::EdiPartyNameInvalidNameAssigner
                                         })?;
-                                    name_assigner = Some(dir_string.into());
+                                    Ok((Some(dir_string.into()), party))
                                 }
                                 Element::ContextSpecific {
                                     slot: 1, element, ..
                                 } => {
                                     // partyName [1]
-                                    let dir_string: DirectoryString =
-                                        element.as_ref().decode().map_err(|_| {
-                                            Error::InvalidGeneralName(
-                                                "invalid partyName".to_string(),
-                                            )
-                                        })?;
-                                    party_name = Some(dir_string.into());
+                                    let dir_string: DirectoryString = element
+                                        .as_ref()
+                                        .decode()
+                                        .map_err(|_| error::Error::EdiPartyNameInvalidPartyName)?;
+                                    Ok((assigner, Some(dir_string.into())))
                                 }
-                                _ => {
-                                    return Err(Error::InvalidGeneralName(
-                                        "ediPartyName has invalid element".to_string(),
-                                    ));
-                                }
-                            }
-                        }
+                                _ => Err(error::Error::UnexpectedElementType(
+                                    error::Kind::GeneralName,
+                                )),
+                            },
+                        )?;
 
-                        let party_name = party_name.ok_or_else(|| {
-                            Error::InvalidGeneralName(
-                                "ediPartyName requires partyName [1]".to_string(),
-                            )
-                        })?;
+                        let party_name =
+                            party_name.ok_or(error::Error::EdiPartyNameMissingPartyName)?;
                         Ok(GeneralName::EdiPartyName(EdiPartyName {
                             name_assigner,
                             party_name,
                         }))
                     }
-                    _ => Err(Error::InvalidGeneralName(
-                        "ediPartyName must be Sequence".to_string(),
-                    )),
+                    _ => Err(error::Error::ExpectedSequence(error::Kind::GeneralName).into()),
                 }
             }
             6 => {
@@ -266,42 +242,65 @@ impl GeneralName {
                 match element {
                     Element::OctetString(os) => {
                         let bytes = os.as_bytes();
-                        let ip = match bytes.len() {
-                            4 => {
-                                // IPv4: 4 bytes (single address)
-                                let octets: [u8; 4] = bytes.try_into().unwrap();
-                                IpAddressOrRange::Address(IpAddr::from(octets))
+                        let ip = match bytes {
+                            // IPv4: 4 bytes (single address)
+                            [a, b, c, d] => {
+                                IpAddressOrRange::Address(IpAddr::from([*a, *b, *c, *d]))
                             }
-                            8 => {
-                                // IPv4 network: 8 bytes (address + mask)
-                                let addr_octets: [u8; 4] = bytes[0..4].try_into().unwrap();
-                                let mask_octets: [u8; 4] = bytes[4..8].try_into().unwrap();
-
-                                let addr = std::net::Ipv4Addr::from(addr_octets);
-                                let mask = std::net::Ipv4Addr::from(mask_octets);
+                            // IPv4 network: 8 bytes (address + mask)
+                            [a0, a1, a2, a3, m0, m1, m2, m3] => {
+                                let addr = std::net::Ipv4Addr::from([*a0, *a1, *a2, *a3]);
+                                let mask = std::net::Ipv4Addr::from([*m0, *m1, *m2, *m3]);
 
                                 // Convert netmask to prefix length
                                 let prefix_len =
                                     mask.octets().iter().map(|&b| b.count_ones()).sum::<u32>()
                                         as u8;
 
-                                let net = Ipv4Net::new(addr, prefix_len).map_err(|e| {
-                                    Error::InvalidGeneralName(format!(
-                                        "invalid IPv4 network: {}",
-                                        e
-                                    ))
-                                })?;
+                                let net = Ipv4Net::new(addr, prefix_len)
+                                    .map_err(|e| error::Error::InvalidIpv4Network(e.to_string()))?;
                                 IpAddressOrRange::Network(IpNet::V4(net))
                             }
-                            16 => {
-                                // IPv6: 16 bytes (single address)
-                                let octets: [u8; 16] = bytes.try_into().unwrap();
+                            // IPv6: 16 bytes (single address)
+                            [
+                                b0,
+                                b1,
+                                b2,
+                                b3,
+                                b4,
+                                b5,
+                                b6,
+                                b7,
+                                b8,
+                                b9,
+                                b10,
+                                b11,
+                                b12,
+                                b13,
+                                b14,
+                                b15,
+                            ] => {
+                                let octets = [
+                                    *b0, *b1, *b2, *b3, *b4, *b5, *b6, *b7, *b8, *b9, *b10, *b11,
+                                    *b12, *b13, *b14, *b15,
+                                ];
                                 IpAddressOrRange::Address(IpAddr::from(octets))
                             }
-                            32 => {
-                                // IPv6 network: 32 bytes (address + mask)
-                                let addr_octets: [u8; 16] = bytes[0..16].try_into().unwrap();
-                                let mask_octets: [u8; 16] = bytes[16..32].try_into().unwrap();
+                            // IPv6 network: 32 bytes (address + mask)
+                            bytes if bytes.len() == 32 => {
+                                let (addr_bytes, mask_bytes) = bytes.split_at(16);
+                                let addr_octets: [u8; 16] =
+                                    addr_bytes.try_into().map_err(|_| {
+                                        error::Error::InvalidIpv6Network(
+                                            "invalid IPv6 address".to_string(),
+                                        )
+                                    })?;
+                                let mask_octets: [u8; 16] =
+                                    mask_bytes.try_into().map_err(|_| {
+                                        error::Error::InvalidIpv6Network(
+                                            "invalid IPv6 mask".to_string(),
+                                        )
+                                    })?;
 
                                 let addr = std::net::Ipv6Addr::from(addr_octets);
                                 let mask = std::net::Ipv6Addr::from(mask_octets);
@@ -311,26 +310,19 @@ impl GeneralName {
                                     mask.octets().iter().map(|&b| b.count_ones()).sum::<u32>()
                                         as u8;
 
-                                let net = Ipv6Net::new(addr, prefix_len).map_err(|e| {
-                                    Error::InvalidGeneralName(format!(
-                                        "invalid IPv6 network: {}",
-                                        e
-                                    ))
-                                })?;
+                                let net = Ipv6Net::new(addr, prefix_len)
+                                    .map_err(|e| error::Error::InvalidIpv6Network(e.to_string()))?;
                                 IpAddressOrRange::Network(IpNet::V6(net))
                             }
                             _ => {
-                                return Err(Error::InvalidGeneralName(format!(
-                                    "iPAddress must be 4, 8, 16, or 32 bytes, got {}",
-                                    bytes.len()
-                                )));
+                                return Err(
+                                    error::Error::InvalidIpAddressLength(bytes.len()).into()
+                                );
                             }
                         };
                         Ok(GeneralName::IpAddress(ip))
                     }
-                    _ => Err(Error::InvalidGeneralName(
-                        "iPAddress must be OctetString".to_string(),
-                    )),
+                    _ => Err(error::Error::ExpectedOctetString(error::Kind::GeneralName).into()),
                 }
             }
             8 => {
@@ -339,22 +331,17 @@ impl GeneralName {
                     Element::OctetString(os) => {
                         // IMPLICIT OID comes as OctetString, need to parse
                         let oid = ObjectIdentifier::try_from(os.as_bytes())
-                            .map_err(|_| Error::InvalidGeneralName("invalid OID".to_string()))?;
+                            .map_err(|_| error::Error::InvalidOidEncoding)?;
                         Ok(GeneralName::RegisteredId(oid))
                     }
                     Element::ObjectIdentifier(oid) => {
                         // EXPLICIT OID (less common)
                         Ok(GeneralName::RegisteredId(oid.clone()))
                     }
-                    _ => Err(Error::InvalidGeneralName(
-                        "registeredID must be ObjectIdentifier".to_string(),
-                    )),
+                    _ => Err(error::Error::ExpectedOid(error::Kind::GeneralName).into()),
                 }
             }
-            _ => Err(Error::InvalidGeneralName(format!(
-                "unknown GeneralName tag [{}]",
-                slot
-            ))),
+            _ => Err(error::Error::UnknownGeneralNameTag(slot).into()),
         }
     }
 
@@ -363,12 +350,11 @@ impl GeneralName {
         match element {
             Element::OctetString(os) => {
                 // IMPLICIT IA5String comes as OctetString
-                String::from_utf8(os.as_bytes().to_vec()).map_err(|_| {
-                    Error::InvalidGeneralName("IA5String must be valid ASCII".to_string())
-                })
+                String::from_utf8(os.as_bytes().to_vec())
+                    .map_err(|_| error::Error::GeneralNameInvalidAscii.into())
             }
             Element::IA5String(s) => Ok(s.clone()),
-            _ => Err(Error::InvalidGeneralName("expected IA5String".to_string())),
+            _ => Err(error::Error::UnexpectedElementType(error::Kind::GeneralName).into()),
         }
     }
 }
@@ -427,9 +413,7 @@ impl Decoder<Element, GeneralName> for Element {
             Element::ContextSpecific { slot, element, .. } => {
                 GeneralName::parse_from_context_specific(*slot, element)
             }
-            _ => Err(Error::InvalidGeneralName(
-                "GeneralName must be context-specific element".to_string(),
-            )),
+            _ => Err(error::Error::UnexpectedElementType(error::Kind::GeneralName).into()),
         }
     }
 }

@@ -5,6 +5,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::error::Error;
 use crate::extensions::Extension;
 use crate::extensions::certificate_policies::{CertPolicyId, CertificatePolicies};
@@ -61,13 +62,11 @@ impl Extension for PolicyMappings {
 
     fn parse(value: &OctetString) -> Result<Self, Error> {
         let asn1_obj = ASN1Object::try_from(value).map_err(Error::InvalidASN1)?;
-        let elements = asn1_obj.elements();
 
-        if elements.is_empty() {
-            return Err(Error::InvalidPolicyMappings("empty content".to_string()));
+        match asn1_obj.elements() {
+            [elem, ..] => elem.decode(),
+            [] => Err(error::Error::PolicyMappingsEmpty.into()),
         }
-
-        elements[0].decode()
     }
 }
 
@@ -80,9 +79,7 @@ impl Decoder<Element, PolicyMappings> for Element {
         match self {
             Element::Sequence(elements) => {
                 if elements.is_empty() {
-                    return Err(Error::InvalidPolicyMappings(
-                        "empty sequence - at least one mapping required".to_string(),
-                    ));
+                    return Err(error::Error::PolicyMappingsEmpty.into());
                 }
 
                 let mappings: Vec<PolicyMapping> = elements
@@ -92,9 +89,7 @@ impl Decoder<Element, PolicyMappings> for Element {
 
                 Ok(PolicyMappings { mappings })
             }
-            _ => Err(Error::InvalidPolicyMappings(
-                "expected Sequence".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::PolicyMappings).into()),
         }
     }
 }
@@ -106,9 +101,7 @@ impl Encoder<PolicyMappings, Element> for PolicyMappings {
 
     fn encode(&self) -> Result<Element, Self::Error> {
         if self.mappings.is_empty() {
-            return Err(Error::InvalidPolicyMappings(
-                "at least one mapping required".to_string(),
-            ));
+            return Err(error::Error::PolicyMappingsEmpty.into());
         }
 
         let mapping_elements = self
@@ -129,43 +122,28 @@ impl Decoder<Element, PolicyMapping> for Element {
     fn decode(&self) -> Result<PolicyMapping, Self::Error> {
         match self {
             Element::Sequence(elements) => {
-                if elements.len() != 2 {
-                    return Err(Error::InvalidPolicyMappings(format!(
-                        "expected 2 elements in mapping, got {}",
-                        elements.len()
-                    )));
-                }
-
-                let mut iter = elements.iter();
-
-                let issuer_domain_policy = match iter.next() {
-                    Some(Element::ObjectIdentifier(oid)) => oid.clone(),
-                    _ => {
-                        return Err(Error::InvalidPolicyMappings(
-                            "issuerDomainPolicy must be ObjectIdentifier".to_string(),
-                        ));
+                let (issuer_domain_policy, subject_domain_policy) = match elements.as_slice() {
+                    [
+                        Element::ObjectIdentifier(issuer),
+                        Element::ObjectIdentifier(subject),
+                    ] => (issuer.clone(), subject.clone()),
+                    [_, Element::ObjectIdentifier(_)] => {
+                        return Err(error::Error::PolicyMappingIssuerExpectedOid.into());
                     }
-                };
-
-                let subject_domain_policy = match iter.next() {
-                    Some(Element::ObjectIdentifier(oid)) => oid.clone(),
+                    [Element::ObjectIdentifier(_), _] => {
+                        return Err(error::Error::PolicyMappingSubjectExpectedOid.into());
+                    }
                     _ => {
-                        return Err(Error::InvalidPolicyMappings(
-                            "subjectDomainPolicy must be ObjectIdentifier".to_string(),
-                        ));
+                        return Err(error::Error::PolicyMappingInvalidStructure.into());
                     }
                 };
 
                 // RFC 5280: anyPolicy (2.5.29.32.0) MUST NOT be used in policy mappings
                 if issuer_domain_policy == CertificatePolicies::ANY_POLICY {
-                    return Err(Error::InvalidPolicyMappings(
-                        "issuerDomainPolicy must not be anyPolicy (2.5.29.32.0)".to_string(),
-                    ));
+                    return Err(error::Error::PolicyMappingIssuerExpectedOid.into());
                 }
                 if subject_domain_policy == CertificatePolicies::ANY_POLICY {
-                    return Err(Error::InvalidPolicyMappings(
-                        "subjectDomainPolicy must not be anyPolicy (2.5.29.32.0)".to_string(),
-                    ));
+                    return Err(error::Error::PolicyMappingSubjectExpectedOid.into());
                 }
 
                 Ok(PolicyMapping {
@@ -173,9 +151,7 @@ impl Decoder<Element, PolicyMapping> for Element {
                     subject_domain_policy,
                 })
             }
-            _ => Err(Error::InvalidPolicyMappings(
-                "expected Sequence for PolicyMapping".to_string(),
-            )),
+            _ => Err(error::Error::PolicyMappingInvalidStructure.into()),
         }
     }
 }
@@ -187,14 +163,10 @@ impl Encoder<PolicyMapping, Element> for PolicyMapping {
 
     fn encode(&self) -> Result<Element, Self::Error> {
         if self.issuer_domain_policy == CertificatePolicies::ANY_POLICY {
-            return Err(Error::InvalidPolicyMappings(
-                "issuerDomainPolicy must not be anyPolicy".to_string(),
-            ));
+            return Err(error::Error::PolicyMappingIssuerExpectedOid.into());
         }
         if self.subject_domain_policy == CertificatePolicies::ANY_POLICY {
-            return Err(Error::InvalidPolicyMappings(
-                "subjectDomainPolicy must not be anyPolicy".to_string(),
-            ));
+            return Err(error::Error::PolicyMappingSubjectExpectedOid.into());
         }
 
         Ok(Element::Sequence(vec![
@@ -308,7 +280,7 @@ mod tests {
         let result: Result<PolicyMappings, _> = elem.decode();
         assert!(result.is_err());
         let err_msg = format!("{:?}", result.unwrap_err());
-        assert!(err_msg.contains("anyPolicy"));
+        assert!(err_msg.contains("PolicyMapping") && err_msg.contains("ExpectedOid"));
     }
 
     /// Test full parse through Extension::parse

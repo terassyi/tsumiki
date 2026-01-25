@@ -31,11 +31,11 @@ impl DecodableFrom<Der> for ASN1Object {}
 impl Decoder<Der, ASN1Object> for Der {
     type Error = Error;
     fn decode(&self) -> Result<ASN1Object, Error> {
-        let mut elements = Vec::new();
-        for tlv in self.elements() {
-            let element = Element::try_from(tlv)?;
-            elements.push(element);
-        }
+        let elements = self
+            .elements()
+            .iter()
+            .map(Element::try_from)
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(ASN1Object { elements })
     }
 }
@@ -46,10 +46,11 @@ impl Encoder<ASN1Object, Der> for ASN1Object {
     type Error = Error;
 
     fn encode(&self) -> Result<Der, Self::Error> {
-        let mut tlvs = Vec::new();
-        for element in &self.elements {
-            tlvs.push(element.encode()?);
-        }
+        let tlvs = self
+            .elements
+            .iter()
+            .map(|e| e.encode())
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(Der::new(tlvs))
     }
 }
@@ -100,7 +101,7 @@ impl TryFrom<&Tlv> for Element {
                         let integer = Integer::from(data);
                         Ok(Element::Integer(integer))
                     } else {
-                        Err(Error::InvalidInteger("Integer tag has no data".to_string()))
+                        Err(Error::IntegerNoData)
                     }
                 }
                 PrimitiveTag::BitString => {
@@ -108,10 +109,7 @@ impl TryFrom<&Tlv> for Element {
                         let bit_string = BitString::try_from(data)?;
                         Ok(Element::BitString(bit_string))
                     } else {
-                        // Can we have a BitString with no data?
-                        Err(Error::InvalidBitString(
-                            "BitString tag has no data".to_string(),
-                        ))
+                        Err(Error::BitStringNoData)
                     }
                 }
                 PrimitiveTag::OctetString => {
@@ -129,48 +127,46 @@ impl TryFrom<&Tlv> for Element {
                         let oid = ObjectIdentifier::try_from(data)?;
                         Ok(Element::ObjectIdentifier(oid))
                     } else {
-                        Err(Error::InvalidObjectIdentifier(
-                            "ObjectIdentifier tag has no data".to_string(),
-                        ))
+                        Err(Error::ObjectIdentifierNoData)
                     }
                 }
                 PrimitiveTag::UTF8String => {
                     if let Some(data) = tlv.data() {
                         let utf8_string = String::from_utf8(data.to_vec())
-                            .map_err(|e| Error::InvalidUTF8String(e.to_string()))?;
+                            .map_err(|_| Error::Utf8StringInvalidUtf8)?;
                         Ok(Element::UTF8String(utf8_string))
                     } else {
                         Ok(Element::UTF8String(String::new()))
                     }
                 }
                 PrimitiveTag::Sequence => {
-                    if let Some(tlvs) = tlv.tlvs() {
-                        let mut elements = Vec::new();
-                        for sub_tlv in tlvs.iter() {
-                            let element = Element::try_from(sub_tlv)?;
-                            elements.push(element);
-                        }
-                        Ok(Element::Sequence(elements))
-                    } else {
-                        Ok(Element::Sequence(Vec::new()))
-                    }
+                    let elements = tlv
+                        .tlvs()
+                        .map(|tlvs| {
+                            tlvs.iter()
+                                .map(Element::try_from)
+                                .collect::<Result<Vec<_>, _>>()
+                        })
+                        .transpose()?
+                        .unwrap_or_default();
+                    Ok(Element::Sequence(elements))
                 }
                 PrimitiveTag::Set => {
-                    if let Some(tlvs) = tlv.tlvs() {
-                        let mut elements = Vec::new();
-                        for sub_tlv in tlvs.iter() {
-                            let element = Element::try_from(sub_tlv)?;
-                            elements.push(element);
-                        }
-                        Ok(Element::Set(elements))
-                    } else {
-                        Ok(Element::Set(Vec::new()))
-                    }
+                    let elements = tlv
+                        .tlvs()
+                        .map(|tlvs| {
+                            tlvs.iter()
+                                .map(Element::try_from)
+                                .collect::<Result<Vec<_>, _>>()
+                        })
+                        .transpose()?
+                        .unwrap_or_default();
+                    Ok(Element::Set(elements))
                 }
                 PrimitiveTag::PrintableString => {
                     if let Some(data) = tlv.data() {
                         let printable_string = String::from_utf8(data.to_vec())
-                            .map_err(|e| Error::InvalidPrintableString(e.to_string()))?;
+                            .map_err(|_| Error::PrintableStringInvalidEncoding)?;
                         Ok(Element::PrintableString(printable_string))
                     } else {
                         Ok(Element::PrintableString(String::new()))
@@ -179,7 +175,7 @@ impl TryFrom<&Tlv> for Element {
                 PrimitiveTag::IA5String => {
                     if let Some(data) = tlv.data() {
                         let ia5_string = String::from_utf8(data.to_vec())
-                            .map_err(|e| Error::InvalidIA5String(e.to_string()))?;
+                            .map_err(|_| Error::Ia5StringInvalidEncoding)?;
                         Ok(Element::IA5String(ia5_string))
                     } else {
                         Ok(Element::IA5String(String::new()))
@@ -190,7 +186,7 @@ impl TryFrom<&Tlv> for Element {
                         let time = parse_utc_time(data)?;
                         Ok(Element::UTCTime(time))
                     } else {
-                        Err(Error::InvalidUTCTime("UTCTime tag has no data".to_string()))
+                        Err(Error::UtcTimeNoData)
                     }
                 }
                 PrimitiveTag::GeneralizedTime => {
@@ -198,9 +194,7 @@ impl TryFrom<&Tlv> for Element {
                         let time = parse_generalized_time(data)?;
                         Ok(Element::GeneralizedTime(time))
                     } else {
-                        Err(Error::InvalidGeneralizedTime(
-                            "GeneralizedTime tag has no data".to_string(),
-                        ))
+                        Err(Error::GeneralizedTimeNoData)
                     }
                 }
                 PrimitiveTag::BMPString => {
@@ -429,17 +423,15 @@ impl TryFrom<&Element> for Tlv {
                             if let Some(data) = inner_tlv.data() {
                                 Ok(Tlv::new_primitive(tag, data.to_vec()))
                             } else {
-                                Err(Error::InvalidElement(
-                                    "IMPLICIT tagging requires primitive inner element".to_string(),
+                                Err(Error::ElementCannotEncode(
+                                    "IMPLICIT tagging requires primitive inner element",
                                 ))
                             }
                         }
                     }
                 }
             }
-            Element::Unimplemented(_) => Err(Error::InvalidElement(
-                "Cannot encode Unimplemented element".to_string(),
-            )),
+            Element::Unimplemented(_) => Err(Error::ElementUnimplemented),
         }
     }
 }
@@ -564,10 +556,7 @@ impl TryFrom<Integer> for i64 {
     type Error = Error;
 
     fn try_from(value: Integer) -> Result<Self, Self::Error> {
-        value
-            .inner
-            .to_i64()
-            .ok_or_else(|| Error::InvalidInteger("Integer value out of range for i64".to_string()))
+        value.inner.to_i64().ok_or(Error::IntegerOutOfRangeI64)
     }
 }
 
@@ -575,10 +564,7 @@ impl TryFrom<&Integer> for i64 {
     type Error = Error;
 
     fn try_from(value: &Integer) -> Result<Self, Self::Error> {
-        value
-            .inner
-            .to_i64()
-            .ok_or_else(|| Error::InvalidInteger("Integer value out of range for i64".to_string()))
+        value.inner.to_i64().ok_or(Error::IntegerOutOfRangeI64)
     }
 }
 
@@ -586,10 +572,7 @@ impl TryFrom<Integer> for u64 {
     type Error = Error;
 
     fn try_from(value: Integer) -> Result<Self, Self::Error> {
-        value
-            .inner
-            .to_u64()
-            .ok_or_else(|| Error::InvalidInteger("Integer value out of range for u64".to_string()))
+        value.inner.to_u64().ok_or(Error::IntegerOutOfRangeU64)
     }
 }
 
@@ -597,10 +580,7 @@ impl TryFrom<&Integer> for u64 {
     type Error = Error;
 
     fn try_from(value: &Integer) -> Result<Self, Self::Error> {
-        value
-            .inner
-            .to_u64()
-            .ok_or_else(|| Error::InvalidInteger("Integer value out of range for u64".to_string()))
+        value.inner.to_u64().ok_or(Error::IntegerOutOfRangeU64)
     }
 }
 
@@ -628,23 +608,23 @@ impl BMPString {
     /// Returns an error if the string contains characters outside the BMP
     /// (i.e., characters requiring surrogate pairs, U+10000 and above).
     pub fn new(s: &str) -> Result<Self, Error> {
-        let mut inner = Vec::new();
-        for ch in s.chars() {
-            let code_point = ch as u32;
-            if code_point > 0xFFFF {
-                return Err(Error::InvalidBMPString(format!(
-                    "Character '{}' (U+{:04X}) is outside BMP range (U+0000-U+FFFF)",
-                    ch, code_point
-                )));
-            }
-            if (0xD800..=0xDFFF).contains(&code_point) {
-                return Err(Error::InvalidBMPString(format!(
-                    "Character U+{:04X} is in surrogate range (U+D800-U+DFFF)",
-                    code_point
-                )));
-            }
-            inner.push(code_point as u16);
-        }
+        let inner = s
+            .chars()
+            .enumerate()
+            .map(|(i, ch)| {
+                let code_point = ch as u32;
+                if code_point > 0xFFFF {
+                    return Err(Error::BmpStringRequiresSurrogatePair);
+                }
+                if (0xD800..=0xDFFF).contains(&code_point) {
+                    return Err(Error::BmpStringInvalidCodePoint {
+                        position: i,
+                        code_point: code_point as u16,
+                    });
+                }
+                Ok(code_point as u16)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(BMPString { inner })
     }
 
@@ -656,9 +636,7 @@ impl BMPString {
     /// - Any code unit is in the surrogate range (U+D800-U+DFFF)
     pub fn from_be_bytes(bytes: &[u8]) -> Result<Self, Error> {
         if !bytes.len().is_multiple_of(2) {
-            return Err(Error::InvalidBMPString(
-                "BMPString byte length must be even".to_string(),
-            ));
+            return Err(Error::BmpStringOddLength(bytes.len()));
         }
         let data: Vec<u16> = bytes
             .chunks_exact(2)
@@ -672,8 +650,7 @@ impl BMPString {
     /// This can fail if the BMPString contains invalid UTF-16 sequences,
     /// though this should be rare since we validate on construction.
     pub fn try_into_string(&self) -> Result<String, Error> {
-        String::from_utf16(&self.inner)
-            .map_err(|e| Error::InvalidBMPString(format!("Failed to convert to String: {}", e)))
+        String::from_utf16(&self.inner).map_err(|_| Error::BmpStringConversionFailed)
     }
 
     /// Get the length in UCS-2 code units (not characters or bytes).
@@ -797,12 +774,12 @@ impl TryFrom<Vec<u16>> for BMPString {
     ///
     /// Returns an error if any code unit is in the surrogate range (U+D800-U+DFFF).
     fn try_from(data: Vec<u16>) -> Result<Self, Self::Error> {
-        for &code_unit in &data {
+        for (i, &code_unit) in data.iter().enumerate() {
             if (0xD800..=0xDFFF).contains(&code_unit) {
-                return Err(Error::InvalidBMPString(format!(
-                    "Code unit U+{:04X} is in surrogate range (U+D800-U+DFFF)",
-                    code_unit
-                )));
+                return Err(Error::BmpStringInvalidCodePoint {
+                    position: i,
+                    code_point: code_unit,
+                });
             }
         }
         Ok(BMPString { inner: data })
@@ -830,12 +807,12 @@ impl Serialize for ObjectIdentifier {
     where
         S: Serializer,
     {
-        let s = match self.inner.first() {
-            Some(n) => self.inner[1..]
-                .iter()
-                .fold(n.to_string(), |s, n| s + "." + &n.to_string()),
-            None => String::new(),
-        };
+        let s: String = self
+            .inner
+            .iter()
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join(".");
         serializer.serialize_str(&s)
     }
 }
@@ -866,31 +843,29 @@ impl TryFrom<&[u8]> for ObjectIdentifier {
     type Error = Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
-        if value.is_empty() {
-            return Err(Error::InvalidObjectIdentifier(
-                "ObjectIdentifier cannot be empty".to_string(),
-            ));
-        }
-
-        let mut values = Vec::new();
-        let first = value[0] as u64;
-        values.push(first / 40);
-        values.push(first % 40);
-
-        let mut val = 0u64;
-        for v in value[1..].iter() {
-            val = (val << 7) | (*v as u64 & 0x7F);
-            if *v & 0x80 == 0 {
-                // If the continuation bit is not set, we have reached the end of this value
-                values.push(val);
-                val = 0; // Reset for the next value
+        let (first_byte, rest) = match value {
+            [first, rest @ ..] => (*first as u64, rest),
+            [] => {
+                return Err(Error::ObjectIdentifierNoData);
             }
-        }
-        if val != 0 {
-            // If there is a leftover value, it means the encoding was incorrect
-            return Err(Error::InvalidObjectIdentifier(
-                "Incomplete encoding in ObjectIdentifier".to_string(),
-            ));
+        };
+
+        let initial_values = vec![first_byte / 40, first_byte % 40];
+
+        let (values, remainder) =
+            rest.iter()
+                .fold((initial_values, 0u64), |(mut vals, acc), &byte| {
+                    let new_acc = (acc << 7) | (byte as u64 & 0x7F);
+                    if byte & 0x80 == 0 {
+                        vals.push(new_acc);
+                        (vals, 0)
+                    } else {
+                        (vals, new_acc)
+                    }
+                });
+
+        if remainder != 0 {
+            return Err(Error::ObjectIdentifierIncompleteEncoding);
         }
 
         Ok(ObjectIdentifier { inner: values })
@@ -901,21 +876,21 @@ impl TryFrom<ObjectIdentifier> for Vec<u8> {
     type Error = Error;
 
     fn try_from(oid: ObjectIdentifier) -> Result<Self, Self::Error> {
-        if oid.inner.len() < 2 {
-            return Err(Error::InvalidObjectIdentifier(format!(
-                "invalid length: {}",
-                oid
-            )));
-        }
+        let (first_arc, second_arc, rest) = match oid.inner.as_slice() {
+            [first, second, rest @ ..] => (*first, *second, rest),
+            _ => {
+                return Err(Error::ObjectIdentifierTooFewComponents);
+            }
+        };
 
         let mut result = Vec::new();
-        // SHould I check overflow?
+        // Should I check overflow?
         // Encode the first two elements of the OID
-        let first = (oid.inner[0] * 40 + oid.inner[1]) as u8;
+        let first = (first_arc * 40 + second_arc) as u8;
         result.push(first);
 
         // Encode the remaining elements of the OID
-        for v in oid.inner[2..].iter() {
+        for v in rest.iter() {
             let mut encoded = Vec::new();
             let mut value = *v;
 
@@ -946,11 +921,12 @@ impl TryFrom<ObjectIdentifier> for Vec<u8> {
 
 impl Display for ObjectIdentifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut iter = self.inner.iter();
-        let s = match iter.next() {
-            Some(n) => iter.fold(n.to_string(), |s, n| s + "." + &n.to_string()),
-            None => String::new(),
-        };
+        let s: String = self
+            .inner
+            .iter()
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>()
+            .join(".");
         write!(f, "{}", s)
     }
 }
@@ -959,34 +935,37 @@ impl FromStr for ObjectIdentifier {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let split = s.split(".");
-        let values = split
-            .map(|s| s.parse::<u64>().map_err(Error::ParseInt))
-            .collect::<Result<Vec<u64>, Error>>()?;
+        if s.is_empty() {
+            return Err(Error::ObjectIdentifierEmptyString);
+        }
+        let values = s
+            .split('.')
+            .map(|component| {
+                component
+                    .parse::<u64>()
+                    .map_err(|_| Error::ObjectIdentifierInvalidComponent(component.to_string()))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(ObjectIdentifier { inner: values })
     }
 }
 
 impl PartialEq<&str> for ObjectIdentifier {
     fn eq(&self, other: &&str) -> bool {
+        let parts: Vec<_> = other.split('.').collect();
+        if parts.len() != self.inner.len() {
+            return false;
+        }
         self.inner
             .iter()
-            .map(|n| n.to_string())
-            .collect::<Vec<_>>()
-            .join(".")
-            == *other
+            .zip(parts.iter())
+            .all(|(arc, s)| s.parse::<u64>().ok() == Some(*arc))
     }
 }
 
 impl PartialEq<ObjectIdentifier> for &str {
     fn eq(&self, other: &ObjectIdentifier) -> bool {
-        *self
-            == other
-                .inner
-                .iter()
-                .map(|n| n.to_string())
-                .collect::<Vec<_>>()
-                .join(".")
+        other == self
     }
 }
 
@@ -1003,15 +982,13 @@ impl AsOid for ObjectIdentifier {
 
 impl AsOid for &ObjectIdentifier {
     fn as_oid(&self) -> Result<ObjectIdentifier, Error> {
-        Ok((*self).clone())
+        (*self).as_oid()
     }
 }
 
 impl AsOid for &str {
     fn as_oid(&self) -> Result<ObjectIdentifier, Error> {
-        ObjectIdentifier::from_str(self).map_err(|e| {
-            Error::InvalidObjectIdentifier(format!("invalid OID string '{}': {}", self, e))
-        })
+        ObjectIdentifier::from_str(self)
     }
 }
 
@@ -1115,9 +1092,7 @@ impl TryFrom<Vec<u8>> for BitString {
                 unused: b,
                 data: value[1..].to_vec(),
             }),
-            None => Err(Error::InvalidBitString(
-                "BitString cannot be empty".to_string(),
-            )),
+            None => Err(Error::BitStringNoData),
         }
     }
 }
@@ -1130,9 +1105,7 @@ impl TryFrom<&[u8]> for BitString {
                 unused: b,
                 data: value[1..].to_vec(),
             }),
-            None => Err(Error::InvalidBitString(
-                "BitString cannot be empty".to_string(),
-            )),
+            None => Err(Error::BitStringNoData),
         }
     }
 }
@@ -1148,23 +1121,22 @@ impl From<BitString> for Vec<u8> {
 
 impl Display for BitString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut result = String::new();
-
-        for (i, byte) in self.data.iter().enumerate() {
-            if i == self.data.len() - 1 && self.unused > 0 {
-                // Handle the last byte with unused bits
-                let valid_bits = byte >> self.unused;
-                let bit_count = 8 - self.unused as usize;
-                result.push_str(&format!(
-                    "{:0bit_count$b}",
-                    valid_bits,
-                    bit_count = bit_count
-                ));
-            } else {
-                // Process full bytes
-                result.push_str(&format!("{:08b}", byte));
-            }
-        }
+        let result: String = self
+            .data
+            .iter()
+            .enumerate()
+            .map(|(i, byte)| {
+                if i == self.data.len() - 1 && self.unused > 0 {
+                    // Handle the last byte with unused bits
+                    let valid_bits = byte >> self.unused;
+                    let bit_count = 8 - self.unused as usize;
+                    format!("{:0bit_count$b}", valid_bits, bit_count = bit_count)
+                } else {
+                    // Process full bytes
+                    format!("{:08b}", byte)
+                }
+            })
+            .collect();
 
         write!(f, "{}", result)
     }
@@ -1325,18 +1297,18 @@ impl Display for OctetString {
 
 fn parse_utc_time(data: &[u8]) -> Result<NaiveDateTime, Error> {
     NaiveDateTime::parse_from_str(
-        std::str::from_utf8(data).map_err(|e| Error::InvalidUTCTime(e.to_string()))?,
+        std::str::from_utf8(data).map_err(|_| Error::UtcTimeInvalidFormat)?,
         "%y%m%d%H%M%SZ",
     )
-    .map_err(|e| Error::InvalidUTCTime(e.to_string()))
+    .map_err(|_| Error::UtcTimeInvalidFormat)
 }
 
 fn parse_generalized_time(data: &[u8]) -> Result<NaiveDateTime, Error> {
     NaiveDateTime::parse_from_str(
-        std::str::from_utf8(data).map_err(|e| Error::InvalidGeneralizedTime(e.to_string()))?,
+        std::str::from_utf8(data).map_err(|_| Error::GeneralizedTimeInvalidFormat)?,
         "%Y%m%d%H%M%SZ",
     )
-    .map_err(|e| Error::InvalidGeneralizedTime(e.to_string()))
+    .map_err(|_| Error::GeneralizedTimeInvalidFormat)
 }
 
 #[cfg(test)]
@@ -2621,10 +2593,8 @@ e8ZYGIc4gvs5McdrVUyYGUs=
         assert!(result.is_err());
 
         match result {
-            Err(Error::InvalidElement(msg)) => {
-                assert!(msg.contains("Cannot encode Unimplemented"));
-            }
-            _ => panic!("Expected InvalidElement error"),
+            Err(Error::ElementUnimplemented) => {}
+            _ => panic!("Expected ElementUnimplemented error"),
         }
     }
 

@@ -1,77 +1,132 @@
 use thiserror::Error;
 
+use crate::extensions::error;
+
+/// Context for certificate-level errors
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CertificateField {
+    Certificate,
+    TBSCertificate,
+    Version,
+    SerialNumber,
+    Signature,
+    Issuer,
+    Validity,
+    Subject,
+    SubjectPublicKeyInfo,
+    IssuerUniqueID,
+    SubjectUniqueID,
+    Extensions,
+    SignatureAlgorithm,
+    SignatureValue,
+}
+
+impl std::fmt::Display for CertificateField {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Certificate => write!(f, "Certificate"),
+            Self::TBSCertificate => write!(f, "TBSCertificate"),
+            Self::Version => write!(f, "version"),
+            Self::SerialNumber => write!(f, "serialNumber"),
+            Self::Signature => write!(f, "signature"),
+            Self::Issuer => write!(f, "issuer"),
+            Self::Validity => write!(f, "validity"),
+            Self::Subject => write!(f, "subject"),
+            Self::SubjectPublicKeyInfo => write!(f, "subjectPublicKeyInfo"),
+            Self::IssuerUniqueID => write!(f, "issuerUniqueID"),
+            Self::SubjectUniqueID => write!(f, "subjectUniqueID"),
+            Self::Extensions => write!(f, "extensions"),
+            Self::SignatureAlgorithm => write!(f, "signatureAlgorithm"),
+            Self::SignatureValue => write!(f, "signatureValue"),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("invalid validity: {0}")]
-    InvalidValidity(String),
-    #[error("invalid attribute type and value: {0}")]
-    InvalidAttributeTypeAndValue(String),
-    #[error("invalid attribute type: {0}")]
-    InvalidAttributeType(String),
-    #[error("invalid attribute value: {0}")]
-    InvalidAttributeValue(String),
-    #[error("invalid name: {0}")]
-    InvalidName(String),
-    #[error("invalid relative distinguished name: {0}")]
-    InvalidRelativeDistinguishedName(String),
-    #[error("invalid algorithm identifier: {0}")]
-    InvalidAlgorithmIdentifier(String),
-    #[error("invalid certificate serial number: {0}")]
-    InvalidCertificateSerialNumber(String),
-    #[error("invalid version: {0}")]
+    // Structured certificate errors
+    #[error("{0}: expected SEQUENCE")]
+    ExpectedSequence(CertificateField),
+    #[error("{0}: missing required field")]
+    MissingField(CertificateField),
+    #[error("{context}: expected {expected} elements, got {actual}")]
+    InvalidElementCount {
+        context: CertificateField,
+        expected: &'static str,
+        actual: usize,
+    },
+    #[error("Certificate: no elements in ASN1Object")]
+    EmptyCertificate,
+    #[error("Certificate: failed to decode DER")]
+    CertificateDerDecodeFailed,
+    #[error("{0}: unexpected element")]
+    UnexpectedElement(CertificateField),
+    #[error("{0}: expected BIT STRING")]
+    ExpectedBitString(CertificateField),
+
+    // Validity errors
+    #[error("Validity: expected 2 elements in SEQUENCE")]
+    ValidityInvalidElementCount,
+    #[error("Validity: expected SEQUENCE")]
+    ValidityExpectedSequence,
+    #[error("Validity: notBefore must be UTCTime or GeneralizedTime")]
+    ValidityInvalidNotBefore,
+    #[error("Validity: notAfter must be UTCTime or GeneralizedTime")]
+    ValidityInvalidNotAfter,
+
+    // UniqueIdentifier errors
+    #[error("UniqueIdentifier: expected context-specific tag [1] or [2], got [{0}]")]
+    UniqueIdentifierInvalidTag(u8),
+    #[error("UniqueIdentifier: expected BIT STRING inside context-specific tag")]
+    UniqueIdentifierExpectedBitString,
+    #[error("UniqueIdentifier: expected context-specific tag [1] or [2] or BIT STRING")]
+    UniqueIdentifierInvalidElement,
+
+    // Extension errors
+    #[error("Extension: OID {0} is not recognized")]
+    UnknownExtensionOid(String),
+    #[error("Extension: failed to parse OID {oid}: {error}")]
+    ExtensionParseOidFailed { oid: String, error: String },
+    #[error("Extensions: expected SEQUENCE")]
+    ExtensionsExpectedSequence,
+    #[error("Extensions: at least one extension required")]
+    ExtensionsEmpty,
+    #[error("Extensions: expected context-specific tag [3]")]
+    ExtensionsExpectedTag3,
+    #[error("Extensions: duplicate extension OID {0}")]
+    ExtensionsDuplicateOid(String),
+    #[error("Extension: OID mismatch - expected {expected}, got {actual}")]
+    OidMismatch { expected: String, actual: String },
+    #[error("Extension: invalid OID string '{oid}': {message}")]
+    InvalidOidString { oid: String, message: String },
+    #[error("Extensions: expected context-specific tag [3], got [{actual}]")]
+    UnexpectedContextTag { expected: u8, actual: u8 },
+    #[error("Extensions: expected SEQUENCE inside context-specific tag [3]")]
+    ExpectedSequenceInExtensions,
+    #[error("Extensions: invalid structure - expected context-specific tag [3] or SEQUENCE")]
+    InvalidExtensionsStructure,
+
+    // Version errors
+    #[error("Version: invalid value {0}")]
     InvalidVersion(String),
-    #[error("invalid unique identifier: {0}")]
-    InvalidUniqueIdentifier(String),
-    #[error("invalid extension: {0}")]
-    InvalidExtension(String),
-    #[error("invalid extensions: {0}")]
-    InvalidExtensions(String),
-    #[error("invalid BasicConstraints: {0}")]
-    InvalidBasicConstraints(String),
-    #[error("invalid KeyUsage: {0}")]
-    InvalidKeyUsage(String),
-    #[error("invalid SubjectKeyIdentifier: {0}")]
-    InvalidSubjectKeyIdentifier(String),
-    #[error("invalid AuthorityKeyIdentifier: {0}")]
-    InvalidAuthorityKeyIdentifier(String),
-    #[error("invalid SubjectAltName: {0}")]
-    InvalidSubjectAltName(String),
-    #[error("invalid IssuerAltName: {0}")]
-    InvalidIssuerAltName(String),
-    #[error("invalid GeneralName: {0}")]
-    InvalidGeneralName(String),
-    #[error("invalid ExtendedKeyUsage: {0}")]
-    InvalidExtendedKeyUsage(String),
-    #[error("invalid AuthorityInfoAccess: {0}")]
-    InvalidAuthorityInfoAccess(String),
-    #[error("invalid NameConstraints: {0}")]
-    InvalidNameConstraints(String),
-    #[error("invalid CRLDistributionPoints: {0}")]
-    InvalidCRLDistributionPoints(String),
-    #[error("invalid CertificatePolicies: {0}")]
-    InvalidCertificatePolicies(String),
-    #[error("invalid InhibitAnyPolicy: {0}")]
-    InvalidInhibitAnyPolicy(String),
-    #[error("invalid PolicyConstraints: {0}")]
-    InvalidPolicyConstraints(String),
-    #[error("invalid PolicyMappings: {0}")]
-    InvalidPolicyMappings(String),
-    #[error("invalid certificate: {0}")]
+
+    // Certificate errors (used by rustls integration)
+    #[error("Certificate: {0}")]
     InvalidCertificate(String),
-    #[error("invalid TBS certificate: {0}")]
-    InvalidTBSCertificate(String),
+    #[error("DER encoding: {0}")]
+    DerEncodingError(String),
+
+    // External error conversions
     #[error("invalid ASN.1: {0}")]
     InvalidASN1(#[source] asn1::error::Error),
     #[error("PKIX types error: {0}")]
     PKIXTypesError(#[from] pkix_types::Error),
-    #[error("serialization error: {0}")]
-    SerializationError(String),
-    #[error("DER encoding error: {0}")]
-    DerEncodingError(String),
     #[error("PEM error: {0}")]
     PemError(#[from] pem::error::Error),
     #[error("DER error: {0}")]
     DerError(#[from] der::error::Error),
     #[error("unexpected PEM label: expected {expected}, got {got}")]
     UnexpectedPemLabel { expected: String, got: String },
+    #[error("extension error: {0}")]
+    ExtensionError(#[from] error::Error),
 }

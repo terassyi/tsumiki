@@ -5,6 +5,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::error::Error;
 use crate::extensions::Extension;
 
@@ -55,16 +56,12 @@ impl Decoder<OctetString, SubjectKeyIdentifier> for OctetString {
         // The outer OCTET STRING is the extension value wrapper (handled by Extension)
         // Parse the inner DER structure
         let asn1_obj = ASN1Object::try_from(self).map_err(Error::InvalidASN1)?;
-        let elements = asn1_obj.elements();
-
-        if elements.is_empty() {
-            return Err(Error::InvalidSubjectKeyIdentifier(
-                "empty content".to_string(),
-            ));
-        }
 
         // The first element should be an OctetString
-        elements[0].decode()
+        match asn1_obj.elements() {
+            [elem, ..] => elem.decode(),
+            [] => Err(error::Error::EmptyContent(error::Kind::SubjectKeyIdentifier).into()),
+        }
     }
 }
 
@@ -78,9 +75,7 @@ impl Decoder<Element, SubjectKeyIdentifier> for Element {
             Element::OctetString(os) => Ok(SubjectKeyIdentifier {
                 key_identifier: os.clone(),
             }),
-            _ => Err(Error::InvalidSubjectKeyIdentifier(
-                "expected OctetString".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedOctetString(error::Kind::SubjectKeyIdentifier).into()),
         }
     }
 }
@@ -179,14 +174,14 @@ mod tests {
         // Test case: Not an OctetString (Integer)
         case(
             Element::Integer(asn1::Integer::from(vec![0x01, 0x02])),
-            "expected OctetString"
+            "expected OCTET STRING"
         ),
         // Test case: Not an OctetString (Sequence)
         case(
             Element::Sequence(vec![
                 Element::OctetString(OctetString::from(vec![0x01]))
             ]),
-            "expected OctetString"
+            "expected OCTET STRING"
         ),
     )]
     fn test_subject_key_identifier_decode_failure(input: Element, expected_error_msg: &str) {

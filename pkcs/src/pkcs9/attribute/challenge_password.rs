@@ -27,14 +27,14 @@
 //! Note: RFC 2985 marks this attribute as deprecated due to security concerns,
 //! but it is still widely implemented and used in practice.
 
-use asn1::{ASN1Object, Element, OctetString};
+use asn1::OctetString;
 use pkix_types::DirectoryString;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
 use std::fmt;
 
 use crate::pkcs9::error::{Error, Result};
 
-use super::Attribute;
+use super::{Attribute, extract_single_value};
 
 /// challengePassword attribute
 ///
@@ -139,36 +139,12 @@ impl Attribute for ChallengePassword {
     const OID: &'static str = "1.2.840.113549.1.9.7";
 
     fn parse(data: &OctetString) -> Result<Self> {
-        // Parse the SET OF values
-        let asn1_obj = ASN1Object::try_from(data).map_err(Error::from)?;
-        let elements = asn1_obj.elements();
-
-        if elements.is_empty() {
-            return Err(Error::InvalidChallengePassword("Empty ASN1Object".into()));
-        }
-
-        // The first element should be a SET
-        let Element::Set(set) = &elements[0] else {
-            return Err(Error::InvalidChallengePassword(
-                "challengePassword values must be a SET".into(),
-            ));
-        };
-
-        if set.len() != 1 {
-            return Err(Error::InvalidChallengePassword(format!(
-                "challengePassword SET must contain exactly one value, got {}",
-                set.len()
-            )));
-        }
+        let value = extract_single_value(data, "challengePassword")?;
 
         // Extract the DirectoryString value
         // DirectoryString is a CHOICE of various string types
-        let dir_string = DirectoryString::try_from(&set[0]).map_err(|e| {
-            Error::InvalidChallengePassword(format!(
-                "Invalid challengePassword DirectoryString: {}",
-                e
-            ))
-        })?;
+        let dir_string = DirectoryString::try_from(&value)
+            .map_err(|e| Error::ChallengePasswordInvalidEncoding(e.to_string()))?;
 
         // Validate length
         if dir_string.as_str().is_empty() {
@@ -190,7 +166,7 @@ impl Attribute for ChallengePassword {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::ObjectIdentifier;
+    use asn1::{ASN1Object, Element, ObjectIdentifier};
     use rstest::rstest;
     use std::str::FromStr;
     use tsumiki::decoder::Decoder;

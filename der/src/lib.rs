@@ -141,11 +141,9 @@ impl Encoder<Tag, u8> for Tag {
         Ok(match self {
             Tag::Primitive(_, value) => *value,
             Tag::ContextSpecific { slot, constructed } => {
-                let mut tag = 0x80; // Context-specific class
-                if *constructed {
-                    tag |= TAG_CONSTRUCTED;
-                }
-                tag | slot
+                let base = 0x80; // Context-specific class
+                let constructed_bit = if *constructed { TAG_CONSTRUCTED } else { 0 };
+                base | constructed_bit | slot
             }
         })
     }
@@ -574,8 +572,8 @@ mod tests {
                             actual_tlvs.len()
                         )
                     }
-                    for i in 0..expected_tlvs.len() {
-                        compare_primitive_tlv(&expected_tlvs[i], &actual_tlvs[i]);
+                    for (expected, actual) in expected_tlvs.iter().zip(actual_tlvs.iter()) {
+                        compare_primitive_tlv(expected, actual);
                     }
                 }
             },

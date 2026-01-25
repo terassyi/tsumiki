@@ -7,8 +7,29 @@ pub enum Error {
     #[error("Invalid version: {0}")]
     InvalidVersion(i64),
 
-    #[error("Invalid structure: {0}")]
-    InvalidStructure(String),
+    #[error("expected SEQUENCE")]
+    ExpectedSequence,
+
+    #[error("expected {expected} elements, got {actual}")]
+    InvalidElementCount {
+        expected: &'static str,
+        actual: usize,
+    },
+
+    #[error("expected OCTET STRING for {field}")]
+    ExpectedOctetString { field: &'static str },
+
+    #[error("expected INTEGER for version")]
+    ExpectedVersionInteger,
+
+    #[error("empty ASN1Object")]
+    EmptyAsn1Object,
+
+    #[error("failed to encode SubjectPublicKeyInfo")]
+    SubjectPublicKeyInfoEncodingFailed,
+
+    #[error("unexpected key format: expected {expected}")]
+    UnexpectedKeyFormat { expected: &'static str },
 
     #[error("ASN.1 error: {0}")]
     Asn1(#[from] asn1::error::Error),
@@ -22,15 +43,6 @@ pub enum Error {
     #[error("Invalid algorithm identifier")]
     InvalidAlgorithmIdentifier,
 
-    #[error("Missing required field: {0}")]
-    MissingField(String),
-
-    #[error("Decryption error: {0}")]
-    DecryptionError(String),
-
     #[error("PKCS#9 attribute error: {0}")]
     Pkcs9(#[from] crate::pkcs9::error::Error),
-
-    #[error("Invalid public key: {0}")]
-    InvalidPublicKey(String),
 }

@@ -28,6 +28,10 @@ pub enum Error {
     /// Cannot convert NULL to typed parameter
     #[error("Cannot convert NULL to typed parameter")]
     NullConversion,
+
+    /// Invalid OID string
+    #[error("Invalid OID: {0}")]
+    InvalidOid(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

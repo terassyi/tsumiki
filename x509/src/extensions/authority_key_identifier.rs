@@ -5,6 +5,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::error::Error;
 use crate::extensions::Extension;
 use crate::extensions::general_name::GeneralName;
@@ -67,16 +68,12 @@ impl Extension for AuthorityKeyIdentifier {
     fn parse(value: &OctetString) -> Result<Self, Error> {
         // OctetString -> ASN1Object -> Element (Sequence) -> AuthorityKeyIdentifier
         let asn1_obj = ASN1Object::try_from(value).map_err(Error::InvalidASN1)?;
-        let elements = asn1_obj.elements();
-
-        if elements.is_empty() {
-            return Err(Error::InvalidAuthorityKeyIdentifier(
-                "empty sequence".to_string(),
-            ));
-        }
 
         // The first element should be a Sequence
-        elements[0].decode()
+        match asn1_obj.elements() {
+            [elem, ..] => elem.decode(),
+            [] => Err(error::Error::EmptySequence(error::Kind::AuthorityKeyIdentifier).into()),
+        }
     }
 }
 
@@ -88,74 +85,65 @@ impl Decoder<Element, AuthorityKeyIdentifier> for Element {
     fn decode(&self) -> Result<AuthorityKeyIdentifier, Self::Error> {
         match self {
             Element::Sequence(elements) => {
-                let mut key_identifier = None;
-                let mut authority_cert_issuer = None;
-                let mut authority_cert_serial_number = None;
-
-                for elem in elements {
-                    match elem {
-                        // [0] IMPLICIT KeyIdentifier (OCTET STRING)
-                        Element::ContextSpecific {
-                            slot: 0, element, ..
-                        } => {
-                            if let Element::OctetString(os) = element.as_ref() {
-                                key_identifier = Some(os.clone());
-                            } else {
-                                return Err(Error::InvalidAuthorityKeyIdentifier(
-                                    "keyIdentifier must be OctetString".to_string(),
-                                ));
-                            }
-                        }
-                        // [1] IMPLICIT GeneralNames (SEQUENCE OF GeneralName)
-                        Element::ContextSpecific {
-                            slot: 1, element, ..
-                        } => {
-                            // GeneralNames is a SEQUENCE OF GeneralName
-                            match element.as_ref() {
-                                Element::Sequence(names) => {
-                                    let mut parsed_names = Vec::new();
-                                    for name_elem in names {
-                                        // Each GeneralName is a context-specific tagged element
-                                        let general_name: GeneralName = name_elem.decode()?;
-                                        parsed_names.push(general_name);
+                let (key_identifier, authority_cert_issuer, authority_cert_serial_number) =
+                    elements.iter().try_fold(
+                        (None, None, None),
+                        |(key_id, cert_issuer, serial), elem| -> Result<_, Error> {
+                            match elem {
+                                // [0] IMPLICIT KeyIdentifier (OCTET STRING)
+                                Element::ContextSpecific {
+                                    slot: 0, element, ..
+                                } => {
+                                    if let Element::OctetString(os) = element.as_ref() {
+                                        Ok((Some(os.clone()), cert_issuer, serial))
+                                    } else {
+                                        Err(error::Error::AkiKeyIdentifierNotOctetString.into())
                                     }
-                                    authority_cert_issuer = Some(parsed_names);
                                 }
-                                _ => {
-                                    return Err(Error::InvalidAuthorityKeyIdentifier(
-                                        "authorityCertIssuer must be Sequence (GeneralNames)"
-                                            .to_string(),
-                                    ));
+                                // [1] IMPLICIT GeneralNames (SEQUENCE OF GeneralName)
+                                Element::ContextSpecific {
+                                    slot: 1, element, ..
+                                } => match element.as_ref() {
+                                    Element::Sequence(names) => {
+                                        let parsed_names: Vec<GeneralName> = names
+                                            .iter()
+                                            .map(|e| e.decode())
+                                            .collect::<Result<Vec<GeneralName>, Error>>()?;
+                                        Ok((key_id, Some(parsed_names), serial))
+                                    }
+                                    _ => {
+                                        Err(error::Error::AkiAuthorityCertIssuerNotSequence.into())
+                                    }
+                                },
+                                // [2] IMPLICIT CertificateSerialNumber (INTEGER)
+                                Element::ContextSpecific {
+                                    slot: 2, element, ..
+                                } => {
+                                    if let Element::OctetString(os) = element.as_ref() {
+                                        Ok((
+                                            key_id,
+                                            cert_issuer,
+                                            Some(CertificateSerialNumber::from_bytes(
+                                                os.as_bytes().to_vec(),
+                                            )),
+                                        ))
+                                    } else if let Element::Integer(i) = element.as_ref() {
+                                        Ok((
+                                            key_id,
+                                            cert_issuer,
+                                            Some(CertificateSerialNumber::from(i.clone())),
+                                        ))
+                                    } else {
+                                        Err(error::Error::AkiSerialNumberInvalidType.into())
+                                    }
                                 }
+                                _ => Err(error::Error::UnexpectedElementType(
+                                    error::Kind::AuthorityKeyIdentifier,
+                                )
+                                .into()),
                             }
-                        }
-                        // [2] IMPLICIT CertificateSerialNumber (INTEGER)
-                        Element::ContextSpecific {
-                            slot: 2, element, ..
-                        } => {
-                            // IMPLICIT tagging: OctetString wrapper around raw INTEGER bytes
-                            if let Element::OctetString(os) = element.as_ref() {
-                                authority_cert_serial_number = Some(
-                                    CertificateSerialNumber::from_bytes(os.as_bytes().to_vec()),
-                                );
-                            } else if let Element::Integer(i) = element.as_ref() {
-                                // EXPLICIT tagging (less common but valid)
-                                authority_cert_serial_number =
-                                    Some(CertificateSerialNumber::from(i.clone()));
-                            } else {
-                                return Err(Error::InvalidAuthorityKeyIdentifier(
-                                    "serialNumber must be OctetString (IMPLICIT) or Integer (EXPLICIT)".to_string(),
-                                ));
-                            }
-                        }
-                        _ => {
-                            return Err(Error::InvalidAuthorityKeyIdentifier(format!(
-                                "unexpected element: {:?}",
-                                elem
-                            )));
-                        }
-                    }
-                }
+                        },
+                    )?;
 
                 Ok(AuthorityKeyIdentifier {
                     key_identifier,
@@ -163,9 +151,7 @@ impl Decoder<Element, AuthorityKeyIdentifier> for Element {
                     authority_cert_serial_number,
                 })
             }
-            _ => Err(Error::InvalidAuthorityKeyIdentifier(
-                "expected Sequence".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::AuthorityKeyIdentifier).into()),
         }
     }
 }
@@ -332,7 +318,7 @@ mod tests {
         // Test case: Not a Sequence
         case(
             Element::Boolean(true),
-            "expected Sequence"
+            "expected SEQUENCE"
         ),
         // Test case: keyIdentifier [0] is not OctetString
         case(
@@ -343,7 +329,7 @@ mod tests {
                     element: Box::new(Element::Integer(asn1::Integer::from(vec![0x01]))),
                 },
             ]),
-            "keyIdentifier must be OctetString"
+            "keyIdentifier must be OCTET STRING"
         ),
         // Test case: serialNumber [2] is invalid type (BitString)
         case(
@@ -354,7 +340,7 @@ mod tests {
                     element: Box::new(Element::BitString(asn1::BitString::try_from(vec![0x00, 0x01]).unwrap())),
                 },
             ]),
-            "serialNumber must be OctetString (IMPLICIT) or Integer (EXPLICIT)"
+            "serialNumber must be OCTET STRING or INTEGER"
         ),
     )]
     fn test_authority_key_identifier_decode_failure(input: Element, expected_error_msg: &str) {

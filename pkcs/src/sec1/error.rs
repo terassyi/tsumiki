@@ -1,5 +1,6 @@
 //! SEC1 (RFC 5915) error types
 
+use asn1::ObjectIdentifier;
 use thiserror::Error;
 
 /// Errors that can occur when parsing or encoding SEC1 structures.
@@ -21,6 +22,10 @@ pub enum Error {
     #[error("PKIX types error: {0}")]
     PkixTypes(#[from] pkix_types::Error),
 
+    /// Algorithm parameter error
+    #[error("algorithm parameter error: {0}")]
+    AlgorithmParameter(#[from] pkix_types::algorithm::parameters::Error),
+
     /// Expected a SEQUENCE element but got something else
     #[error("expected SEQUENCE")]
     ExpectedSequence,
@@ -33,9 +38,9 @@ pub enum Error {
     #[error("expected OCTET STRING")]
     ExpectedOctetString,
 
-    /// The sequence has fewer elements than required
-    #[error("insufficient elements: {0}")]
-    InsufficientElements(String),
+    /// Missing required fields in the structure
+    #[error("missing required fields: version or privateKey")]
+    MissingRequiredFields,
 
     /// The ASN.1 object contains no elements
     #[error("empty ASN.1 object")]
@@ -51,7 +56,11 @@ pub enum Error {
 
     /// Unknown or unsupported elliptic curve OID
     #[error("unknown curve OID: {0}")]
-    UnknownCurve(String),
+    UnknownCurveOid(ObjectIdentifier),
+
+    /// Invalid parameters element (expected OBJECT IDENTIFIER)
+    #[error("invalid parameters: expected OBJECT IDENTIFIER")]
+    InvalidParametersExpectedOid,
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -148,16 +148,12 @@ impl TryFrom<&Element> for DirectoryString {
             Element::OctetString(os) => {
                 // May come as OctetString due to IMPLICIT tagging
                 // Default to UTF8String encoding for OctetString
-                let s = String::from_utf8(os.as_bytes().to_vec()).map_err(|e| {
-                    Error::InvalidDirectoryString(format!("invalid UTF-8 in OctetString: {}", e))
-                })?;
+                let s = String::from_utf8(os.as_bytes().to_vec())
+                    .map_err(|_| Error::DirectoryStringInvalidUtf8)?;
                 (s, StringEncoding::UTF8String)
             }
-            other => {
-                return Err(Error::InvalidDirectoryString(format!(
-                    "DirectoryString must be a string type, got {:?}",
-                    other
-                )))
+            _ => {
+                return Err(Error::DirectoryStringExpectedStringType);
             }
         };
         Ok(Self { value, encoding })

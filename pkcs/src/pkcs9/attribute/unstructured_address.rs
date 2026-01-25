@@ -111,20 +111,19 @@ impl Attribute for UnstructuredAddress {
         // The values should be a SET
         let elements = asn1_obj.elements();
         if elements.is_empty() {
-            return Err(Error::InvalidUnstructuredAddress("Empty ASN1Object".into()));
+            return Err(Error::AttributeEmptyAsn1Object("unstructuredAddress"));
         }
 
         // The first element should be a SET
         let Element::Set(set) = &elements[0] else {
-            return Err(Error::InvalidUnstructuredAddress(
-                "unstructuredAddress values must be a SET".into(),
-            ));
+            return Err(Error::AttributeExpectedElementType {
+                attr: "unstructuredAddress",
+                expected: "SET",
+            });
         };
 
         if set.is_empty() {
-            return Err(Error::InvalidUnstructuredAddress(
-                "unstructuredAddress values SET is empty".into(),
-            ));
+            return Err(Error::AttributeEmptyValuesSet("unstructuredAddress"));
         }
 
         // Get the first value from the SET
@@ -134,18 +133,13 @@ impl Attribute for UnstructuredAddress {
             Element::UTF8String(_) | Element::PrintableString(_) | Element::BMPString(_) => {
                 // Use DirectoryString to handle all string types
                 DirectoryString::try_from(&set[0])
-                    .map_err(|e| {
-                        Error::InvalidUnstructuredAddress(format!(
-                            "Invalid unstructuredAddress DirectoryString: {}",
-                            e
-                        ))
-                    })?
+                    .map_err(|e| Error::ChallengePasswordInvalidEncoding(e.to_string()))?
                     .as_str()
                     .to_string()
             }
             _ => {
-                return Err(Error::InvalidUnstructuredAddress(format!(
-                    "Invalid unstructuredAddress type: expected IA5String or DirectoryString, got {:?}",
+                return Err(Error::UnstructuredAddressInvalidType(format!(
+                    "{:?}",
                     set[0]
                 )));
             }
@@ -218,9 +212,9 @@ mod tests {
     }
 
     #[rstest]
-    #[case(vec![], "unstructuredAddress values SET is empty")]
-    #[case(vec![Element::Integer(vec![1, 2, 3].into())], "Invalid unstructuredAddress type")]
-    #[case(vec![Element::Null], "Invalid unstructuredAddress type")]
+    #[case(vec![], "AttributeEmptyValuesSet")]
+    #[case(vec![Element::Integer(vec![1, 2, 3].into())], "UnstructuredAddressInvalidType")]
+    #[case(vec![Element::Null], "UnstructuredAddressInvalidType")]
     fn test_unstructured_address_parse_errors(
         #[case] elements: Vec<Element>,
         #[case] error_msg: &str,

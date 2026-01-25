@@ -64,13 +64,11 @@ pub(crate) fn execute(config: Config) -> Result<()> {
 
     // If show_pubkey is set, show and output public key
     if config.show_pubkey {
-        let key: PrivateKey = pem.decode().map_err(|_| {
-            crate::error::Error::PublicKeyExtraction(
-                "unsupported key format (only RSA-PKCS#1, PKCS#8, or SEC1)".to_string(),
-            )
-        })?;
+        let key: PrivateKey = pem
+            .decode()
+            .map_err(|_| crate::error::Error::UnsupportedKeyFormat)?;
         let pub_key = key.public_key().ok_or_else(|| {
-            crate::error::Error::PublicKeyExtraction(format!("{} key", key.algorithm()))
+            crate::error::Error::PublicKeyExtractionFailed(key.algorithm().to_string())
         })?;
         let pem = pub_key.to_pem()?;
         print!("{}", pem);
@@ -104,7 +102,9 @@ pub(crate) fn execute(config: Config) -> Result<()> {
                 let key = decode(pem)?;
                 sec1::output_ec_private_key_fingerprint(&key, &config)
             }
-            _ => Err(format!("Unsupported PEM label: {}", pem.label()).into()),
+            _ => Err(crate::error::Error::UnsupportedPemLabel(
+                pem.label().to_string(),
+            )),
         };
     }
 
@@ -112,8 +112,8 @@ pub(crate) fn execute(config: Config) -> Result<()> {
     if config.show_key_size {
         return match pem.label() {
             Label::RSAPrivateKey | Label::PrivateKey | Label::ECPrivateKey => {
-                let key: PrivateKey = pem.decode().map_err(|e| {
-                    crate::error::Error::Message(format!("Failed to decode private key: {}", e))
+                let key: PrivateKey = pem.decode().map_err(|e: pkcs::Error| {
+                    crate::error::Error::PrivateKeyDecodeFailed(e.to_string())
                 })?;
                 let key_size = key.key_size();
                 if key_size == 0 {
@@ -124,13 +124,15 @@ pub(crate) fn execute(config: Config) -> Result<()> {
                 Ok(())
             }
             Label::RSAPublicKey | Label::PublicKey => {
-                let key: PublicKey = pem.decode().map_err(|e| {
-                    crate::error::Error::Message(format!("Failed to decode public key: {}", e))
+                let key: PublicKey = pem.decode().map_err(|e: pkcs::Error| {
+                    crate::error::Error::PublicKeyDecodeFailed(e.to_string())
                 })?;
                 println!("Key Size: {} bits", key.key_size());
                 Ok(())
             }
-            _ => Err(format!("Cannot determine key size for: {}", pem.label()).into()),
+            _ => Err(crate::error::Error::CannotDetermineKeySize(
+                pem.label().to_string(),
+            )),
         };
     }
 
@@ -160,6 +162,8 @@ pub(crate) fn execute(config: Config) -> Result<()> {
             let key = decode(pem)?;
             sec1::output_ec_private_key(&key, &config)
         }
-        _ => Err(format!("Unsupported PEM label: {}", pem.label()).into()),
+        _ => Err(crate::error::Error::UnsupportedPemLabel(
+            pem.label().to_string(),
+        )),
     }
 }

@@ -18,6 +18,7 @@ mod authority_key_identifier;
 mod basic_constraints;
 mod certificate_policies;
 mod crl_distribution_points;
+pub mod error;
 mod extended_key_usage;
 mod freshest_crl;
 mod general_name;
@@ -85,11 +86,10 @@ impl RawExtension {
         // Verify OID matches
         let expected_oid = T::oid()?;
         if self.oid() != &expected_oid {
-            return Err(Error::InvalidExtension(format!(
-                "OID mismatch: expected {}, got {}",
-                expected_oid,
-                self.oid()
-            )));
+            return Err(Error::OidMismatch {
+                expected: expected_oid.to_string(),
+                actual: self.oid().to_string(),
+            });
         }
         T::parse(self.value())
     }
@@ -240,18 +240,16 @@ impl Decoder<Element, Extensions> for Element {
         match self {
             Element::ContextSpecific { slot, element, .. } => {
                 if *slot != 3 {
-                    return Err(Error::InvalidExtensions(format!(
-                        "expected context-specific tag [3], got [{}]",
-                        slot
-                    )));
+                    return Err(Error::UnexpectedContextTag {
+                        expected: 3,
+                        actual: *slot,
+                    });
                 }
                 // EXPLICIT tagging: element contains the full SEQUENCE
                 match element.as_ref() {
                     Element::Sequence(seq_elements) => {
                         if seq_elements.is_empty() {
-                            return Err(Error::InvalidExtensions(
-                                "Extensions must contain at least one Extension".to_string(),
-                            ));
+                            return Err(Error::ExtensionsEmpty);
                         }
                         let extensions = seq_elements
                             .iter()
@@ -259,17 +257,13 @@ impl Decoder<Element, Extensions> for Element {
                             .collect::<Result<Vec<RawExtension>, Error>>()?;
                         Ok(Extensions { extensions })
                     }
-                    _ => Err(Error::InvalidExtensions(
-                        "expected Sequence inside context-specific tag [3]".to_string(),
-                    )),
+                    _ => Err(Error::ExpectedSequenceInExtensions),
                 }
             }
             Element::Sequence(seq_elements) => {
                 // Allow direct Sequence for testing
                 if seq_elements.is_empty() {
-                    return Err(Error::InvalidExtensions(
-                        "Extensions must contain at least one Extension".to_string(),
-                    ));
+                    return Err(Error::ExtensionsEmpty);
                 }
                 let extensions = seq_elements
                     .iter()
@@ -277,9 +271,7 @@ impl Decoder<Element, Extensions> for Element {
                     .collect::<Result<Vec<RawExtension>, Error>>()?;
                 Ok(Extensions { extensions })
             }
-            _ => Err(Error::InvalidExtensions(
-                "expected context-specific tag [3] or Sequence for Extensions".to_string(),
-            )),
+            _ => Err(Error::InvalidExtensionsStructure),
         }
     }
 }
@@ -291,9 +283,7 @@ impl Encoder<Extensions, Element> for Extensions {
 
     fn encode(&self) -> Result<Element, Self::Error> {
         if self.extensions.is_empty() {
-            return Err(Error::InvalidExtensions(
-                "Extensions must contain at least one Extension".to_string(),
-            ));
+            return Err(Error::ExtensionsEmpty);
         }
 
         let extension_elements: Result<Vec<Element>, Error> = self
@@ -316,8 +306,9 @@ pub trait Extension: Sized {
     const OID: &'static str;
 
     fn oid() -> Result<ObjectIdentifier, Error> {
-        ObjectIdentifier::from_str(Self::OID).map_err(|e| {
-            Error::InvalidExtension(format!("failed to parse OID {}: {}", Self::OID, e))
+        ObjectIdentifier::from_str(Self::OID).map_err(|e| Error::InvalidOidString {
+            oid: Self::OID.to_string(),
+            message: e.to_string(),
         })
     }
     /// Parse the extension value (DER-encoded ASN.1 in OctetString)
@@ -496,7 +487,7 @@ mod tests {
         // Test case: Empty Extensions
         case(
             Element::Sequence(vec![]),
-            "Extensions must contain at least one Extension"
+            "at least one extension required"
         ),
         // Test case: Wrong context-specific tag
         case(
@@ -519,12 +510,12 @@ mod tests {
             slot: 3,
                 element: Box::new(Element::Integer(asn1::Integer::from(vec![0x01]))),
             },
-            "expected Sequence inside context-specific tag [3]"
+            "expected SEQUENCE inside context-specific tag [3]"
         ),
         // Test case: Not a Sequence or ContextSpecific
         case(
             Element::Integer(asn1::Integer::from(vec![0x01])),
-            "expected context-specific tag [3] or Sequence for Extensions"
+            "invalid structure - expected context-specific tag [3] or SEQUENCE"
         ),
     )]
     fn test_extensions_decode_failure(input: Element, expected_error_msg: &str) {
@@ -596,19 +587,19 @@ mod tests {
         // Test case: Not a Sequence
         case(
             Element::Integer(asn1::Integer::from(vec![0x01])),
-            "expected Sequence for Extension"
+            "Extension: expected SEQUENCE"
         ),
         // Test case: Empty sequence
         case(
             Element::Sequence(vec![]),
-            "expected 2 or 3 elements in Extension sequence, got 0"
+            "expected 2 or 3 elements, got 0"
         ),
         // Test case: Only one element
         case(
             Element::Sequence(vec![
                 Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.29.19").unwrap()),
             ]),
-            "expected 2 or 3 elements in Extension sequence, got 1"
+            "expected 2 or 3 elements, got 1"
         ),
         // Test case: Too many elements
         case(
@@ -618,7 +609,7 @@ mod tests {
                 Element::OctetString(OctetString::from(vec![0x30, 0x00])),
                 Element::Null,
             ]),
-            "expected 2 or 3 elements in Extension sequence, got 4"
+            "expected 2 or 3 elements, got 4"
         ),
         // Test case: First element is not OID
         case(
@@ -626,7 +617,7 @@ mod tests {
                 Element::Integer(asn1::Integer::from(vec![0x01])),
                 Element::OctetString(OctetString::from(vec![0x30, 0x00])),
             ]),
-            "expected ObjectIdentifier for extnID"
+            "expected OBJECT IDENTIFIER for extnID"
         ),
         // Test case: Second element (critical) is not Boolean when 3 elements
         case(
@@ -635,15 +626,15 @@ mod tests {
                 Element::Integer(asn1::Integer::from(vec![0x01])),
                 Element::OctetString(OctetString::from(vec![0x30, 0x00])),
             ]),
-            "expected Boolean for critical"
+            "expected BOOLEAN for critical or OCTET STRING for extnValue"
         ),
-        // Test case: extnValue is not OctetString
+        // Test case: extnValue is not OctetString (2 elements)
         case(
             Element::Sequence(vec![
                 Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.29.19").unwrap()),
                 Element::Integer(asn1::Integer::from(vec![0x01])),
             ]),
-            "expected OctetString for extnValue"
+            "expected BOOLEAN for critical or OCTET STRING for extnValue"
         ),
     )]
     fn test_extension_decode_failure(input: Element, expected_error_msg: &str) {

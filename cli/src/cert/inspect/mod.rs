@@ -1,16 +1,12 @@
 mod tls;
 mod verifier;
 
-use std::fmt::Write;
-
 use asn1::ASN1Object;
 use chrono::Utc;
 use clap::Args;
 use pem::ToPem;
 use pkcs::pkcs8::PublicKey;
 use pkix_types::OidName;
-use sha1::Sha1;
-use sha2::{Digest, Sha256, Sha512};
 use tsumiki::decoder::Decoder;
 use tsumiki::encoder::Encoder;
 use x509::extensions::{Extension, GeneralName, IpAddressOrRange, SubjectAltName};
@@ -18,27 +14,7 @@ use x509::{Certificate, CertificateChain};
 
 use crate::error::Result;
 use crate::output::OutputFormat;
-use crate::utils::read_input;
-
-#[derive(Clone, Copy, clap::ValueEnum, Debug)]
-pub(crate) enum FingerprintAlgorithm {
-    /// SHA1 fingerprint
-    Sha1,
-    /// SHA256 fingerprint (default)
-    Sha256,
-    /// SHA512 fingerprint
-    Sha512,
-}
-
-impl std::fmt::Display for FingerprintAlgorithm {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            FingerprintAlgorithm::Sha1 => write!(f, "SHA1"),
-            FingerprintAlgorithm::Sha256 => write!(f, "SHA256"),
-            FingerprintAlgorithm::Sha512 => write!(f, "SHA512"),
-        }
-    }
-}
+use crate::utils::{FingerprintAlgorithm, calculate_fingerprint, read_input};
 
 #[derive(Args)]
 pub(crate) struct Config {
@@ -132,46 +108,22 @@ pub(crate) struct Config {
 
 impl Config {
     fn should_show_specific_fields(&self) -> bool {
-        self.show_subject
-            || self.show_issuer
-            || self.show_dates
-            || self.show_serial
-            || self.list_extensions
-            || self.show_algorithms
-            || self.show_fingerprint
-            || self.check_expiry
-            || self.show_pubkey
-            || self.show_purposes
-            || self.show_san
-            || self.check_self_signed
-    }
-}
-
-fn calculate_fingerprint(data: &[u8], alg: FingerprintAlgorithm) -> String {
-    let format_digest = |digest: &[u8]| {
-        digest
-            .iter()
-            .map(|b| format!("{:02X}", b))
-            .collect::<Vec<_>>()
-            .join(":")
-    };
-
-    match alg {
-        FingerprintAlgorithm::Sha1 => {
-            let mut hasher = Sha1::new();
-            hasher.update(data);
-            format_digest(&hasher.finalize())
-        }
-        FingerprintAlgorithm::Sha256 => {
-            let mut hasher = Sha256::new();
-            hasher.update(data);
-            format_digest(&hasher.finalize())
-        }
-        FingerprintAlgorithm::Sha512 => {
-            let mut hasher = Sha512::new();
-            hasher.update(data);
-            format_digest(&hasher.finalize())
-        }
+        [
+            self.show_subject,
+            self.show_issuer,
+            self.show_dates,
+            self.show_serial,
+            self.list_extensions,
+            self.show_algorithms,
+            self.show_fingerprint,
+            self.check_expiry,
+            self.show_pubkey,
+            self.show_purposes,
+            self.show_san,
+            self.check_self_signed,
+        ]
+        .iter()
+        .any(|&flag| flag)
     }
 }
 
@@ -188,41 +140,32 @@ fn get_purpose_name(oid_str: &str) -> &'static str {
 }
 
 fn extract_san(tbs: &x509::TBSCertificate) -> Result<Vec<String>> {
-    let mut san_list = Vec::new();
+    let exts = match tbs.extensions() {
+        Some(e) => e,
+        None => return Ok(Vec::new()),
+    };
 
-    if let Some(exts) = tbs.extensions() {
-        for raw_ext in exts.extensions() {
-            // Parse to SubjectAltName first to check if it's the right extension
-            if let Ok(san) = raw_ext.parse::<SubjectAltName>() {
-                for name in &san.names {
-                    match name {
-                        GeneralName::DnsName(dns) => {
-                            san_list.push(format!("DNS:{}", dns));
-                        }
-                        GeneralName::Rfc822Name(email) => {
-                            san_list.push(format!("Email:{}", email));
-                        }
-                        GeneralName::Uri(uri) => {
-                            san_list.push(format!("URI:{}", uri));
-                        }
-                        GeneralName::IpAddress(ip_range) => match ip_range {
-                            IpAddressOrRange::Address(addr) => {
-                                san_list.push(format!("IP:{}", addr));
-                            }
-                            _ => {
-                                san_list.push("IP:Other".to_string());
-                            }
-                        },
-                        _ => {
-                            // Skip other types
-                        }
-                    }
-                }
-                // Found SAN, no need to check other extensions
-                break;
-            }
-        }
-    }
+    let san = match exts
+        .extensions()
+        .iter()
+        .find_map(|ext| ext.parse::<SubjectAltName>().ok())
+    {
+        Some(s) => s,
+        None => return Ok(Vec::new()),
+    };
+
+    let san_list = san
+        .names
+        .iter()
+        .filter_map(|name| match name {
+            GeneralName::DnsName(dns) => Some(format!("DNS:{}", dns)),
+            GeneralName::Rfc822Name(email) => Some(format!("Email:{}", email)),
+            GeneralName::Uri(uri) => Some(format!("URI:{}", uri)),
+            GeneralName::IpAddress(IpAddressOrRange::Address(addr)) => Some(format!("IP:{}", addr)),
+            GeneralName::IpAddress(_) => Some("IP:Other".to_string()),
+            _ => None,
+        })
+        .collect();
 
     Ok(san_list)
 }
@@ -232,38 +175,42 @@ fn check_self_signed(tbs: &x509::TBSCertificate) -> bool {
 }
 
 fn show_certificate_purposes(tbs: &x509::TBSCertificate) -> Result<()> {
-    let mut output = String::new();
-
-    if let Some(extensions) = tbs.extensions() {
-        for ext in extensions.extensions() {
-            if *ext.oid() == x509::extensions::ExtendedKeyUsage::OID {
-                if let Ok(eku) = ext.parse::<x509::extensions::ExtendedKeyUsage>() {
-                    writeln!(output, "Certificate Purposes:")?;
-                    for purpose_oid in &eku.purposes {
-                        let oid_str = purpose_oid.to_string();
-                        let purpose_name = get_purpose_name(&oid_str);
-                        writeln!(output, "  - {}", purpose_name)?;
-                    }
-                    print!("{}", output);
-                    return Ok(());
-                }
-            }
+    let extensions = match tbs.extensions() {
+        Some(e) => e,
+        None => {
+            println!("No extensions in certificate");
+            return Ok(());
         }
-        writeln!(output, "No Extended Key Usage extension found")?;
-    } else {
-        writeln!(output, "No extensions in certificate")?;
+    };
+
+    let eku = extensions
+        .extensions()
+        .iter()
+        .find(|ext| *ext.oid() == x509::extensions::ExtendedKeyUsage::OID)
+        .and_then(|ext| ext.parse::<x509::extensions::ExtendedKeyUsage>().ok());
+
+    match eku {
+        Some(eku) => {
+            println!("Certificate Purposes:");
+            eku.purposes
+                .iter()
+                .map(|purpose_oid| {
+                    let oid_str = purpose_oid.to_string();
+                    get_purpose_name(&oid_str)
+                })
+                .for_each(|purpose_name| println!("  - {}", purpose_name));
+        }
+        None => println!("No Extended Key Usage extension found"),
     }
-    print!("{}", output);
+
     Ok(())
 }
 
 fn parse_remote_address(remote: &str) -> (&str, u16) {
-    if let Some((host, port_str)) = remote.rsplit_once(':') {
-        if let Ok(port) = port_str.parse::<u16>() {
-            return (host, port);
-        }
-    }
-    (remote, 443)
+    remote
+        .rsplit_once(':')
+        .and_then(|(host, port_str)| port_str.parse::<u16>().ok().map(|port| (host, port)))
+        .unwrap_or((remote, 443))
 }
 
 fn parse_certificate_from_der(input_bytes: Vec<u8>) -> Result<Certificate> {
@@ -276,41 +223,30 @@ fn load_certificate_chain(file: Option<&str>) -> Result<CertificateChain> {
     let input_bytes = read_input(file)?;
 
     // Try to parse as PEM first, fallback to DER
-    if let Ok(contents) = String::from_utf8(input_bytes.clone()) {
-        // Text data - try PEM first (using FromStr)
-        if let Ok(chain) = contents.parse::<CertificateChain>() {
-            return Ok(chain);
-        }
-        // Not PEM, try to parse as DER (single certificate)
-        let cert = parse_certificate_from_der(input_bytes)?;
-        Ok(CertificateChain::from(cert))
-    } else {
-        // Binary data - treat as DER (single certificate)
-        let cert = parse_certificate_from_der(input_bytes)?;
-        Ok(CertificateChain::from(cert))
-    }
+    String::from_utf8(input_bytes.clone())
+        .ok()
+        .and_then(|contents| contents.parse::<CertificateChain>().ok())
+        .map(Ok)
+        .unwrap_or_else(|| parse_certificate_from_der(input_bytes).map(CertificateChain::from))
 }
 
 pub(crate) fn execute(config: Config) -> Result<()> {
     // Validate that --remote is not used with file input
     if config.remote.is_some() && config.file.is_some() {
-        return Err(crate::error::Error::InvalidInput(
-            "--remote cannot be used with file input".to_string(),
-        ));
+        return Err(crate::error::Error::RemoteWithFileInput);
     }
 
     // Fetch certificate chain from remote server or read from file/stdin
-    let chain = if let Some(ref remote) = config.remote {
-        let (host, port) = parse_remote_address(remote);
-        tls::fetch_certificate_chain(host, port)?
-    } else {
-        load_certificate_chain(config.file.as_deref())?
+    let chain = match &config.remote {
+        Some(remote) => {
+            let (host, port) = parse_remote_address(remote);
+            tls::fetch_certificate_chain(host, port)?
+        }
+        None => load_certificate_chain(config.file.as_deref())?,
     };
 
     if chain.is_empty() {
-        return Err(crate::error::Error::Certificate(
-            "no certificates found".to_string(),
-        ));
+        return Err(crate::error::Error::NoCertificatesFound);
     }
 
     // Filter chain based on selection flags
@@ -323,12 +259,12 @@ pub(crate) fn execute(config: Config) -> Result<()> {
 
     // Show specific fields if requested
     if config.should_show_specific_fields() {
-        for (i, cert) in chain.iter().enumerate() {
+        chain.iter().enumerate().try_for_each(|(i, cert)| {
             if chain.len() > 1 && !config.no_header {
                 println!("--- Certificate {} ---", i);
             }
-            show_specific_fields(cert, &config)?;
-        }
+            show_specific_fields(cert, &config)
+        })?;
         return Ok(());
     }
 
@@ -345,42 +281,35 @@ fn filter_chain(chain: &CertificateChain, config: &Config) -> Result<Certificate
             .first()
             .cloned()
             .map(CertificateChain::from)
-            .ok_or_else(|| crate::error::Error::Certificate("no certificates found".to_string()));
+            .ok_or(crate::error::Error::NoCertificatesFound);
     }
 
     if let Some(index) = config.index {
-        return chain
-            .get(index)
-            .cloned()
-            .map(CertificateChain::from)
-            .ok_or_else(|| {
-                crate::error::Error::Certificate(format!(
-                    "certificate index {} out of range (chain has {} certificates)",
-                    index,
-                    chain.len()
-                ))
-            });
+        return chain.get(index).cloned().map(CertificateChain::from).ok_or(
+            crate::error::Error::CertificateIndexOutOfRange {
+                index,
+                total: chain.len(),
+            },
+        );
     }
 
     if let Some(depth) = config.depth {
         let certs: Vec<_> = chain.iter().take(depth).cloned().collect();
         if certs.is_empty() {
-            return Err(crate::error::Error::Certificate(
-                "no certificates found".to_string(),
-            ));
+            return Err(crate::error::Error::NoCertificatesFound);
         }
         return Ok(CertificateChain::new(certs));
     }
 
     if config.root {
         // Find self-signed certificate
-        for cert in chain.iter() {
-            if cert.is_self_signed() {
-                return Ok(CertificateChain::from(cert.clone()));
-            }
-        }
-        // No root found, return empty chain
-        return Ok(CertificateChain::new(vec![]));
+        return chain
+            .iter()
+            .find(|cert| cert.is_self_signed())
+            .cloned()
+            .map(CertificateChain::from)
+            .map(Ok)
+            .unwrap_or_else(|| Ok(CertificateChain::new(vec![])));
     }
 
     Ok(chain.clone())
@@ -388,219 +317,191 @@ fn filter_chain(chain: &CertificateChain, config: &Config) -> Result<Certificate
 
 fn show_specific_fields(cert: &Certificate, config: &Config) -> Result<()> {
     let tbs = cert.tbs_certificate();
-    let mut output = String::new();
 
-    if config.show_subject {
-        format_subject(&mut output, tbs)?;
-    }
-    if config.show_issuer {
-        format_issuer(&mut output, tbs)?;
-    }
-    if config.show_dates {
-        format_dates(&mut output, tbs)?;
-    }
-    if config.show_serial {
-        format_serial(&mut output, tbs)?;
-    }
-    if config.list_extensions {
-        format_extensions(&mut output, tbs)?;
-    }
-    if config.show_algorithms {
-        format_algorithms(&mut output, tbs)?;
-    }
-    if config.show_fingerprint {
-        format_fingerprint(&mut output, cert, config.fingerprint_alg)?;
-    }
-    if config.check_expiry {
-        format_expiry(&mut output, tbs)?;
-    }
-    if config.show_pubkey {
-        format_pubkey(&mut output, tbs)?;
-    }
-    if config.show_purposes {
-        print!("{}", output);
-        show_certificate_purposes(tbs)?;
-        return Ok(());
-    }
-    if config.show_san {
-        format_san(&mut output, tbs)?;
-    }
-    if config.check_self_signed {
-        format_self_signed(&mut output, tbs)?;
-    }
+    let parts = [
+        config.show_subject.then(|| format_subject(tbs)),
+        config.show_issuer.then(|| format_issuer(tbs)),
+        config.show_dates.then(|| format_dates(tbs)),
+        config.show_serial.then(|| format_serial(tbs)),
+        config.list_extensions.then(|| format_extensions(tbs)),
+        config.show_algorithms.then(|| format_algorithms(tbs)),
+        config
+            .show_fingerprint
+            .then(|| format_fingerprint(cert, config.fingerprint_alg)),
+        config.check_expiry.then(|| format_expiry(tbs)),
+        config.show_pubkey.then(|| format_pubkey(tbs)),
+        config.show_san.then(|| format_san(tbs)),
+        config.check_self_signed.then(|| format_self_signed(tbs)),
+    ];
+
+    let output = parts
+        .into_iter()
+        .flatten()
+        .collect::<Result<Vec<_>>>()?
+        .join("");
+
     print!("{}", output);
-    Ok(())
-}
 
-fn format_subject(output: &mut String, tbs: &x509::TBSCertificate) -> Result<()> {
-    writeln!(output, "Subject: {}", tbs.subject())?;
-    Ok(())
-}
-
-fn format_issuer(output: &mut String, tbs: &x509::TBSCertificate) -> Result<()> {
-    writeln!(output, "Issuer: {}", tbs.issuer())?;
-    Ok(())
-}
-
-fn format_dates(output: &mut String, tbs: &x509::TBSCertificate) -> Result<()> {
-    let validity = tbs.validity();
-    writeln!(
-        output,
-        "Not Before: {}",
-        validity.not_before().format("%b %d %H:%M:%S %Y GMT")
-    )?;
-    writeln!(
-        output,
-        "Not After: {}",
-        validity.not_after().format("%b %d %H:%M:%S %Y GMT")
-    )?;
-    Ok(())
-}
-
-fn format_serial(output: &mut String, tbs: &x509::TBSCertificate) -> Result<()> {
-    writeln!(
-        output,
-        "Serial Number: {}",
-        tbs.serial_number().format_hex()
-    )?;
-    Ok(())
-}
-
-fn format_extensions(output: &mut String, tbs: &x509::TBSCertificate) -> Result<()> {
-    if let Some(exts) = tbs.extensions() {
-        writeln!(output, "Extensions:")?;
-        for ext in exts.extensions() {
-            let oid_str = ext.oid().to_string();
-            let name = ext.oid_name().unwrap_or(&oid_str);
-            let critical = if ext.critical() { " (critical)" } else { "" };
-            writeln!(output, "  {} [{}]{}", name, ext.oid(), critical)?;
-        }
-    } else {
-        writeln!(output, "No extensions")?;
+    if config.show_purposes {
+        show_certificate_purposes(tbs)?;
     }
+
     Ok(())
 }
 
-fn format_algorithms(output: &mut String, tbs: &x509::TBSCertificate) -> Result<()> {
-    let sig_alg = &tbs.signature();
+fn format_subject(tbs: &x509::TBSCertificate) -> Result<String> {
+    Ok(format!("Subject: {}\n", tbs.subject()))
+}
+
+fn format_issuer(tbs: &x509::TBSCertificate) -> Result<String> {
+    Ok(format!("Issuer: {}\n", tbs.issuer()))
+}
+
+fn format_dates(tbs: &x509::TBSCertificate) -> Result<String> {
+    let validity = tbs.validity();
+    Ok(format!(
+        "Not Before: {}\nNot After: {}\n",
+        validity.not_before().format("%b %d %H:%M:%S %Y GMT"),
+        validity.not_after().format("%b %d %H:%M:%S %Y GMT")
+    ))
+}
+
+fn format_serial(tbs: &x509::TBSCertificate) -> Result<String> {
+    Ok(format!(
+        "Serial Number: {}\n",
+        tbs.serial_number().format_hex()
+    ))
+}
+
+fn format_extensions(tbs: &x509::TBSCertificate) -> Result<String> {
+    match tbs.extensions() {
+        Some(exts) => {
+            let lines = exts
+                .extensions()
+                .iter()
+                .map(|ext| {
+                    let oid_str = ext.oid().to_string();
+                    let name = ext.oid_name().unwrap_or(&oid_str);
+                    let critical = if ext.critical() { " (critical)" } else { "" };
+                    format!("  {} [{}]{}", name, ext.oid(), critical)
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            Ok(format!("Extensions:\n{}\n", lines))
+        }
+        None => Ok("No extensions\n".to_string()),
+    }
+}
+
+fn format_algorithms(tbs: &x509::TBSCertificate) -> Result<String> {
+    let sig_alg = tbs.signature();
     let sig_oid_str = sig_alg.algorithm.to_string();
     let sig_name = sig_alg.oid_name().unwrap_or(&sig_oid_str);
-    writeln!(
-        output,
-        "Signature Algorithm: {} ({})",
-        sig_name, sig_alg.algorithm
-    )?;
 
     let pubkey_alg = tbs.subject_public_key_info().algorithm();
     let pubkey_oid_str = pubkey_alg.algorithm.to_string();
     let pubkey_name = pubkey_alg.oid_name().unwrap_or(&pubkey_oid_str);
-    writeln!(
-        output,
-        "Public Key Algorithm: {} ({})",
-        pubkey_name, pubkey_alg.algorithm
-    )?;
-    Ok(())
+
+    Ok(format!(
+        "Signature Algorithm: {} ({})\nPublic Key Algorithm: {} ({})\n",
+        sig_name, sig_alg.algorithm, pubkey_name, pubkey_alg.algorithm
+    ))
 }
 
-fn format_fingerprint(
-    output: &mut String,
-    cert: &Certificate,
-    alg: FingerprintAlgorithm,
-) -> Result<()> {
+fn format_fingerprint(cert: &Certificate, alg: FingerprintAlgorithm) -> Result<String> {
     let asn1_obj: ASN1Object = cert.encode()?;
     let der = asn1_obj.encode()?;
     let cert_der = der.encode()?;
     let fingerprint = calculate_fingerprint(&cert_der, alg);
-    writeln!(output, "{} Fingerprint: {}", alg, fingerprint)?;
-    Ok(())
+    Ok(format!("{} Fingerprint: {}\n", alg, fingerprint))
 }
 
-fn format_expiry(output: &mut String, tbs: &x509::TBSCertificate) -> Result<()> {
+fn format_expiry(tbs: &x509::TBSCertificate) -> Result<String> {
     let validity = tbs.validity();
     let not_after = validity.not_after();
     let now = Utc::now().naive_utc();
 
     if now > *not_after {
-        writeln!(
-            output,
-            "Certificate is EXPIRED (expired on {})",
+        let output = format!(
+            "Certificate is EXPIRED (expired on {})\n",
             not_after.format("%Y-%m-%d %H:%M:%S UTC")
-        )?;
+        );
         print!("{}", output);
         std::process::exit(1);
     } else {
-        writeln!(
-            output,
-            "Certificate is VALID (expires on {})",
+        Ok(format!(
+            "Certificate is VALID (expires on {})\n",
             not_after.format("%Y-%m-%d %H:%M:%S UTC")
-        )?;
+        ))
     }
-    Ok(())
 }
 
-fn format_pubkey(output: &mut String, tbs: &x509::TBSCertificate) -> Result<()> {
+fn format_pubkey(tbs: &x509::TBSCertificate) -> Result<String> {
     let spki = tbs.subject_public_key_info().clone();
     let pubkey = PublicKey::new(spki);
     let pem = pubkey.to_pem()?;
-    write!(output, "{}", pem)?;
-    Ok(())
+    Ok(pem.to_string())
 }
 
-fn format_san(output: &mut String, tbs: &x509::TBSCertificate) -> Result<()> {
+fn format_san(tbs: &x509::TBSCertificate) -> Result<String> {
     let san_list = extract_san(tbs)?;
     if san_list.is_empty() {
-        writeln!(output, "Subject Alternative Names: (none)")?;
+        Ok("Subject Alternative Names: (none)\n".to_string())
     } else {
-        writeln!(output, "Subject Alternative Names:")?;
-        for san in san_list {
-            writeln!(output, "  {}", san)?;
-        }
+        let sans = san_list
+            .iter()
+            .map(|san| format!("  {}", san))
+            .collect::<Vec<_>>()
+            .join("\n");
+        Ok(format!("Subject Alternative Names:\n{}\n", sans))
     }
-    Ok(())
 }
 
-fn format_self_signed(output: &mut String, tbs: &x509::TBSCertificate) -> Result<()> {
+fn format_self_signed(tbs: &x509::TBSCertificate) -> Result<String> {
     let is_self_signed = check_self_signed(tbs);
-    if is_self_signed {
-        writeln!(output, "Self-Signed: Yes")?;
-    } else {
-        writeln!(output, "Self-Signed: No")?;
-    }
-    Ok(())
+    Ok(format!(
+        "Self-Signed: {}\n",
+        if is_self_signed { "Yes" } else { "No" }
+    ))
 }
 
 fn output_certificate_chain(chain: &CertificateChain, config: &Config) -> Result<()> {
     match config.output {
         OutputFormat::Text => {
-            for (i, cert) in chain.iter().enumerate() {
+            chain.iter().enumerate().for_each(|(i, cert)| {
                 if chain.len() > 1 && !config.no_header {
                     println!("--- Certificate {} ---", i);
                 }
                 println!("{}", cert);
-            }
+            });
         }
         OutputFormat::Json => {
-            if chain.len() == 1 {
-                let json = serde_json::to_string_pretty(chain.end_entity().unwrap())?;
-                println!("{}", json);
+            let json = if chain.len() == 1 {
+                serde_json::to_string_pretty(
+                    chain
+                        .end_entity()
+                        .ok_or(crate::error::Error::NoCertificatesFound)?,
+                )?
             } else {
-                let json = serde_json::to_string_pretty(&chain)?;
-                println!("{}", json);
-            }
+                serde_json::to_string_pretty(&chain)?
+            };
+            println!("{}", json);
         }
         OutputFormat::Yaml => {
-            if chain.len() == 1 {
-                let json_value = serde_json::to_value(chain.end_entity().unwrap())?;
-                let yaml = serde_yml::to_string(&json_value)?;
-                print!("{}", yaml);
+            let json_value = if chain.len() == 1 {
+                serde_json::to_value(
+                    chain
+                        .end_entity()
+                        .ok_or(crate::error::Error::NoCertificatesFound)?,
+                )?
             } else {
-                let json_value = serde_json::to_value(chain)?;
-                let yaml = serde_yml::to_string(&json_value)?;
-                print!("{}", yaml);
-            }
+                serde_json::to_value(chain)?
+            };
+            let yaml = serde_yml::to_string(&json_value)?;
+            print!("{}", yaml);
         }
         OutputFormat::Brief => {
-            for (i, cert) in chain.iter().enumerate() {
+            chain.iter().enumerate().for_each(|(i, cert)| {
                 let tbs = cert.tbs_certificate();
                 let subject = tbs.subject();
                 let validity = tbs.validity();
@@ -614,7 +515,7 @@ fn output_certificate_chain(chain: &CertificateChain, config: &Config) -> Result
                 } else {
                     println!("{} | Valid: {} to {}", subject, not_before, not_after);
                 }
-            }
+            });
         }
     }
     Ok(())

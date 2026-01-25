@@ -5,6 +5,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
+use super::error;
 use crate::error::Error;
 use crate::extensions::Extension;
 
@@ -113,15 +114,11 @@ impl Decoder<OctetString, CertificatePolicies> for OctetString {
 
     fn decode(&self) -> Result<CertificatePolicies, Self::Error> {
         let asn1_obj = ASN1Object::try_from(self).map_err(Error::InvalidASN1)?;
-        let elements = asn1_obj.elements();
 
-        if elements.is_empty() {
-            return Err(Error::InvalidCertificatePolicies(
-                "empty sequence".to_string(),
-            ));
+        match asn1_obj.elements() {
+            [elem, ..] => elem.decode(),
+            [] => Err(error::Error::EmptySequence(error::Kind::CertificatePolicies).into()),
         }
-
-        elements[0].decode()
     }
 }
 
@@ -134,22 +131,17 @@ impl Decoder<Element, CertificatePolicies> for Element {
         match self {
             Element::Sequence(elements) => {
                 if elements.is_empty() {
-                    return Err(Error::InvalidCertificatePolicies(
-                        "empty sequence - at least one PolicyInformation required".to_string(),
-                    ));
+                    return Err(error::Error::CertificatePoliciesEmpty.into());
                 }
 
-                let mut policies = Vec::new();
-                for elem in elements {
-                    let policy: PolicyInformation = elem.decode()?;
-                    policies.push(policy);
-                }
+                let policies = elements
+                    .iter()
+                    .map(|elem| elem.decode())
+                    .collect::<Result<Vec<PolicyInformation>, _>>()?;
 
                 Ok(CertificatePolicies { policies })
             }
-            _ => Err(Error::InvalidCertificatePolicies(
-                "expected Sequence".to_string(),
-            )),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::CertificatePolicies).into()),
         }
     }
 }
@@ -161,9 +153,7 @@ impl Encoder<CertificatePolicies, Element> for CertificatePolicies {
 
     fn encode(&self) -> Result<Element, Self::Error> {
         if self.policies.is_empty() {
-            return Err(Error::InvalidCertificatePolicies(
-                "at least one PolicyInformation required".to_string(),
-            ));
+            return Err(error::Error::CertificatePoliciesEmpty.into());
         }
 
         let policy_elements = self
@@ -184,38 +174,32 @@ impl Decoder<Element, PolicyInformation> for Element {
     fn decode(&self) -> Result<PolicyInformation, Self::Error> {
         match self {
             Element::Sequence(elements) => {
-                let mut iter = elements.iter();
-
-                // First element: policyIdentifier (OBJECT IDENTIFIER)
-                let policy_identifier = match iter.next() {
-                    Some(Element::ObjectIdentifier(oid)) => oid.clone(),
-                    Some(_) => {
-                        return Err(Error::InvalidCertificatePolicies(
-                            "expected ObjectIdentifier for policyIdentifier".to_string(),
-                        ));
+                let (policy_identifier, policy_qualifiers) = match elements.as_slice() {
+                    // Only policyIdentifier
+                    [Element::ObjectIdentifier(oid)] => (oid.clone(), None),
+                    // policyIdentifier + policyQualifiers
+                    [
+                        Element::ObjectIdentifier(oid),
+                        Element::Sequence(qualifiers),
+                    ] => {
+                        let result = qualifiers
+                            .iter()
+                            .map(|elem| elem.decode())
+                            .collect::<Result<Vec<PolicyQualifierInfo>, _>>()?;
+                        (oid.clone(), Some(result))
                     }
-                    None => {
-                        return Err(Error::InvalidCertificatePolicies(
-                            "PolicyInformation must have at least policyIdentifier".to_string(),
-                        ));
+                    // policyIdentifier + wrong type for policyQualifiers
+                    [Element::ObjectIdentifier(_), _] => {
+                        return Err(error::Error::PolicyQualifiersExpectedSequence.into());
                     }
-                };
-
-                // Second element (optional): policyQualifiers (SEQUENCE)
-                let policy_qualifiers = match iter.next() {
-                    Some(Element::Sequence(qualifiers)) => {
-                        let mut result = Vec::new();
-                        for qualifier_elem in qualifiers {
-                            result.push(qualifier_elem.decode()?);
-                        }
-                        Some(result)
+                    // Wrong type for policyIdentifier
+                    [_, ..] => {
+                        return Err(error::Error::PolicyInformationExpectedOid.into());
                     }
-                    Some(_) => {
-                        return Err(Error::InvalidCertificatePolicies(
-                            "expected Sequence for policyQualifiers".to_string(),
-                        ));
+                    // Empty
+                    [] => {
+                        return Err(error::Error::PolicyInformationMissingIdentifier.into());
                     }
-                    None => None,
                 };
 
                 Ok(PolicyInformation {
@@ -223,9 +207,7 @@ impl Decoder<Element, PolicyInformation> for Element {
                     policy_qualifiers,
                 })
             }
-            _ => Err(Error::InvalidCertificatePolicies(
-                "expected Sequence for PolicyInformation".to_string(),
-            )),
+            _ => Err(error::Error::PolicyInformationExpectedSequence.into()),
         }
     }
 }
@@ -238,21 +220,19 @@ impl Encoder<PolicyInformation, Element> for PolicyInformation {
     fn encode(&self) -> Result<Element, Self::Error> {
         let policy_id = Element::ObjectIdentifier(self.policy_identifier.clone());
 
-        let qualifiers_elem = match &self.policy_qualifiers {
-            Some(qualifiers) => {
-                let encoded = qualifiers
+        let qualifiers_elem = self
+            .policy_qualifiers
+            .as_ref()
+            .map(|qualifiers| {
+                qualifiers
                     .iter()
                     .map(|q| q.encode())
-                    .collect::<Result<Vec<_>, _>>()?;
-                Some(Element::Sequence(encoded))
-            }
-            None => None,
-        };
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Element::Sequence)
+            })
+            .transpose()?;
 
-        let mut elements = vec![policy_id];
-        if let Some(qualifiers) = qualifiers_elem {
-            elements.push(qualifiers);
-        }
+        let elements: Vec<_> = std::iter::once(policy_id).chain(qualifiers_elem).collect();
 
         Ok(Element::Sequence(elements))
     }
@@ -266,30 +246,16 @@ impl Decoder<Element, PolicyQualifierInfo> for Element {
     fn decode(&self) -> Result<PolicyQualifierInfo, Self::Error> {
         match self {
             Element::Sequence(elements) => {
-                let mut iter = elements.iter();
-
-                // First element: policyQualifierId (OBJECT IDENTIFIER)
-                let policy_qualifier_id = match iter.next() {
-                    Some(Element::ObjectIdentifier(oid)) => oid.clone(),
-                    Some(_) => {
-                        return Err(Error::InvalidCertificatePolicies(
-                            "expected ObjectIdentifier for policyQualifierId".to_string(),
-                        ));
+                let (policy_qualifier_id, qualifier_elem) = match elements.as_slice() {
+                    [Element::ObjectIdentifier(oid), qualifier] => (oid.clone(), qualifier),
+                    [Element::ObjectIdentifier(_)] => {
+                        return Err(error::Error::PolicyQualifierInfoInvalidElementCount.into());
                     }
-                    None => {
-                        return Err(Error::InvalidCertificatePolicies(
-                            "PolicyQualifierInfo must have policyQualifierId".to_string(),
-                        ));
+                    [_, ..] => {
+                        return Err(error::Error::PolicyQualifierIdExpectedOid.into());
                     }
-                };
-
-                // Second element: qualifier (depends on policyQualifierId)
-                let qualifier_elem = match iter.next() {
-                    Some(elem) => elem,
-                    None => {
-                        return Err(Error::InvalidCertificatePolicies(
-                            "PolicyQualifierInfo must have qualifier".to_string(),
-                        ));
+                    [] => {
+                        return Err(error::Error::PolicyQualifierInfoInvalidElementCount.into());
                     }
                 };
 
@@ -299,9 +265,7 @@ impl Decoder<Element, PolicyQualifierInfo> for Element {
                         if let Element::IA5String(s) = qualifier_elem {
                             Qualifier::CpsUri(s.clone())
                         } else {
-                            return Err(Error::InvalidCertificatePolicies(
-                                "expected IA5String for CPS URI".to_string(),
-                            ));
+                            return Err(error::Error::PolicyQualifierIdExpectedOid.into());
                         }
                     }
                     PolicyQualifierInfo::ID_QT_UNOTICE => {
@@ -321,9 +285,7 @@ impl Decoder<Element, PolicyQualifierInfo> for Element {
                     qualifier,
                 })
             }
-            _ => Err(Error::InvalidCertificatePolicies(
-                "expected Sequence for PolicyQualifierInfo".to_string(),
-            )),
+            _ => Err(error::Error::PolicyQualifierInfoExpectedSequence.into()),
         }
     }
 }
@@ -355,37 +317,29 @@ impl Decoder<Element, UserNotice> for Element {
     fn decode(&self) -> Result<UserNotice, Self::Error> {
         match self {
             Element::Sequence(elements) => {
-                let mut notice_ref = None;
-                let mut explicit_text = None;
-
-                for elem in elements {
-                    match elem {
-                        Element::Sequence(_) => {
-                            // This is NoticeReference
-                            notice_ref = Some(elem.decode()?);
+                let (notice_ref, explicit_text) = elements.iter().try_fold(
+                    (None, None),
+                    |(notice, text), elem| -> Result<_, Error> {
+                        match elem {
+                            Element::Sequence(_) => Ok((Some(elem.decode()?), text)),
+                            Element::IA5String(s) | Element::UTF8String(s) => {
+                                Ok((notice, Some(s.clone())))
+                            }
+                            Element::PrintableString(s) => Ok((notice, Some(s.clone()))),
+                            _ => Err(error::Error::UnexpectedElementType(
+                                error::Kind::CertificatePolicies,
+                            )
+                            .into()),
                         }
-                        Element::IA5String(s) | Element::UTF8String(s) => {
-                            explicit_text = Some(s.clone());
-                        }
-                        Element::PrintableString(s) => {
-                            explicit_text = Some(s.clone());
-                        }
-                        _ => {
-                            return Err(Error::InvalidCertificatePolicies(
-                                "unexpected element in UserNotice".to_string(),
-                            ));
-                        }
-                    }
-                }
+                    },
+                )?;
 
                 Ok(UserNotice {
                     notice_ref,
                     explicit_text,
                 })
             }
-            _ => Err(Error::InvalidCertificatePolicies(
-                "expected Sequence for UserNotice".to_string(),
-            )),
+            _ => Err(error::Error::UserNoticeExpectedSequence.into()),
         }
     }
 }
@@ -420,53 +374,48 @@ impl Decoder<Element, NoticeReference> for Element {
     fn decode(&self) -> Result<NoticeReference, Self::Error> {
         match self {
             Element::Sequence(elements) => {
-                let mut iter = elements.iter();
-
-                // First element: organization (DisplayText)
-                let organization = match iter.next() {
-                    Some(Element::IA5String(s) | Element::UTF8String(s)) => s.clone(),
-                    Some(Element::PrintableString(s)) => s.clone(),
-                    Some(_) => {
-                        return Err(Error::InvalidCertificatePolicies(
-                            "expected DisplayText for organization".to_string(),
-                        ));
+                let (organization, notice_numbers) = match elements.as_slice() {
+                    [
+                        Element::IA5String(s) | Element::UTF8String(s),
+                        Element::Sequence(nums),
+                    ]
+                    | [Element::PrintableString(s), Element::Sequence(nums)] => {
+                        let numbers = nums
+                            .iter()
+                            .map(|num_elem| -> Result<i64, Error> {
+                                match num_elem {
+                                    Element::Integer(n) => n.try_into().map_err(|_| {
+                                        error::Error::ValueOutOfRangeU32(
+                                            error::Kind::CertificatePolicies,
+                                        )
+                                        .into()
+                                    }),
+                                    _ => Err(error::Error::NoticeNumbersExpectedIntegers.into()),
+                                }
+                            })
+                            .collect::<Result<Vec<i64>, Error>>()?;
+                        (s.clone(), numbers)
                     }
-                    None => {
-                        return Err(Error::InvalidCertificatePolicies(
-                            "NoticeReference must have organization".to_string(),
-                        ));
+                    [
+                        Element::IA5String(_)
+                        | Element::UTF8String(_)
+                        | Element::PrintableString(_),
+                        _,
+                    ] => {
+                        return Err(error::Error::NoticeNumbersExpectedSequence.into());
                     }
-                };
-
-                // Second element: noticeNumbers (SEQUENCE OF INTEGER)
-                let notice_numbers = match iter.next() {
-                    Some(Element::Sequence(nums)) => {
-                        let mut result = Vec::new();
-                        for num_elem in nums {
-                            if let Element::Integer(n) = num_elem {
-                                let num_value: i64 = n.try_into().map_err(|_| {
-                                    Error::InvalidCertificatePolicies(
-                                        "notice number out of i64 range".to_string(),
-                                    )
-                                })?;
-                                result.push(num_value);
-                            } else {
-                                return Err(Error::InvalidCertificatePolicies(
-                                    "expected INTEGER in noticeNumbers".to_string(),
-                                ));
-                            }
-                        }
-                        result
+                    [
+                        Element::IA5String(_)
+                        | Element::UTF8String(_)
+                        | Element::PrintableString(_),
+                    ] => {
+                        return Err(error::Error::NoticeReferenceInvalidStructure.into());
                     }
-                    Some(_) => {
-                        return Err(Error::InvalidCertificatePolicies(
-                            "expected Sequence for noticeNumbers".to_string(),
-                        ));
+                    [_, ..] => {
+                        return Err(error::Error::NoticeReferenceInvalidStructure.into());
                     }
-                    None => {
-                        return Err(Error::InvalidCertificatePolicies(
-                            "NoticeReference must have noticeNumbers".to_string(),
-                        ));
+                    [] => {
+                        return Err(error::Error::NoticeReferenceInvalidStructure.into());
                     }
                 };
 
@@ -475,9 +424,7 @@ impl Decoder<Element, NoticeReference> for Element {
                     notice_numbers,
                 })
             }
-            _ => Err(Error::InvalidCertificatePolicies(
-                "expected Sequence for NoticeReference".to_string(),
-            )),
+            _ => Err(error::Error::NoticeReferenceInvalidStructure.into()),
         }
     }
 }
@@ -660,10 +607,10 @@ mod tests {
     // Test case: Empty sequence
     #[case(
         Element::Sequence(vec![]),
-        "empty sequence"
+        "at least one PolicyInformation required"
     )]
     // Test case: Not a Sequence
-    #[case(Element::Boolean(true), "expected Sequence")]
+    #[case(Element::Boolean(true), "expected SEQUENCE")]
     fn test_certificate_policies_decode_failure(
         #[case] input: Element,
         #[case] expected_error_msg: &str,

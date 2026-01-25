@@ -121,7 +121,8 @@ impl Display for Pem {
         writeln!(f, "-----BEGIN {}-----", self.label)?;
         // RFC 7468: base64 text should be wrapped at 64 characters
         for chunk in self.base64_data.as_bytes().chunks(64) {
-            writeln!(f, "{}", std::str::from_utf8(chunk).unwrap())?;
+            let line = std::str::from_utf8(chunk).map_err(|_| std::fmt::Error)?;
+            writeln!(f, "{}", line)?;
         }
         write!(f, "-----END {}-----", self.label)
     }

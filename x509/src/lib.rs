@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize, ser::SerializeStruct};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 
-use crate::error::Error;
+use crate::error::{CertificateField, Error};
 use crate::extensions::{Extensions, ParsedExtensions};
 
 mod chain;
@@ -365,13 +365,14 @@ impl Decoder<ASN1Object, Certificate> for ASN1Object {
     fn decode(&self) -> Result<Certificate, Self::Error> {
         let elements = self.elements();
         if elements.len() != 1 {
-            return Err(Error::InvalidCertificate(format!(
-                "expected 1 top-level element in ASN1Object, got {}",
-                elements.len()
-            )));
+            return Err(Error::InvalidElementCount {
+                context: CertificateField::Certificate,
+                expected: "1",
+                actual: elements.len(),
+            });
         }
 
-        elements[0].decode()
+        elements.first().ok_or(Error::EmptyCertificate)?.decode()
     }
 }
 
@@ -384,25 +385,35 @@ impl Decoder<Element, Certificate> for Element {
         match self {
             Element::Sequence(elements) => {
                 if elements.len() != 3 {
-                    return Err(Error::InvalidCertificate(format!(
-                        "expected 3 elements in Certificate sequence, got {}",
-                        elements.len()
-                    )));
+                    return Err(Error::InvalidElementCount {
+                        context: CertificateField::Certificate,
+                        expected: "3",
+                        actual: elements.len(),
+                    });
                 }
 
+                let (tbs_elem, sig_alg_elem, sig_val_elem) = match elements.as_slice() {
+                    [tbs, sig_alg, sig_val] => (tbs, sig_alg, sig_val),
+                    _ => {
+                        return Err(Error::InvalidElementCount {
+                            context: CertificateField::Certificate,
+                            expected: "3",
+                            actual: elements.len(),
+                        });
+                    }
+                };
+
                 // TBSCertificate
-                let tbs_certificate: TBSCertificate = elements[0].decode()?;
+                let tbs_certificate: TBSCertificate = tbs_elem.decode()?;
 
                 // signatureAlgorithm
-                let signature_algorithm: AlgorithmIdentifier = elements[1].decode()?;
+                let signature_algorithm: AlgorithmIdentifier = sig_alg_elem.decode()?;
 
                 // signatureValue (BIT STRING)
-                let signature_value = if let Element::BitString(bs) = &elements[2] {
+                let signature_value = if let Element::BitString(bs) = sig_val_elem {
                     bs.clone()
                 } else {
-                    return Err(Error::InvalidCertificate(
-                        "expected BitString for signature value".to_string(),
-                    ));
+                    return Err(Error::ExpectedBitString(CertificateField::SignatureValue));
                 };
 
                 Ok(Certificate {
@@ -411,9 +422,7 @@ impl Decoder<Element, Certificate> for Element {
                     signature_value,
                 })
             }
-            _ => Err(Error::InvalidCertificate(
-                "expected Sequence for Certificate".to_string(),
-            )),
+            _ => Err(Error::ExpectedSequence(CertificateField::Certificate)),
         }
     }
 }
@@ -474,15 +483,12 @@ impl pem::FromPem for Certificate {
         let der: der::Der = der_bytes.decode()?;
 
         // Decode DER to ASN1Object
-        let asn1_obj: asn1::ASN1Object = der.decode().map_err(|e| {
-            Error::InvalidCertificate(format!("Failed to decode DER to ASN1Object: {}", e))
-        })?;
+        let asn1_obj = der
+            .decode()
+            .map_err(|_| Error::CertificateDerDecodeFailed)?;
 
         // Get first element
-        let element = asn1_obj
-            .elements()
-            .first()
-            .ok_or_else(|| Error::InvalidCertificate("No elements in ASN1Object".to_string()))?;
+        let element = asn1_obj.elements().first().ok_or(Error::EmptyCertificate)?;
 
         // Decode to Certificate
         element.decode()
@@ -640,18 +646,17 @@ impl Decoder<Element, TBSCertificate> for Element {
 
     fn decode(&self) -> Result<TBSCertificate, Self::Error> {
         let Element::Sequence(elements) = self else {
-            return Err(Error::InvalidTBSCertificate(
-                "expected Sequence for TBSCertificate".to_string(),
-            ));
+            return Err(Error::ExpectedSequence(CertificateField::TBSCertificate));
         };
 
         // V1 certificates have 6 required fields (no version field)
         // V2/V3 certificates can have up to 10 fields (version + 6 required + 3 optional)
         if elements.len() < 6 || elements.len() > 10 {
-            return Err(Error::InvalidTBSCertificate(format!(
-                "expected 6-10 elements in TBSCertificate sequence, got {}",
-                elements.len()
-            )));
+            return Err(Error::InvalidElementCount {
+                context: CertificateField::TBSCertificate,
+                expected: "6-10",
+                actual: elements.len(),
+            });
         }
 
         let mut iter = elements.iter();
@@ -662,7 +667,7 @@ impl Decoder<Element, TBSCertificate> for Element {
                 if let Some(elem) = iter.next() {
                     elem.decode()?
                 } else {
-                    return Err(Error::InvalidTBSCertificate("missing version".to_string()));
+                    return Err(Error::MissingField(CertificateField::Version));
                 }
             } else {
                 Version::V1 // DEFAULT v1
@@ -672,74 +677,60 @@ impl Decoder<Element, TBSCertificate> for Element {
         let serial_number = if let Some(elem) = iter.next() {
             elem.decode()?
         } else {
-            return Err(Error::InvalidTBSCertificate(
-                "missing serialNumber".to_string(),
-            ));
+            return Err(Error::MissingField(CertificateField::SerialNumber));
         };
 
         // signature
         let signature = if let Some(elem) = iter.next() {
             elem.decode()?
         } else {
-            return Err(Error::InvalidTBSCertificate(
-                "missing signature".to_string(),
-            ));
+            return Err(Error::MissingField(CertificateField::Signature));
         };
 
         // issuer
         let issuer = if let Some(elem) = iter.next() {
             elem.decode()?
         } else {
-            return Err(Error::InvalidTBSCertificate("missing issuer".to_string()));
+            return Err(Error::MissingField(CertificateField::Issuer));
         };
 
         // validity
         let validity = if let Some(elem) = iter.next() {
             elem.decode()?
         } else {
-            return Err(Error::InvalidTBSCertificate("missing validity".to_string()));
+            return Err(Error::MissingField(CertificateField::Validity));
         };
 
         // subject
         let subject = if let Some(elem) = iter.next() {
             elem.decode()?
         } else {
-            return Err(Error::InvalidTBSCertificate("missing subject".to_string()));
+            return Err(Error::MissingField(CertificateField::Subject));
         };
 
         // subjectPublicKeyInfo
         let subject_public_key_info = if let Some(elem) = iter.next() {
             elem.decode()?
         } else {
-            return Err(Error::InvalidTBSCertificate(
-                "missing subjectPublicKeyInfo".to_string(),
-            ));
+            return Err(Error::MissingField(CertificateField::SubjectPublicKeyInfo));
         };
 
         // Optional fields: issuerUniqueID [1], subjectUniqueID [2], extensions [3]
-        let mut issuer_unique_id = None;
-        let mut subject_unique_id = None;
-        let mut extensions = None;
-
-        for elem in iter {
-            match elem {
-                Element::ContextSpecific { slot: 1, .. } if issuer_unique_id.is_none() => {
-                    issuer_unique_id = Some(elem.decode()?);
+        let (issuer_unique_id, subject_unique_id, extensions) = iter.try_fold(
+            (None, None, None),
+            |(issuer_uid, subject_uid, exts), elem| match elem {
+                Element::ContextSpecific { slot: 1, .. } if issuer_uid.is_none() => {
+                    Ok((Some(elem.decode()?), subject_uid, exts))
                 }
-                Element::ContextSpecific { slot: 2, .. } if subject_unique_id.is_none() => {
-                    subject_unique_id = Some(elem.decode()?);
+                Element::ContextSpecific { slot: 2, .. } if subject_uid.is_none() => {
+                    Ok((issuer_uid, Some(elem.decode()?), exts))
                 }
-                Element::ContextSpecific { slot: 3, .. } if extensions.is_none() => {
-                    extensions = Some(elem.decode()?);
+                Element::ContextSpecific { slot: 3, .. } if exts.is_none() => {
+                    Ok((issuer_uid, subject_uid, Some(elem.decode()?)))
                 }
-                _ => {
-                    return Err(Error::InvalidTBSCertificate(format!(
-                        "unexpected element in TBSCertificate: {:?}",
-                        elem
-                    )));
-                }
-            }
-        }
+                _ => Err(Error::UnexpectedElement(CertificateField::TBSCertificate)),
+            },
+        )?;
 
         Ok(TBSCertificate {
             version,
@@ -827,24 +818,16 @@ impl Decoder<Element, UniqueIdentifier> for Element {
         match self {
             Element::ContextSpecific { slot, element, .. } => {
                 if *slot != 1 && *slot != 2 {
-                    return Err(Error::InvalidUniqueIdentifier(format!(
-                        "expected context-specific tag [1] or [2], got [{}]",
-                        slot
-                    )));
+                    return Err(Error::UniqueIdentifierInvalidTag(*slot));
                 }
                 // IMPLICIT tagging: element is directly the BitString
                 match element.as_ref() {
                     Element::BitString(bit_string) => Ok(UniqueIdentifier(bit_string.clone())),
-                    _ => Err(Error::InvalidUniqueIdentifier(
-                        "expected BitString inside context-specific tag".to_string(),
-                    )),
+                    _ => Err(Error::UniqueIdentifierExpectedBitString),
                 }
             }
             Element::BitString(bit_string) => Ok(UniqueIdentifier(bit_string.clone())), // Allow direct BitString for testing
-            _ => Err(Error::InvalidUniqueIdentifier(
-                "expected context-specific tag [1] or [2] or BitString for UniqueIdentifier"
-                    .to_string(),
-            )),
+            _ => Err(Error::UniqueIdentifierInvalidElement),
         }
     }
 }
@@ -974,28 +957,24 @@ impl Decoder<Element, Validity> for Element {
     fn decode(&self) -> Result<Validity, Self::Error> {
         if let Element::Sequence(elements) = self {
             if elements.len() != 2 {
-                return Err(Error::InvalidValidity(
-                    "expected 2 elements in sequence".to_string(),
-                ));
+                return Err(Error::ValidityInvalidElementCount);
             }
             let not_before = match &elements[0] {
                 Element::UTCTime(dt) => *dt,
                 Element::GeneralizedTime(dt) => *dt,
-                _ => return Err(Error::InvalidValidity("invalid notBefore time".to_string())),
+                _ => return Err(Error::ValidityInvalidNotBefore),
             };
             let not_after = match &elements[1] {
                 Element::UTCTime(dt) => *dt,
                 Element::GeneralizedTime(dt) => *dt,
-                _ => return Err(Error::InvalidValidity("invalid notAfter time".to_string())),
+                _ => return Err(Error::ValidityInvalidNotAfter),
             };
             Ok(Validity {
                 not_before,
                 not_after,
             })
         } else {
-            Err(Error::InvalidValidity(
-                "expected sequence for Validity".to_string(),
-            ))
+            Err(Error::ValidityExpectedSequence)
         }
     }
 }
@@ -1144,12 +1123,12 @@ mod tests {
         // Test case: Not a Sequence
         case(
             Element::Integer(Integer::from(vec![0x01])),
-            "InvalidAlgorithmIdentifier"
+            "ExpectedSequence"
         ),
         // Test case: Empty sequence
         case(
             Element::Sequence(vec![]),
-            "InvalidAlgorithmIdentifier"
+            "EmptyAlgorithmIdentifier"
         ),
         // Test case: Too many elements
         case(
@@ -1158,14 +1137,14 @@ mod tests {
                 Element::Null,
                 Element::Integer(Integer::from(vec![0x01])),
             ]),
-            "InvalidAlgorithmIdentifier"
+            "TooManyElements"
         ),
         // Test case: First element is not ObjectIdentifier
         case(
             Element::Sequence(vec![
                 Element::Integer(Integer::from(vec![0x01])),
             ]),
-            "InvalidAlgorithmIdentifier"
+            "ExpectedOidForAlgorithm"
         )
     )]
     fn test_algorithm_identifier_decode_failure(input: Element, expected_error_variant: &str) {
@@ -1287,10 +1266,10 @@ mod tests {
     }
 
     #[rstest]
-    #[case::null(Element::Null, "InvalidCertificateSerialNumber")]
-    #[case::octet_string(Element::OctetString(asn1::OctetString::from(vec![0x01])), "InvalidCertificateSerialNumber")]
-    #[case::object_identifier(Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.3.4").unwrap()), "InvalidCertificateSerialNumber")]
-    #[case::utf8_string(Element::UTF8String("test".to_string()), "InvalidCertificateSerialNumber")]
+    #[case::null(Element::Null, "CertificateSerialNumberExpectedInteger")]
+    #[case::octet_string(Element::OctetString(asn1::OctetString::from(vec![0x01])), "CertificateSerialNumberExpectedInteger")]
+    #[case::object_identifier(Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.3.4").unwrap()), "CertificateSerialNumberExpectedInteger")]
+    #[case::utf8_string(Element::UTF8String("test".to_string()), "CertificateSerialNumberExpectedInteger")]
     fn test_certificate_serial_number_decode_failure(
         #[case] input: Element,
         #[case] expected_error_variant: &str,
@@ -1354,14 +1333,14 @@ mod tests {
         // Test case: Empty sequence
         case(
             Element::Sequence(vec![]),
-            "expected 2 elements in sequence"
+            "expected 2 elements in SEQUENCE"
         ),
         // Test case: Only one element
         case(
             Element::Sequence(vec![
                 Element::UTCTime(NaiveDateTime::parse_from_str("2019-12-16 03:02:10", "%Y-%m-%d %H:%M:%S").unwrap())
             ]),
-            "expected 2 elements in sequence"
+            "expected 2 elements in SEQUENCE"
         ),
         // Test case: Too many elements
         case(
@@ -1370,12 +1349,12 @@ mod tests {
                 Element::UTCTime(NaiveDateTime::parse_from_str("2024-12-16 03:02:10", "%Y-%m-%d %H:%M:%S").unwrap()),
                 Element::UTCTime(NaiveDateTime::parse_from_str("2025-12-16 03:02:10", "%Y-%m-%d %H:%M:%S").unwrap())
             ]),
-            "expected 2 elements in sequence"
+            "expected 2 elements in SEQUENCE"
         ),
         // Test case: Not a sequence
         case(
             Element::Integer(Integer::from(vec![0x01])),
-            "expected sequence for Validity"
+            "expected SEQUENCE"
         ),
         // Test case: Invalid notBefore (not a time element)
         case(
@@ -1383,7 +1362,7 @@ mod tests {
                 Element::Integer(Integer::from(vec![0x01])),
                 Element::UTCTime(NaiveDateTime::parse_from_str("2024-12-16 03:02:10", "%Y-%m-%d %H:%M:%S").unwrap())
             ]),
-            "invalid notBefore time"
+            "notBefore must be UTCTime or GeneralizedTime"
         ),
         // Test case: Invalid notAfter (not a time element)
         case(
@@ -1391,24 +1370,20 @@ mod tests {
                 Element::UTCTime(NaiveDateTime::parse_from_str("2019-12-16 03:02:10", "%Y-%m-%d %H:%M:%S").unwrap()),
                 Element::Integer(Integer::from(vec![0x01]))
             ]),
-            "invalid notAfter time"
+            "notAfter must be UTCTime or GeneralizedTime"
         )
     )]
     fn test_validity_decode_failure(input: Element, expected_error_msg: &str) {
         let result: Result<Validity, Error> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
-        #[allow(irrefutable_let_patterns)]
-        if let Error::InvalidValidity(msg) = err {
-            assert!(
-                msg.contains(expected_error_msg),
-                "Expected error message to contain '{}', but got '{}'",
-                expected_error_msg,
-                msg
-            );
-        } else {
-            panic!("Expected InvalidValidity error, but got {:?}", err);
-        }
+        let err_str = format!("{}", err);
+        assert!(
+            err_str.contains(expected_error_msg),
+            "Expected error message to contain '{}', but got '{}'",
+            expected_error_msg,
+            err_str
+        );
     }
 
     #[test]
@@ -1538,12 +1513,12 @@ mod tests {
         // Test case: Not a Sequence
         case(
             Element::Integer(Integer::from(vec![0x01])),
-            "expected Sequence"
+            "expected SEQUENCE"
         ),
         // Test case: Empty sequence
         case(
             Element::Sequence(vec![]),
-            "expected 2 elements in sequence, got 0"
+            "expected 2 elements, got 0"
         ),
         // Test case: Only one element
         case(
@@ -1552,7 +1527,7 @@ mod tests {
                     Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()),
                 ]),
             ]),
-            "expected 2 elements in sequence, got 1"
+            "expected 2 elements, got 1"
         ),
         // Test case: Too many elements
         case(
@@ -1563,7 +1538,7 @@ mod tests {
                 Element::BitString(BitString::new(0, vec![0x00])),
                 Element::Null,
             ]),
-            "expected 2 elements in sequence, got 3"
+            "expected 2 elements, got 3"
         ),
         // Test case: First element is not AlgorithmIdentifier (not a sequence)
         case(
@@ -1571,7 +1546,7 @@ mod tests {
                 Element::Integer(Integer::from(vec![0x01])),
                 Element::BitString(BitString::new(0, vec![0x00])),
             ]),
-            "Invalid algorithm identifier"
+            "AlgorithmIdentifier must be a SEQUENCE"
         ),
         // Test case: Second element is not BitString
         case(
@@ -1581,7 +1556,7 @@ mod tests {
                 ]),
                 Element::OctetString(OctetString::from(vec![0x00])),
             ]),
-            "expected BitString for subject public key"
+            "expected BIT STRING for subject public key"
         ),
         // Test case: Invalid AlgorithmIdentifier (empty sequence)
         case(
@@ -1589,7 +1564,7 @@ mod tests {
                 Element::Sequence(vec![]),
                 Element::BitString(BitString::new(0, vec![0x00])),
             ]),
-            "Invalid algorithm identifier"
+            "AlgorithmIdentifier must have at least 1 element"
         ),
     )]
     fn test_subject_public_key_info_decode_failure(input: Element, expected_error_msg: &str) {
