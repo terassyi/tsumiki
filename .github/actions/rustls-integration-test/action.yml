@@ -1,0 +1,21 @@
+name: 'Rustls Integration Test'
+description: 'Run rustls integration test with TLS echo server/client'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup mold linker
+      uses: rui314/setup-mold@v1
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Cache cargo
+      uses: Swatinem/rust-cache@v2
+
+    - name: Setup just
+      uses: extractions/setup-just@v2
+
+    - name: Run rustls integration test
+      shell: bash
+      run: just test-rustls-integration

@@ -118,13 +118,13 @@ pub enum Error {
 
     // External error conversions
     #[error("invalid ASN.1: {0}")]
-    InvalidASN1(#[source] asn1::error::Error),
+    InvalidASN1(#[source] tsumiki_asn1::error::Error),
     #[error("PKIX types error: {0}")]
-    PKIXTypesError(#[from] pkix_types::Error),
+    PKIXTypesError(#[from] tsumiki_pkix_types::Error),
     #[error("PEM error: {0}")]
-    PemError(#[from] pem::error::Error),
+    PemError(#[from] tsumiki_pem::error::Error),
     #[error("DER error: {0}")]
-    DerError(#[from] der::error::Error),
+    DerError(#[from] tsumiki_der::error::Error),
     #[error("unexpected PEM label: expected {expected}, got {got}")]
     UnexpectedPemLabel { expected: String, got: String },
     #[error("extension error: {0}")]

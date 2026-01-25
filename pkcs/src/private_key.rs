@@ -25,12 +25,12 @@
 //! }
 //! ```
 
-use asn1::{ASN1Object, Element};
-use der::Der;
-use pem::{Label, Pem, ToPem};
-use pkix_types::algorithm::AlgorithmIdentifier;
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
+use tsumiki_asn1::{ASN1Object, Element};
+use tsumiki_der::Der;
+use tsumiki_pem::{Label, Pem, ToPem};
+use tsumiki_pkix_types::algorithm::AlgorithmIdentifier;
 
 use crate::error::{Error, Result};
 use crate::pkcs1::RSAPrivateKey;
@@ -104,7 +104,7 @@ impl std::fmt::Display for KeyAlgorithm {
 /// ```ignore
 /// use pkcs::{PrivateKey, PrivateKeyExt};
 /// use tsumiki::decoder::Decoder;
-/// use pem::Pem;
+/// use tsumiki_pem::Pem;
 ///
 /// let pem: Pem = "-----BEGIN RSA PRIVATE KEY-----...".parse()?;
 /// let key: PrivateKey = pem.decode()?;
@@ -203,7 +203,7 @@ pub trait PrivateKeyExt {
     ///
     /// ```ignore
     /// use pkcs::{PrivateKey, PrivateKeyExt, PublicKey};
-    /// use pem::ToPem;
+    /// use tsumiki_pem::ToPem;
     ///
     /// let key: PrivateKey = /* ... */;
     /// if let Some(pubkey) = key.public_key() {

@@ -1,5 +1,5 @@
 use clap::Args;
-use pem::{Label, Pem};
+use tsumiki_pem::{Label, Pem};
 
 use crate::error::Result;
 use crate::utils::read_input;

@@ -20,7 +20,6 @@ use std::net::ToSocketAddrs;
 use std::path::Path;
 use std::sync::Arc;
 
-use pkcs::PrivateKey;
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, Error, SignatureScheme};
@@ -28,7 +27,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use tsumiki::decoder::Decoder;
-use x509::Certificate;
+use tsumiki_pkcs::PrivateKey;
+use tsumiki_x509::Certificate;
 
 const SERVER_ADDR: &str = "127.0.0.1:8443";
 const CA_CERT_PATH: &str = "examples/certs/ca.crt";
@@ -153,7 +153,7 @@ impl ServerCertVerifier for TsumikiCertVerifier {
 /// Load certificate as tsumiki Certificate
 fn load_certificate_as_tsumiki(path: &Path) -> io::Result<Certificate> {
     let pem_data = fs::read_to_string(path)?;
-    let pem = pem_data.parse::<pem::Pem>().map_err(|e| {
+    let pem = pem_data.parse::<tsumiki_pem::Pem>().map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("PEM parse error: {}", e),
@@ -185,7 +185,7 @@ fn load_certificate(path: &Path) -> io::Result<CertificateDer<'static>> {
 /// (PKCS#1 RSA, SEC1 EC, or PKCS#8).
 fn load_private_key(path: &Path) -> io::Result<PrivateKeyDer<'static>> {
     let pem_data = fs::read_to_string(path)?;
-    let pem = pem_data.parse::<pem::Pem>().map_err(|e| {
+    let pem = pem_data.parse::<tsumiki_pem::Pem>().map_err(|e| {
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("PEM parse error: {}", e),

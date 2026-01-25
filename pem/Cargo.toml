@@ -1,17 +1,20 @@
 [package]
-name = "pem"
-version.workspace = true
+name = "tsumiki-pem"
+version = "0.0.1"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "PEM related crate"
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "PEM format parser and encoder for X.509 certificates"
 
 [dependencies]
 base64.workspace = true
 regex = "1.11.1"
-thiserror ={ workspace = true }
-
+thiserror = { workspace = true }
 tsumiki = { path = "../tsumiki" }
 
 [dev-dependencies]
-rstest ={ workspace = true }
+rstest = { workspace = true }

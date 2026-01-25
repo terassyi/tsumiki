@@ -1,16 +1,16 @@
 mod tls;
 mod verifier;
 
-use asn1::ASN1Object;
 use chrono::Utc;
 use clap::Args;
-use pem::ToPem;
-use pkcs::pkcs8::PublicKey;
-use pkix_types::OidName;
 use tsumiki::decoder::Decoder;
 use tsumiki::encoder::Encoder;
-use x509::extensions::{Extension, GeneralName, IpAddressOrRange, SubjectAltName};
-use x509::{Certificate, CertificateChain};
+use tsumiki_asn1::ASN1Object;
+use tsumiki_pem::ToPem;
+use tsumiki_pkcs::pkcs8::PublicKey;
+use tsumiki_pkix_types::OidName;
+use tsumiki_x509::extensions::{Extension, GeneralName, IpAddressOrRange, SubjectAltName};
+use tsumiki_x509::{Certificate, CertificateChain};
 
 use crate::error::Result;
 use crate::output::OutputFormat;
@@ -129,17 +129,17 @@ impl Config {
 
 fn get_purpose_name(oid_str: &str) -> &'static str {
     match oid_str {
-        x509::extensions::ExtendedKeyUsage::SERVER_AUTH => "Server Authentication",
-        x509::extensions::ExtendedKeyUsage::CLIENT_AUTH => "Client Authentication",
-        x509::extensions::ExtendedKeyUsage::CODE_SIGNING => "Code Signing",
-        x509::extensions::ExtendedKeyUsage::EMAIL_PROTECTION => "Email Protection",
-        x509::extensions::ExtendedKeyUsage::TIME_STAMPING => "Time Stamping",
-        x509::extensions::ExtendedKeyUsage::OCSP_SIGNING => "OCSP Signing",
+        tsumiki_x509::extensions::ExtendedKeyUsage::SERVER_AUTH => "Server Authentication",
+        tsumiki_x509::extensions::ExtendedKeyUsage::CLIENT_AUTH => "Client Authentication",
+        tsumiki_x509::extensions::ExtendedKeyUsage::CODE_SIGNING => "Code Signing",
+        tsumiki_x509::extensions::ExtendedKeyUsage::EMAIL_PROTECTION => "Email Protection",
+        tsumiki_x509::extensions::ExtendedKeyUsage::TIME_STAMPING => "Time Stamping",
+        tsumiki_x509::extensions::ExtendedKeyUsage::OCSP_SIGNING => "OCSP Signing",
         _ => "Unknown",
     }
 }
 
-fn extract_san(tbs: &x509::TBSCertificate) -> Result<Vec<String>> {
+fn extract_san(tbs: &tsumiki_x509::TBSCertificate) -> Result<Vec<String>> {
     let exts = match tbs.extensions() {
         Some(e) => e,
         None => return Ok(Vec::new()),
@@ -170,11 +170,11 @@ fn extract_san(tbs: &x509::TBSCertificate) -> Result<Vec<String>> {
     Ok(san_list)
 }
 
-fn check_self_signed(tbs: &x509::TBSCertificate) -> bool {
+fn check_self_signed(tbs: &tsumiki_x509::TBSCertificate) -> bool {
     tbs.subject() == tbs.issuer()
 }
 
-fn show_certificate_purposes(tbs: &x509::TBSCertificate) -> Result<()> {
+fn show_certificate_purposes(tbs: &tsumiki_x509::TBSCertificate) -> Result<()> {
     let extensions = match tbs.extensions() {
         Some(e) => e,
         None => {
@@ -186,8 +186,11 @@ fn show_certificate_purposes(tbs: &x509::TBSCertificate) -> Result<()> {
     let eku = extensions
         .extensions()
         .iter()
-        .find(|ext| *ext.oid() == x509::extensions::ExtendedKeyUsage::OID)
-        .and_then(|ext| ext.parse::<x509::extensions::ExtendedKeyUsage>().ok());
+        .find(|ext| *ext.oid() == tsumiki_x509::extensions::ExtendedKeyUsage::OID)
+        .and_then(|ext| {
+            ext.parse::<tsumiki_x509::extensions::ExtendedKeyUsage>()
+                .ok()
+        });
 
     match eku {
         Some(eku) => {
@@ -269,7 +272,7 @@ pub(crate) fn execute(config: Config) -> Result<()> {
     }
 
     // Full output
-    pkix_types::set_use_oid_values(config.show_oid);
+    tsumiki_pkix_types::set_use_oid_values(config.show_oid);
     output_certificate_chain(&chain, &config)?;
 
     Ok(())
@@ -349,15 +352,15 @@ fn show_specific_fields(cert: &Certificate, config: &Config) -> Result<()> {
     Ok(())
 }
 
-fn format_subject(tbs: &x509::TBSCertificate) -> Result<String> {
+fn format_subject(tbs: &tsumiki_x509::TBSCertificate) -> Result<String> {
     Ok(format!("Subject: {}\n", tbs.subject()))
 }
 
-fn format_issuer(tbs: &x509::TBSCertificate) -> Result<String> {
+fn format_issuer(tbs: &tsumiki_x509::TBSCertificate) -> Result<String> {
     Ok(format!("Issuer: {}\n", tbs.issuer()))
 }
 
-fn format_dates(tbs: &x509::TBSCertificate) -> Result<String> {
+fn format_dates(tbs: &tsumiki_x509::TBSCertificate) -> Result<String> {
     let validity = tbs.validity();
     Ok(format!(
         "Not Before: {}\nNot After: {}\n",
@@ -366,14 +369,14 @@ fn format_dates(tbs: &x509::TBSCertificate) -> Result<String> {
     ))
 }
 
-fn format_serial(tbs: &x509::TBSCertificate) -> Result<String> {
+fn format_serial(tbs: &tsumiki_x509::TBSCertificate) -> Result<String> {
     Ok(format!(
         "Serial Number: {}\n",
         tbs.serial_number().format_hex()
     ))
 }
 
-fn format_extensions(tbs: &x509::TBSCertificate) -> Result<String> {
+fn format_extensions(tbs: &tsumiki_x509::TBSCertificate) -> Result<String> {
     match tbs.extensions() {
         Some(exts) => {
             let lines = exts
@@ -393,7 +396,7 @@ fn format_extensions(tbs: &x509::TBSCertificate) -> Result<String> {
     }
 }
 
-fn format_algorithms(tbs: &x509::TBSCertificate) -> Result<String> {
+fn format_algorithms(tbs: &tsumiki_x509::TBSCertificate) -> Result<String> {
     let sig_alg = tbs.signature();
     let sig_oid_str = sig_alg.algorithm.to_string();
     let sig_name = sig_alg.oid_name().unwrap_or(&sig_oid_str);
@@ -416,7 +419,7 @@ fn format_fingerprint(cert: &Certificate, alg: FingerprintAlgorithm) -> Result<S
     Ok(format!("{} Fingerprint: {}\n", alg, fingerprint))
 }
 
-fn format_expiry(tbs: &x509::TBSCertificate) -> Result<String> {
+fn format_expiry(tbs: &tsumiki_x509::TBSCertificate) -> Result<String> {
     let validity = tbs.validity();
     let not_after = validity.not_after();
     let now = Utc::now().naive_utc();
@@ -436,14 +439,14 @@ fn format_expiry(tbs: &x509::TBSCertificate) -> Result<String> {
     }
 }
 
-fn format_pubkey(tbs: &x509::TBSCertificate) -> Result<String> {
+fn format_pubkey(tbs: &tsumiki_x509::TBSCertificate) -> Result<String> {
     let spki = tbs.subject_public_key_info().clone();
     let pubkey = PublicKey::new(spki);
     let pem = pubkey.to_pem()?;
     Ok(pem.to_string())
 }
 
-fn format_san(tbs: &x509::TBSCertificate) -> Result<String> {
+fn format_san(tbs: &tsumiki_x509::TBSCertificate) -> Result<String> {
     let san_list = extract_san(tbs)?;
     if san_list.is_empty() {
         Ok("Subject Alternative Names: (none)\n".to_string())
@@ -457,7 +460,7 @@ fn format_san(tbs: &x509::TBSCertificate) -> Result<String> {
     }
 }
 
-fn format_self_signed(tbs: &x509::TBSCertificate) -> Result<String> {
+fn format_self_signed(tbs: &tsumiki_x509::TBSCertificate) -> Result<String> {
     let is_self_signed = check_self_signed(tbs);
     Ok(format!(
         "Self-Signed: {}\n",

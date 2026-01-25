@@ -35,10 +35,10 @@
 //!   the number of seconds is zero.
 //! - GeneralizedTime values must not include fractional seconds.
 
-use asn1::{Element, OctetString};
 use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
 use std::fmt;
+use tsumiki_asn1::{Element, OctetString};
 
 use super::{Attribute, extract_single_value};
 use crate::pkcs9::error::{Error, Result};
@@ -186,12 +186,12 @@ impl Attribute for SigningTime {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::{ASN1Object, Element, ObjectIdentifier};
     use chrono::{Datelike, NaiveDateTime, Timelike};
     use rstest::rstest;
     use std::str::FromStr;
     use tsumiki::decoder::Decoder;
     use tsumiki::encoder::Encoder;
+    use tsumiki_asn1::{ASN1Object, Element, ObjectIdentifier};
 
     use crate::pkcs9::attribute::RawAttribute;
 

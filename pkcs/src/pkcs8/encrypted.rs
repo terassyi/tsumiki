@@ -3,16 +3,16 @@
 //! Encrypted private key container. The actual encryption/decryption
 //! implementation requires RFC 8018 PBKDF2/PBES2 (not yet implemented).
 
-use asn1::{ASN1Object, Element, OctetString};
-use der::Der;
-use pem::Pem;
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, Element, OctetString};
+use tsumiki_der::Der;
+use tsumiki_pem::Pem;
 
 use super::Result;
 use super::error::Error;
-use pkix_types::AlgorithmIdentifier;
+use tsumiki_pkix_types::AlgorithmIdentifier;
 
 /// EncryptedPrivateKeyInfo
 ///
@@ -121,11 +121,11 @@ impl Decoder<Pem, EncryptedPrivateKeyInfo> for Pem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use der::Der;
-    use pem::{Label, Pem};
     use rstest::rstest;
     use tsumiki::decoder::Decoder;
     use tsumiki::encoder::Encoder;
+    use tsumiki_der::Der;
+    use tsumiki_pem::{Label, Pem};
 
     // Encrypted PKCS#8 RSA key (encrypted with AES-256-CBC, password: "test")
     const ENCRYPTED_RSA_PKCS8_PEM: &str = "-----BEGIN ENCRYPTED PRIVATE KEY-----
@@ -188,7 +188,7 @@ t7pqbqBDtqOYW2v9TINhDGo+bosxOIjQuVAR6+6bA5LhBro=
 
         // Decode DER to ASN1Object
         let der: Der = pem.decode().expect("Failed to decode DER from PEM");
-        let asn1_obj: asn1::ASN1Object = der.decode().expect("Failed to decode ASN1Object");
+        let asn1_obj: tsumiki_asn1::ASN1Object = der.decode().expect("Failed to decode ASN1Object");
 
         // Decode EncryptedPrivateKeyInfo directly from ASN1Object
         let encrypted_key: EncryptedPrivateKeyInfo = asn1_obj
@@ -228,7 +228,7 @@ t7pqbqBDtqOYW2v9TINhDGo+bosxOIjQuVAR6+6bA5LhBro=
     fn test_encrypted_private_key_info_round_trip(#[case] pem_data: &str) {
         let pem: Pem = pem_data.parse().expect("Failed to parse PEM");
         let der: Der = pem.decode().expect("Failed to decode DER from PEM");
-        let asn1_obj: asn1::ASN1Object = der.decode().expect("Failed to decode ASN1Object");
+        let asn1_obj: tsumiki_asn1::ASN1Object = der.decode().expect("Failed to decode ASN1Object");
 
         // Decode directly from ASN1Object
         let original: EncryptedPrivateKeyInfo = asn1_obj.decode().expect("Failed to decode");
@@ -259,7 +259,7 @@ t7pqbqBDtqOYW2v9TINhDGo+bosxOIjQuVAR6+6bA5LhBro=
     fn test_encrypted_private_key_info_structure(#[case] pem_data: &str) {
         let pem: Pem = pem_data.parse().expect("Failed to parse PEM");
         let der: Der = pem.decode().expect("Failed to decode DER from PEM");
-        let asn1_obj: asn1::ASN1Object = der.decode().expect("Failed to decode ASN1Object");
+        let asn1_obj: tsumiki_asn1::ASN1Object = der.decode().expect("Failed to decode ASN1Object");
 
         // Decode directly from ASN1Object
         let encrypted_key: EncryptedPrivateKeyInfo = asn1_obj.decode().expect("Failed to decode");
@@ -291,7 +291,7 @@ t7pqbqBDtqOYW2v9TINhDGo+bosxOIjQuVAR6+6bA5LhBro=
     fn test_encrypted_private_key_info_asn1object_round_trip(#[case] pem_data: &str) {
         let pem: Pem = pem_data.parse().expect("Failed to parse PEM");
         let der: Der = pem.decode().expect("Failed to decode DER from PEM");
-        let asn1_obj: asn1::ASN1Object = der.decode().expect("Failed to decode ASN1Object");
+        let asn1_obj: tsumiki_asn1::ASN1Object = der.decode().expect("Failed to decode ASN1Object");
 
         // Decode from ASN1Object
         let original: EncryptedPrivateKeyInfo = asn1_obj.decode().expect("Failed to decode");

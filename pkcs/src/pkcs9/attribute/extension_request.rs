@@ -18,11 +18,11 @@
 //! This allows the certificate requester to specify which extensions they want,
 //! such as Subject Alternative Names, Key Usage, Extended Key Usage, etc.
 
-use asn1::{ASN1Object, Element, OctetString};
-use pkix_types::Extension;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, Element, OctetString};
+use tsumiki_pkix_types::Extension;
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -178,11 +178,11 @@ impl Attribute for ExtensionRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::ObjectIdentifier;
     use rstest::rstest;
     use std::str::FromStr;
     use tsumiki::decoder::Decoder;
     use tsumiki::encoder::Encoder;
+    use tsumiki_asn1::ObjectIdentifier;
 
     fn create_basic_extension() -> Extension {
         // Create a simple Extension: basicConstraints with CA:TRUE

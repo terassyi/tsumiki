@@ -17,10 +17,10 @@
 //! implementations. Each crate (x509 and pkcs) may use these implementations
 //! or provide their own specific encoding/decoding logic.
 
-use asn1::{Element, ObjectIdentifier, OctetString};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{Element, ObjectIdentifier, OctetString};
 
 use crate::error::{Error, Result};
 
@@ -88,9 +88,11 @@ impl Decoder<Element, Extension> for Element {
 
         let (id, critical, value) = match elements.as_slice() {
             // With critical flag
-            [Element::ObjectIdentifier(oid), Element::Boolean(crit), Element::OctetString(octets)] => {
-                (oid.clone(), *crit, octets.clone())
-            }
+            [
+                Element::ObjectIdentifier(oid),
+                Element::Boolean(crit),
+                Element::OctetString(octets),
+            ] => (oid.clone(), *crit, octets.clone()),
             // Without critical flag (defaults to FALSE)
             [Element::ObjectIdentifier(oid), Element::OctetString(octets)] => {
                 (oid.clone(), false, octets.clone())
@@ -135,10 +137,10 @@ impl Encoder<Extension, Element> for Extension {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::ObjectIdentifier;
     use std::str::FromStr;
     use tsumiki::decoder::Decoder;
     use tsumiki::encoder::Encoder;
+    use tsumiki_asn1::ObjectIdentifier;
 
     #[test]
     fn test_extension_new() {

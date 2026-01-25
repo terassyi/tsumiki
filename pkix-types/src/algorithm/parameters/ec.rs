@@ -4,8 +4,8 @@
 
 use super::{AlgorithmParameter, Error, RawAlgorithmParameter, Result};
 use crate::{AlgorithmParameters, OidName};
-use asn1::{Element, ObjectIdentifier};
 use serde::{Deserialize, Serialize};
+use tsumiki_asn1::{Element, ObjectIdentifier};
 
 /// Well-known elliptic curves defined in [RFC 5480 Section 2.1.1.1](https://datatracker.ietf.org/doc/html/rfc5480#section-2.1.1.1)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -329,8 +329,8 @@ mod tests {
 
     #[rstest]
     #[case(Element::Null)]
-    #[case(Element::Integer(asn1::Integer::from(vec![0x01])))]
-    #[case(Element::OctetString(asn1::OctetString::from(vec![0x01, 0x02])))]
+    #[case(Element::Integer(tsumiki_asn1::Integer::from(vec![0x01])))]
+    #[case(Element::OctetString(tsumiki_asn1::OctetString::from(vec![0x01, 0x02])))]
     fn test_ec_parameters_invalid_element(#[case] element: Element) {
         let raw = RawAlgorithmParameter::new(element);
         let result: Result<EcParameters> = raw.try_into();

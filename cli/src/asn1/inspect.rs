@@ -1,9 +1,9 @@
 use std::str::FromStr;
 
 use clap::Args;
-use der::Der;
-use pem::Pem;
 use tsumiki::decoder::Decoder;
+use tsumiki_der::Der;
+use tsumiki_pem::Pem;
 
 use crate::error::Result;
 use crate::utils::read_input;

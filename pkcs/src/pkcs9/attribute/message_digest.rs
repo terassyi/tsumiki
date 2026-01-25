@@ -19,9 +19,9 @@
 //! The message-digest attribute type is required in these cases if there
 //! are any PKCS #7 authenticated attributes present.
 
-use asn1::{Element, OctetString};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
 use std::fmt;
+use tsumiki_asn1::{Element, OctetString};
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -146,9 +146,9 @@ impl Attribute for MessageDigest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::ASN1Object;
     use rstest::rstest;
     use tsumiki::encoder::Encoder;
+    use tsumiki_asn1::ASN1Object;
 
     #[rstest]
     #[case(vec![0x01, 0x02, 0x03, 0x04], "01020304")]

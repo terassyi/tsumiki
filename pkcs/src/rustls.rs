@@ -2,10 +2,10 @@
 //!
 //! This module is only compiled when the `rustls` feature is enabled.
 
-use asn1::{ASN1Object, Element};
 use rustls_pki_types::{PrivateKeyDer, PrivatePkcs1KeyDer, PrivatePkcs8KeyDer, PrivateSec1KeyDer};
 use tsumiki::decoder::Decoder;
 use tsumiki::encoder::Encoder;
+use tsumiki_asn1::{ASN1Object, Element};
 
 use crate::error::{Error, Result};
 use crate::pkcs1::{self, RSAPrivateKey};
@@ -250,9 +250,9 @@ impl TryFrom<PrivateKey> for PrivateKeyDer<'static> {
 mod tests {
     use std::str::FromStr;
 
-    use pem::Pem;
     use rstest::rstest;
     use tsumiki::decoder::Decoder;
+    use tsumiki_pem::Pem;
 
     use super::*;
     use crate::private_key::PrivateKeyExt;

@@ -1,8 +1,8 @@
 use error::Error;
 use nom::{IResult, Parser};
-use pem::Pem;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_pem::Pem;
 
 pub mod error;
 
@@ -408,9 +408,9 @@ mod tests {
     use rstest::rstest;
 
     use crate::{Der, PrimitiveTag, Tag, Tlv, Value, parse_length};
-    use pem::Pem;
     use tsumiki::decoder::Decoder;
     use tsumiki::encoder::Encoder;
+    use tsumiki_pem::Pem;
 
     #[rstest(
         input,

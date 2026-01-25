@@ -1,8 +1,8 @@
-use asn1::{Element, OctetString};
-use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{Element, OctetString};
+use tsumiki_pkix_types::OidName;
 
 use crate::error::Error;
 use crate::extensions::{CRLDistributionPoints, Extension};

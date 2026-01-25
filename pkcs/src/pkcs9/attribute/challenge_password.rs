@@ -27,10 +27,10 @@
 //! Note: RFC 2985 marks this attribute as deprecated due to security concerns,
 //! but it is still widely implemented and used in practice.
 
-use asn1::OctetString;
-use pkix_types::DirectoryString;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
 use std::fmt;
+use tsumiki_asn1::OctetString;
+use tsumiki_pkix_types::DirectoryString;
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -166,11 +166,11 @@ impl Attribute for ChallengePassword {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::{ASN1Object, Element, ObjectIdentifier};
     use rstest::rstest;
     use std::str::FromStr;
     use tsumiki::decoder::Decoder;
     use tsumiki::encoder::Encoder;
+    use tsumiki_asn1::{ASN1Object, Element, ObjectIdentifier};
 
     use crate::pkcs9::attribute::RawAttribute;
 
@@ -206,7 +206,7 @@ mod tests {
     #[test]
     fn test_challenge_password_parse_bmp_string() {
         // Create a BMPString element
-        use asn1::BMPString;
+        use tsumiki_asn1::BMPString;
         let bmp = BMPString::new("密码").unwrap();
         let password_value = Element::BMPString(bmp);
 
@@ -267,8 +267,8 @@ mod tests {
     #[test]
     fn test_challenge_password_invalid_type_error() {
         // Create an invalid element (INTEGER instead of string)
-        use asn1::Integer;
         use num_bigint::BigInt;
+        use tsumiki_asn1::Integer;
         let invalid_value = Element::Integer(Integer::from(BigInt::from(42)));
 
         // Wrap in SET

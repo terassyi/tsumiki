@@ -1,5 +1,5 @@
-use pem::Pem;
 use tsumiki::decoder::Decoder;
+use tsumiki_pem::Pem;
 
 use crate::error::Result;
 

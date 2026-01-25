@@ -1,13 +1,13 @@
-use asn1::{ASN1Object, BitString, Element, Integer, OctetString};
-use der::Der;
 use num_bigint::BigInt;
-use pem::{Label, Pem, ToPem};
-use pkix_types::algorithm::AlgorithmIdentifier;
-use pkix_types::algorithm::parameters::ec::NamedCurve;
-use pkix_types::{OidName, SubjectPublicKeyInfo};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, BitString, Element, Integer, OctetString};
+use tsumiki_der::Der;
+use tsumiki_pem::{Label, Pem, ToPem};
+use tsumiki_pkix_types::algorithm::AlgorithmIdentifier;
+use tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve;
+use tsumiki_pkix_types::{OidName, SubjectPublicKeyInfo};
 
 use super::Result;
 use super::error::Error;
@@ -475,7 +475,7 @@ AwQF
 
     #[test]
     fn test_algorithm_identifier_with_sequence_params() {
-        use pkix_types::RawAlgorithmParameter;
+        use tsumiki_pkix_types::RawAlgorithmParameter;
 
         // EC algorithm with SEQUENCE parameters
         let oid = EC_PUBLIC_KEY_OID.parse().unwrap();
@@ -515,7 +515,7 @@ AwQF
     ) {
         // Decode PEM -> DER -> ASN1Object -> Element
         let pem = pem_data.decode().expect("Failed to decode PEM");
-        let der: der::Der = pem.decode().expect("Failed to decode DER from PEM");
+        let der: tsumiki_der::Der = pem.decode().expect("Failed to decode DER from PEM");
         let asn1_obj = der.decode().expect("Failed to decode ASN1Object");
         let der_element = asn1_obj
             .elements()
@@ -655,7 +655,7 @@ AwQF
     /// Decode a OneAsymmetricKey from PEM string
     fn decode_key_from_pem(pem_str: &str) -> OneAsymmetricKey {
         let pem = pem_str.decode().expect("Failed to decode PEM");
-        let der: der::Der = pem.decode().expect("Failed to decode DER from PEM");
+        let der: tsumiki_der::Der = pem.decode().expect("Failed to decode DER from PEM");
         let asn1_obj = der.decode().expect("Failed to decode ASN1Object");
         let element = asn1_obj
             .elements()
@@ -695,9 +695,9 @@ AwQF
 
     /// Create a friendlyName RawAttribute
     fn create_friendly_name_attribute(name: &str) -> crate::pkcs9::RawAttribute {
-        use asn1::BMPString;
+        use tsumiki_asn1::BMPString;
 
-        let oid: asn1::ObjectIdentifier = "1.2.840.113549.1.9.20".parse().unwrap();
+        let oid: tsumiki_asn1::ObjectIdentifier = "1.2.840.113549.1.9.20".parse().unwrap();
         let bmp = BMPString::new(name).unwrap();
         let values = Element::Set(vec![Element::BMPString(bmp)]);
         let attr_elem = Element::Sequence(vec![Element::ObjectIdentifier(oid), values]);
@@ -706,7 +706,7 @@ AwQF
 
     /// Create a localKeyId RawAttribute
     fn create_local_key_id_attribute(key_id: &[u8]) -> crate::pkcs9::RawAttribute {
-        let oid: asn1::ObjectIdentifier = "1.2.840.113549.1.9.21".parse().unwrap();
+        let oid: tsumiki_asn1::ObjectIdentifier = "1.2.840.113549.1.9.21".parse().unwrap();
         let octets = OctetString::from(key_id.to_vec());
         let values = Element::Set(vec![Element::OctetString(octets)]);
         let attr_elem = Element::Sequence(vec![Element::ObjectIdentifier(oid), values]);
@@ -714,14 +714,14 @@ AwQF
     }
 
     /// Encode a OneAsymmetricKey to PEM
-    fn encode_key_to_pem(key: &OneAsymmetricKey) -> pem::Pem {
-        use asn1::ASN1Object;
+    fn encode_key_to_pem(key: &OneAsymmetricKey) -> tsumiki_pem::Pem {
+        use tsumiki_asn1::ASN1Object;
 
         let element: Element = key.encode().expect("Failed to encode");
         let asn1_obj = ASN1Object::new(vec![element]);
-        let der: der::Der = asn1_obj.encode().expect("Failed to encode to DER");
+        let der: tsumiki_der::Der = asn1_obj.encode().expect("Failed to encode to DER");
         let der_bytes: Vec<u8> = der.encode().expect("Failed to encode DER to bytes");
-        pem::Pem::from_bytes(pem::Label::PrivateKey, &der_bytes)
+        tsumiki_pem::Pem::from_bytes(tsumiki_pem::Label::PrivateKey, &der_bytes)
     }
 
     /// Normalize PEM string for comparison (trim whitespace)
@@ -739,16 +739,16 @@ AwQF
 /// This is a newtype wrapper around SubjectPublicKeyInfo from pkix_types.
 /// It provides convenient trait implementations and helper methods.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PublicKey(pkix_types::SubjectPublicKeyInfo);
+pub struct PublicKey(tsumiki_pkix_types::SubjectPublicKeyInfo);
 
 impl PublicKey {
     /// Create a new PublicKey from SubjectPublicKeyInfo
-    pub fn new(key_info: pkix_types::SubjectPublicKeyInfo) -> Self {
+    pub fn new(key_info: tsumiki_pkix_types::SubjectPublicKeyInfo) -> Self {
         PublicKey(key_info)
     }
 
     /// Get algorithm OID
-    pub fn algorithm_oid(&self) -> &asn1::ObjectIdentifier {
+    pub fn algorithm_oid(&self) -> &tsumiki_asn1::ObjectIdentifier {
         self.0.algorithm().algorithm()
     }
 
@@ -785,7 +785,7 @@ impl PublicKey {
             .parameters
             .as_ref()
             .and_then(|params| match params {
-                pkix_types::algorithm::AlgorithmParameters::Other(raw) => {
+                tsumiki_pkix_types::algorithm::AlgorithmParameters::Other(raw) => {
                     if let Element::ObjectIdentifier(curve_oid) = raw.element() {
                         NamedCurve::try_from(curve_oid).ok()?.oid_name()
                     } else {
@@ -798,14 +798,14 @@ impl PublicKey {
 }
 
 // Standard trait implementations
-impl AsRef<pkix_types::SubjectPublicKeyInfo> for PublicKey {
-    fn as_ref(&self) -> &pkix_types::SubjectPublicKeyInfo {
+impl AsRef<tsumiki_pkix_types::SubjectPublicKeyInfo> for PublicKey {
+    fn as_ref(&self) -> &tsumiki_pkix_types::SubjectPublicKeyInfo {
         &self.0
     }
 }
 
 impl std::ops::Deref for PublicKey {
-    type Target = pkix_types::SubjectPublicKeyInfo;
+    type Target = tsumiki_pkix_types::SubjectPublicKeyInfo;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -818,13 +818,13 @@ impl std::ops::DerefMut for PublicKey {
     }
 }
 
-impl From<pkix_types::SubjectPublicKeyInfo> for PublicKey {
-    fn from(key_info: pkix_types::SubjectPublicKeyInfo) -> Self {
+impl From<tsumiki_pkix_types::SubjectPublicKeyInfo> for PublicKey {
+    fn from(key_info: tsumiki_pkix_types::SubjectPublicKeyInfo) -> Self {
         PublicKey(key_info)
     }
 }
 
-impl From<PublicKey> for pkix_types::SubjectPublicKeyInfo {
+impl From<PublicKey> for tsumiki_pkix_types::SubjectPublicKeyInfo {
     fn from(key: PublicKey) -> Self {
         key.0
     }
@@ -867,7 +867,7 @@ impl Decoder<Element, PublicKey> for Element {
 
     fn decode(&self) -> Result<PublicKey> {
         // Decode to SubjectPublicKeyInfo
-        let key_info: pkix_types::SubjectPublicKeyInfo = self.decode()?;
+        let key_info: tsumiki_pkix_types::SubjectPublicKeyInfo = self.decode()?;
         Ok(PublicKey(key_info))
     }
 }
@@ -896,7 +896,7 @@ impl Decoder<Pem, PublicKey> for Pem {
         let der: Der = Decoder::<Pem, Der>::decode(self)?;
 
         // Decode Der to ASN1Object
-        let asn1_obj: asn1::ASN1Object = der.decode()?;
+        let asn1_obj: tsumiki_asn1::ASN1Object = der.decode()?;
 
         // Decode from the first element of ASN1Object
         let first = asn1_obj.elements().first().ok_or(Error::EmptyAsn1Object)?;
@@ -907,7 +907,7 @@ impl Decoder<Pem, PublicKey> for Pem {
 impl ToPem for PublicKey {
     type Error = Error;
 
-    fn pem_label(&self) -> pem::Label {
+    fn pem_label(&self) -> tsumiki_pem::Label {
         Label::PublicKey
     }
 
@@ -930,7 +930,7 @@ impl ToPem for PublicKey {
 impl ToPem for OneAsymmetricKey {
     type Error = Error;
 
-    fn pem_label(&self) -> pem::Label {
+    fn pem_label(&self) -> tsumiki_pem::Label {
         Label::PrivateKey
     }
 

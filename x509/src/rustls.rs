@@ -7,9 +7,9 @@ use rustls_pki_types::CertificateDer;
 use crate::Certificate;
 use crate::CertificateChain;
 use crate::error::Error;
-use asn1::ASN1Object;
 use tsumiki::decoder::Decoder;
 use tsumiki::encoder::Encoder;
+use tsumiki_asn1::ASN1Object;
 
 /// Converts a `CertificateDer` to a `Certificate`.
 impl TryFrom<CertificateDer<'_>> for Certificate {
@@ -94,8 +94,8 @@ mod tests {
 
     use super::*;
     use crate::Version;
-    use pem::Pem;
     use rstest::rstest;
+    use tsumiki_pem::Pem;
 
     // Test certificate V1 (RSA 2048-bit, no extensions)
     const TEST_CERT_V1_PEM: &str = r"-----BEGIN CERTIFICATE-----

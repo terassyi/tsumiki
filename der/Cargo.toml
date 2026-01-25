@@ -1,13 +1,17 @@
 [package]
-name = "der"
-version.workspace = true
+name = "tsumiki-der"
+version = "0.0.1"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-description = "DER related crate"
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "DER (Distinguished Encoding Rules) parser for ASN.1 structures"
 
 [dependencies]
-pem = { path = "../pem" }
+tsumiki-pem = { path = "../pem" }
 nom = "8.0.0"
 thiserror = { workspace = true }
 tsumiki = { path = "../tsumiki" }

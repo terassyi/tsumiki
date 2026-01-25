@@ -1,9 +1,9 @@
-use asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
-use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
+use tsumiki_pkix_types::OidName;
 
 use super::error;
 use crate::error::Error;
@@ -159,10 +159,10 @@ impl fmt::Display for ExtendedKeyUsage {
 mod tests {
     use super::*;
     use crate::extensions::RawExtension;
-    use asn1::OctetString;
-    use asn1::{Element, ObjectIdentifier};
     use rstest::rstest;
     use std::str::FromStr;
+    use tsumiki_asn1::OctetString;
+    use tsumiki_asn1::{Element, ObjectIdentifier};
 
     // ========== ExtendedKeyUsage Tests ==========
 
@@ -243,7 +243,7 @@ mod tests {
         // Test case: Sequence with non-OID element
         case(
             Element::Sequence(vec![
-                Element::Integer(asn1::Integer::from(vec![0x01])),
+                Element::Integer(tsumiki_asn1::Integer::from(vec![0x01])),
             ]),
             "all elements must be OBJECT IDENTIFIER"
         ),

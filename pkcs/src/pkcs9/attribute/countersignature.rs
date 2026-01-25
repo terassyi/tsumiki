@@ -39,12 +39,12 @@
 //! the signature of) a message. This provides a timestamp or additional
 //! authentication to an existing signature.
 
-use asn1::{ASN1Object, Element, Integer, OctetString};
 use num_bigint::BigInt;
-use pkix_types::{AlgorithmIdentifier, CertificateSerialNumber, KeyIdentifier, Name};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, Element, Integer, OctetString};
+use tsumiki_pkix_types::{AlgorithmIdentifier, CertificateSerialNumber, KeyIdentifier, Name};
 
 use crate::pkcs9::RawAttribute;
 use crate::pkcs9::error::{Error, Result};
@@ -554,11 +554,11 @@ impl Attribute for Countersignature {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::ObjectIdentifier;
-    use der::Der;
     use rstest::rstest;
     use std::str::FromStr;
     use tsumiki::encoder::Encoder;
+    use tsumiki_asn1::ObjectIdentifier;
+    use tsumiki_der::Der;
 
     #[rstest]
     #[case(Integer::from(vec![0u8]), CMSVersion::V0)]

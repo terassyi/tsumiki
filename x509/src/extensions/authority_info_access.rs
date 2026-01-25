@@ -1,9 +1,9 @@
-use asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
-use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
+use tsumiki_pkix_types::OidName;
 
 use super::error;
 use crate::error::Error;
@@ -202,10 +202,10 @@ impl fmt::Display for AuthorityInfoAccess {
 mod tests {
     use super::*;
     use crate::extensions::{Extension, RawExtension};
-    use asn1::OctetString;
-    use asn1::{Element, ObjectIdentifier};
     use rstest::rstest;
     use std::str::FromStr;
+    use tsumiki_asn1::OctetString;
+    use tsumiki_asn1::{Element, ObjectIdentifier};
 
     #[rstest(input, expected)]
     #[case(

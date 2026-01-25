@@ -1,11 +1,11 @@
 use std::fmt;
 use std::net::IpAddr;
 
-use asn1::{Element, ObjectIdentifier, OctetString};
 use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{Element, ObjectIdentifier, OctetString};
 
 use super::error;
 use crate::DirectoryString;

@@ -1,9 +1,9 @@
-use asn1::{ASN1Object, BitString, Element, OctetString};
-use pkix_types::{OidName, RelativeDistinguishedName};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, BitString, Element, OctetString};
+use tsumiki_pkix_types::{OidName, RelativeDistinguishedName};
 
 use super::error;
 use crate::error::Error;
@@ -78,8 +78,8 @@ pub struct ReasonFlags {
     pub aa_compromise: bool,
 }
 
-impl From<asn1::BitString> for ReasonFlags {
-    fn from(bit_string: asn1::BitString) -> Self {
+impl From<tsumiki_asn1::BitString> for ReasonFlags {
+    fn from(bit_string: tsumiki_asn1::BitString) -> Self {
         let bytes = bit_string.as_bytes();
         let unused_bits = bit_string.unused_bits();
 
@@ -493,10 +493,10 @@ impl fmt::Display for CRLDistributionPoints {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::{Element, ObjectIdentifier, OctetString};
-    use pkix_types::AttributeTypeAndValue;
     use rstest::rstest;
     use std::str::FromStr;
+    use tsumiki_asn1::{Element, ObjectIdentifier, OctetString};
+    use tsumiki_pkix_types::AttributeTypeAndValue;
 
     #[rstest(
         input,
@@ -655,7 +655,7 @@ mod tests {
                         element: Box::new(Element::BitString(
                             // unused_bits=6 means 2 bits are valid: bit 0 (unused) and bit 1 (keyCompromise)
                             // 0b01000000 sets bit 1 (keyCompromise)
-                            asn1::BitString::new(6, vec![0b0100_0000])
+                            tsumiki_asn1::BitString::new(6, vec![0b0100_0000])
                         )),
                     },
                 ]),
@@ -724,7 +724,7 @@ mod tests {
         expected,
         // Test case: Empty bit string
         case(
-            asn1::BitString::new(0, vec![]),
+            tsumiki_asn1::BitString::new(0, vec![]),
             ReasonFlags {
                 key_compromise: false,
                 ca_compromise: false,
@@ -738,7 +738,7 @@ mod tests {
         ),
         // Test case: Only keyCompromise (bit 1)
         case(
-            asn1::BitString::new(6, vec![0b0100_0000]),
+            tsumiki_asn1::BitString::new(6, vec![0b0100_0000]),
             ReasonFlags {
                 key_compromise: true,
                 ca_compromise: false,
@@ -752,7 +752,7 @@ mod tests {
         ),
         // Test case: cACompromise (bit 2)
         case(
-            asn1::BitString::new(5, vec![0b0010_0000]),
+            tsumiki_asn1::BitString::new(5, vec![0b0010_0000]),
             ReasonFlags {
                 key_compromise: false,
                 ca_compromise: true,
@@ -766,7 +766,7 @@ mod tests {
         ),
         // Test case: Multiple flags (bits 1, 2, 4)
         case(
-            asn1::BitString::new(3, vec![0b0110_1000]),
+            tsumiki_asn1::BitString::new(3, vec![0b0110_1000]),
             ReasonFlags {
                 key_compromise: true,
                 ca_compromise: true,
@@ -780,7 +780,7 @@ mod tests {
         ),
         // Test case: All flags in first byte (bits 1-7)
         case(
-            asn1::BitString::new(0, vec![0b0111_1111]),
+            tsumiki_asn1::BitString::new(0, vec![0b0111_1111]),
             ReasonFlags {
                 key_compromise: true,
                 ca_compromise: true,
@@ -794,7 +794,7 @@ mod tests {
         ),
         // Test case: aaCompromise (bit 8, second byte)
         case(
-            asn1::BitString::new(7, vec![0b0000_0000, 0b1000_0000]),
+            tsumiki_asn1::BitString::new(7, vec![0b0000_0000, 0b1000_0000]),
             ReasonFlags {
                 key_compromise: false,
                 ca_compromise: false,
@@ -808,7 +808,7 @@ mod tests {
         ),
         // Test case: All flags including aaCompromise
         case(
-            asn1::BitString::new(7, vec![0b0111_1111, 0b1000_0000]),
+            tsumiki_asn1::BitString::new(7, vec![0b0111_1111, 0b1000_0000]),
             ReasonFlags {
                 key_compromise: true,
                 ca_compromise: true,
@@ -822,7 +822,7 @@ mod tests {
         ),
         // Test case: cessationOfOperation only (bit 5)
         case(
-            asn1::BitString::new(2, vec![0b0000_0100]),
+            tsumiki_asn1::BitString::new(2, vec![0b0000_0100]),
             ReasonFlags {
                 key_compromise: false,
                 ca_compromise: false,
@@ -835,7 +835,7 @@ mod tests {
             }
         ),
     )]
-    fn test_reason_flags_from_bit_string(input: asn1::BitString, expected: ReasonFlags) {
+    fn test_reason_flags_from_bit_string(input: tsumiki_asn1::BitString, expected: ReasonFlags) {
         let result: ReasonFlags = input.into();
         assert_eq!(expected, result);
     }

@@ -22,9 +22,9 @@
 //! to choose an appropriate encryption algorithm when sending encrypted
 //! messages.
 
-use asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
+use tsumiki_asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -313,11 +313,11 @@ impl Attribute for SMIMECapabilities {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::Element;
-    use der::Der;
     use rstest::rstest;
     use std::str::FromStr;
     use tsumiki::encoder::Encoder;
+    use tsumiki_asn1::Element;
+    use tsumiki_der::Der;
 
     #[test]
     fn test_smime_capabilities_oid() {
@@ -337,7 +337,7 @@ mod tests {
 
     #[rstest]
     #[case("1.2.840.113549.1.1.1", Element::Null)] // RSA with NULL
-    #[case("1.2.840.113549.3.2", Element::Integer(asn1::Integer::from(vec![128])))] // RC2-128
+    #[case("1.2.840.113549.3.2", Element::Integer(tsumiki_asn1::Integer::from(vec![128])))] // RC2-128
     fn test_smime_capability_new_with_params(#[case] oid_str: &str, #[case] params: Element) {
         let oid = ObjectIdentifier::from_str(oid_str).unwrap();
         let cap = SMIMECapability::new_with_params(oid.clone(), params.clone());

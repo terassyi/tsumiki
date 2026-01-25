@@ -2,12 +2,12 @@ use super::Config;
 use crate::error::Result;
 use crate::output::OutputFormat;
 use crate::utils::{calculate_fingerprint, format_hex_dump};
-use pkcs::{PrivateKeyExt, PublicKeyExt};
 use std::fmt::Write;
 use tsumiki::encoder::Encoder;
+use tsumiki_pkcs::{PrivateKeyExt, PublicKeyExt};
 
 pub(crate) fn output_rsa_private_key(
-    private_key: &pkcs::pkcs1::RSAPrivateKey,
+    private_key: &tsumiki_pkcs::pkcs1::RSAPrivateKey,
     config: &Config,
 ) -> Result<()> {
     // If --hex flag is set, output only HEX dump
@@ -133,7 +133,7 @@ pub(crate) fn output_rsa_private_key(
 }
 
 pub(crate) fn output_rsa_public_key(
-    public_key: &pkcs::pkcs1::RSAPublicKey,
+    public_key: &tsumiki_pkcs::pkcs1::RSAPublicKey,
     config: &Config,
 ) -> Result<()> {
     // If --hex flag is set, output only HEX dump
@@ -206,7 +206,7 @@ pub(crate) fn output_rsa_public_key(
 }
 
 pub(crate) fn output_rsa_private_key_fingerprint(
-    private_key: &pkcs::pkcs1::RSAPrivateKey,
+    private_key: &tsumiki_pkcs::pkcs1::RSAPrivateKey,
     config: &Config,
 ) -> Result<()> {
     if let Ok(asn1_obj) = private_key.encode() {
@@ -221,7 +221,7 @@ pub(crate) fn output_rsa_private_key_fingerprint(
 }
 
 pub(crate) fn output_rsa_public_key_fingerprint(
-    public_key: &pkcs::pkcs1::RSAPublicKey,
+    public_key: &tsumiki_pkcs::pkcs1::RSAPublicKey,
     config: &Config,
 ) -> Result<()> {
     if let Ok(asn1_obj) = public_key.encode() {

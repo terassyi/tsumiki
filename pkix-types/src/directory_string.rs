@@ -7,10 +7,10 @@ use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
 
-use asn1::{BMPString, Element};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{BMPString, Element};
 
 use crate::error::{Error, Result};
 
@@ -232,8 +232,8 @@ impl Encoder<DirectoryString, Element> for DirectoryString {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::BMPString;
     use rstest::rstest;
+    use tsumiki_asn1::BMPString;
 
     #[test]
     fn test_directory_string_new() {
@@ -276,7 +276,7 @@ mod tests {
     #[test]
     fn test_directory_string_from_octet_string() {
         let bytes = "hello".as_bytes().to_vec();
-        let element = Element::OctetString(asn1::OctetString::from(bytes));
+        let element = Element::OctetString(tsumiki_asn1::OctetString::from(bytes));
         let ds = DirectoryString::try_from(&element).unwrap();
         assert_eq!(ds.as_str(), "hello");
         // OctetString defaults to UTF8String encoding

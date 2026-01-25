@@ -12,10 +12,10 @@
 
 use std::ops::Deref;
 
-use asn1::{Element, Integer};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{Element, Integer};
 
 use crate::error::{Error, Result};
 

@@ -1,10 +1,10 @@
-use asn1::OctetString;
-use asn1::{ASN1Object, Element, Integer};
-use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::OctetString;
+use tsumiki_asn1::{ASN1Object, Element, Integer};
+use tsumiki_pkix_types::OidName;
 
 use super::error;
 use crate::error::Error;
@@ -105,8 +105,8 @@ impl fmt::Display for InhibitAnyPolicy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::Integer;
     use rstest::rstest;
+    use tsumiki_asn1::Integer;
 
     #[rstest]
     #[case(0, vec![0x02, 0x01, 0x00])] // INTEGER 0
@@ -129,7 +129,7 @@ mod tests {
     fn test_inhibit_any_policy_decode_failure(#[case] test_name: &str) {
         let elem = match test_name {
             "OctetString instead of Integer" => {
-                Element::OctetString(asn1::OctetString::from(vec![0x00]))
+                Element::OctetString(tsumiki_asn1::OctetString::from(vec![0x00]))
             }
             "Null instead of Integer" => Element::Null,
             "UTF8String instead of Integer" => Element::UTF8String("0".to_string()),

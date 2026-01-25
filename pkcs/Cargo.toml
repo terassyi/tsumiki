@@ -1,21 +1,24 @@
 [package]
-name = "pkcs"
-version.workspace = true
+name = "tsumiki-pkcs"
+version = "0.0.1"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "PKCS standards (PKCS#1, PKCS#8, PKCS#9, SEC1) for cryptographic key handling"
 
 [features]
 default = []
 rustls = ["dep:rustls-pki-types"]
 
 [dependencies]
-asn1 = { path = "../asn1" }
-der = { path = "../der" }
-pem = { path = "../pem" }
-pkix-types = { path = "../pkix-types" }
+tsumiki-asn1 = { path = "../asn1" }
+tsumiki-der = { path = "../der" }
+tsumiki-pem = { path = "../pem" }
+tsumiki-pkix-types = { path = "../pkix-types" }
 tsumiki = { path = "../tsumiki" }
 thiserror.workspace = true
 num-bigint = { workspace = true }
@@ -26,6 +29,6 @@ rustls-pki-types = { workspace = true, optional = true }
 [dev-dependencies]
 rstest.workspace = true
 serde_json.workspace = true
-pem = { path = "../pem" }
-der = { path = "../der" }
-asn1 = { path = "../asn1" }
+tsumiki-pem = { path = "../pem" }
+tsumiki-der = { path = "../der" }
+tsumiki-asn1 = { path = "../asn1" }

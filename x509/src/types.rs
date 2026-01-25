@@ -5,16 +5,16 @@
 
 // Re-export types that are now in pkix-types for backward compatibility
 #[allow(unused_imports)]
-pub use pkix_types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
+pub use tsumiki_pkix_types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
 
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use asn1::{Element, Integer, ObjectIdentifier};
-    use pkix_types::DirectoryString;
     use rstest::rstest;
+    use tsumiki_asn1::{Element, Integer, ObjectIdentifier};
+    use tsumiki_pkix_types::DirectoryString;
 
     use tsumiki::decoder::Decoder;
 
@@ -35,7 +35,7 @@ mod tests {
             "test@example.com"
         ),
         case(
-            Element::OctetString(asn1::OctetString::from("UTF8 bytes".as_bytes())),
+            Element::OctetString(tsumiki_asn1::OctetString::from("UTF8 bytes".as_bytes())),
             "UTF8 bytes"
         )
     )]
@@ -49,10 +49,10 @@ mod tests {
         input,
         case(Element::Null),
         case(Element::Boolean(true)),
-        case(Element::BitString(asn1::BitString::new(0, vec![0xFF]))),
+        case(Element::BitString(tsumiki_asn1::BitString::new(0, vec![0xFF]))),
     )]
     fn test_directory_string_decode_failure(input: Element) {
-        let result: Result<DirectoryString, pkix_types::Error> = input.decode();
+        let result: Result<DirectoryString, tsumiki_pkix_types::Error> = input.decode();
         assert!(result.is_err());
     }
 
@@ -123,7 +123,7 @@ mod tests {
         )
     )]
     fn test_attribute_type_and_value_decode_failure(input: Element, expected_error_type: &str) {
-        let result: Result<AttributeTypeAndValue, pkix_types::Error> = input.decode();
+        let result: Result<AttributeTypeAndValue, tsumiki_pkix_types::Error> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);
@@ -227,7 +227,7 @@ mod tests {
         )
     )]
     fn test_rdn_decode_failure(input: Element, expected_error_variant: &str) {
-        let result: Result<RelativeDistinguishedName, pkix_types::Error> = input.decode();
+        let result: Result<RelativeDistinguishedName, tsumiki_pkix_types::Error> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);
@@ -361,7 +361,7 @@ mod tests {
         )
     )]
     fn test_name_decode_failure(input: Element, expected_error_variant: &str) {
-        let result: Result<Name, pkix_types::Error> = input.decode();
+        let result: Result<Name, tsumiki_pkix_types::Error> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);

@@ -1,0 +1,76 @@
+name: 'Build Binary'
+description: 'Build tsumiki-cli binary for specified target'
+
+inputs:
+  target:
+    description: 'Rust target triple'
+    required: true
+  artifact-name:
+    description: 'Name for the output artifact'
+    required: true
+
+outputs:
+  binary-path:
+    description: 'Path to the built binary'
+    value: ${{ steps.build.outputs.binary-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup mold linker
+      if: runner.os == 'Linux'
+      uses: rui314/setup-mold@v1
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.target }}
+
+    - name: Install musl-tools (Linux)
+      if: contains(inputs.target, 'linux-musl')
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y musl-tools
+
+    - name: Build
+      id: build
+      shell: bash
+      run: |
+        cargo build --release --target ${{ inputs.target }} --package tsumiki-cli
+        echo "binary-path=target/${{ inputs.target }}/release/tsumiki" >> $GITHUB_OUTPUT
+
+    - name: Create artifact directory
+      shell: bash
+      run: mkdir -p artifacts/${{ inputs.artifact-name }}
+
+    - name: Copy and prepare files
+      shell: bash
+      run: |
+        cp target/${{ inputs.target }}/release/tsumiki artifacts/${{ inputs.artifact-name }}/tsumiki
+        chmod +x artifacts/${{ inputs.artifact-name }}/tsumiki
+        cp LICENSE artifacts/${{ inputs.artifact-name }}/
+        cp README.md artifacts/${{ inputs.artifact-name }}/
+
+    - name: Create tarball
+      shell: bash
+      run: |
+        cd artifacts
+        tar czf ${{ inputs.artifact-name }}.tar.gz ${{ inputs.artifact-name }}
+        rm -rf ${{ inputs.artifact-name }}
+
+    - name: Create checksum
+      shell: bash
+      run: |
+        cd artifacts
+        if [[ "${{ runner.os }}" == "macOS" ]]; then
+          shasum -a 256 ${{ inputs.artifact-name }}.tar.gz > ${{ inputs.artifact-name }}.tar.gz.sha256
+        else
+          sha256sum ${{ inputs.artifact-name }}.tar.gz > ${{ inputs.artifact-name }}.tar.gz.sha256
+        fi
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: artifacts/*

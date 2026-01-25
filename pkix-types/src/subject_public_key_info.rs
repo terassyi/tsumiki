@@ -14,14 +14,14 @@
 //! - PKCS#8 private key format (RFC 5958)
 //! - PKCS#10 certificate signing requests (RFC 2986)
 
-use asn1::{BitString, Element};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{BitString, Element};
 
+use crate::OidName;
 use crate::algorithm::AlgorithmIdentifier;
 use crate::error::{Error, Result};
-use crate::OidName;
 
 /// Subject Public Key Info
 ///
@@ -105,7 +105,7 @@ impl OidName for SubjectPublicKeyInfo {
 mod tests {
     use super::*;
     use crate::algorithm::AlgorithmParameters;
-    use asn1::ObjectIdentifier;
+    use tsumiki_asn1::ObjectIdentifier;
 
     #[test]
     fn test_subject_public_key_info_round_trip() {
@@ -148,7 +148,7 @@ mod tests {
         let algorithm_elm = algorithm.encode().unwrap();
         let element = Element::Sequence(vec![
             algorithm_elm,
-            Element::OctetString(asn1::OctetString::from(vec![1, 2, 3])),
+            Element::OctetString(tsumiki_asn1::OctetString::from(vec![1, 2, 3])),
         ]);
 
         let result: Result<SubjectPublicKeyInfo> = element.decode();

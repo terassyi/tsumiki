@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use rustls::pki_types::ServerName;
 use rustls::{ClientConfig, ClientConnection, StreamOwned};
-use x509::CertificateChain;
+use tsumiki_x509::CertificateChain;
 
 use super::verifier::NoVerifier;
 use crate::error::{Error, Result};

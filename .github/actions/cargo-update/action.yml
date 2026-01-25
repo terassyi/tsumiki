@@ -1,0 +1,64 @@
+name: 'Cargo Update'
+description: 'Run cargo update and create PR if there are changes'
+
+inputs:
+  token:
+    description: 'GitHub token for creating PR'
+    required: true
+  branch:
+    description: 'Branch name for the PR'
+    required: false
+    default: 'chore/cargo-update'
+  fail-on-change:
+    description: 'Fail the action if there are changes'
+    required: false
+    default: 'false'
+
+outputs:
+  changed:
+    description: 'Whether Cargo.lock was changed'
+    value: ${{ steps.changes.outputs.changed }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Run cargo update
+      shell: bash
+      run: cargo update
+
+    - name: Check for changes
+      id: changes
+      shell: bash
+      run: |
+        if git diff --quiet Cargo.lock; then
+          echo "changed=false" >> $GITHUB_OUTPUT
+          echo "Cargo.lock is up to date."
+        else
+          echo "changed=true" >> $GITHUB_OUTPUT
+          echo "::warning::Cargo.lock is not up to date."
+        fi
+
+    - name: Create Pull Request
+      if: steps.changes.outputs.changed == 'true'
+      uses: peter-evans/create-pull-request@v7
+      with:
+        token: ${{ inputs.token }}
+        branch: ${{ inputs.branch }}
+        delete-branch: true
+        title: 'chore(deps): cargo update'
+        body: |
+          Automated `cargo update` to update `Cargo.lock` dependencies.
+
+          This PR updates dependencies within their specified version ranges in `Cargo.toml`.
+        labels: dependencies
+        commit-message: 'chore(deps): cargo update'
+
+    - name: Fail if changes detected
+      if: steps.changes.outputs.changed == 'true' && inputs.fail-on-change == 'true'
+      shell: bash
+      run: |
+        echo "::error::Cargo.lock is not up to date. A PR has been created to update it."
+        exit 1

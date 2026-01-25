@@ -31,7 +31,7 @@ pub enum Error {
 
     /// ASN.1 error
     #[error(transparent)]
-    ASN1Error(#[from] asn1::error::Error),
+    ASN1Error(#[from] tsumiki_asn1::error::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

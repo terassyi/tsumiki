@@ -2,12 +2,12 @@ use super::Config;
 use crate::error::Result;
 use crate::output::OutputFormat;
 use crate::utils::{calculate_fingerprint, format_hex_dump};
-use pkcs::PrivateKeyExt;
-use pkix_types::OidName;
 use std::fmt::Write;
+use tsumiki_pkcs::PrivateKeyExt;
+use tsumiki_pkix_types::OidName;
 
 pub(crate) fn output_ec_private_key(
-    private_key: &pkcs::sec1::ECPrivateKey,
+    private_key: &tsumiki_pkcs::sec1::ECPrivateKey,
     config: &Config,
 ) -> Result<()> {
     // If --hex flag is set, output only HEX dump of raw private key bytes
@@ -107,7 +107,7 @@ pub(crate) fn output_ec_private_key(
 }
 
 pub(crate) fn output_ec_private_key_fingerprint(
-    private_key: &pkcs::sec1::ECPrivateKey,
+    private_key: &tsumiki_pkcs::sec1::ECPrivateKey,
     config: &Config,
 ) -> Result<()> {
     let fingerprint =

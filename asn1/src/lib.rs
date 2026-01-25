@@ -1,13 +1,13 @@
 use std::{fmt::Display, ops::Deref, str::FromStr};
 
 use chrono::NaiveDateTime;
-use der::{Der, PrimitiveTag, TAG_CONSTRUCTED, Tag, Tlv};
 use error::Error;
 use num_bigint::BigInt;
 use num_traits::ToPrimitive;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_der::{Der, PrimitiveTag, TAG_CONSTRUCTED, Tag, Tlv};
 
 pub mod error;
 
@@ -84,7 +84,7 @@ impl TryFrom<&Tlv> for Element {
 
     fn try_from(tlv: &Tlv) -> Result<Self, Self::Error> {
         match tlv.tag() {
-            der::Tag::Primitive(primitive_tag, _value) => match primitive_tag {
+            tsumiki_der::Tag::Primitive(primitive_tag, _value) => match primitive_tag {
                 PrimitiveTag::Boolean => {
                     if let Some(data) = tlv.data() {
                         match data.first() {
@@ -210,7 +210,7 @@ impl TryFrom<&Tlv> for Element {
                     Ok(Element::Unimplemented(tlv.clone()))
                 }
             },
-            der::Tag::ContextSpecific { slot, constructed } => {
+            tsumiki_der::Tag::ContextSpecific { slot, constructed } => {
                 if *constructed {
                     // Constructed: contains nested TLV(s)
                     if let Some(tlvs) = tlv.tlvs() {
@@ -1318,9 +1318,9 @@ mod tests {
     use std::str::FromStr;
 
     use crate::{ASN1Object, BitString, Element, Integer, ObjectIdentifier, OctetString};
-    use der::{PrimitiveTag, TAG_CONSTRUCTED, Tag, Tlv};
     use num_bigint::BigInt;
     use tsumiki::encoder::Encoder;
+    use tsumiki_der::{PrimitiveTag, TAG_CONSTRUCTED, Tag, Tlv};
 
     #[rstest(input, expected, case(vec![0x01], "1"), case(vec![0x03, 0xd4, 0x15, 0x31, 0x8e, 0x2c, 0x57, 0x1d, 0x29, 0x05, 0xfc, 0x3e, 0x05, 0x27, 0x68, 0x9d, 0x0d, 0x09], "333504890676592408951587385614406537514249"))]
     fn test_parse_element_integer(input: Vec<u8>, expected: &str) {
@@ -1615,8 +1615,8 @@ e8ZYGIc4gvs5McdrVUyYGUs=
         case(TEST_PEM_PRIV_KEY1, None)
     )]
     fn test_decode_asn1_from_der(input: &str, _expected: Option<()>) {
-        use der::Der;
-        use pem::Pem;
+        use tsumiki_der::Der;
+        use tsumiki_pem::Pem;
 
         let pem: Pem = input.decode().unwrap();
         let der: Der = pem.decode().unwrap();
@@ -2601,8 +2601,8 @@ e8ZYGIc4gvs5McdrVUyYGUs=
     #[rstest(cert_pem, case(TEST_PEM_CERT1), case(TEST_PEM_CERT2))]
     fn test_roundtrip_certificate(cert_pem: &str) {
         // PEM -> Der -> ASN1Object -> Der
-        let pem: pem::Pem = cert_pem.parse().expect("Failed to parse PEM");
-        let original_der: der::Der = pem.decode().expect("Failed to decode PEM to Der");
+        let pem: tsumiki_pem::Pem = cert_pem.parse().expect("Failed to parse PEM");
+        let original_der: tsumiki_der::Der = pem.decode().expect("Failed to decode PEM to Der");
 
         let asn1_obj: ASN1Object = original_der
             .decode()

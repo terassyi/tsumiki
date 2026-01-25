@@ -7,5 +7,5 @@ pub enum Error {
     #[error("parser incomplete: {0:?}")]
     ParserIncomplete(nom::Needed),
     #[error("pem: {0}")]
-    Pem(pem::error::Error),
+    Pem(tsumiki_pem::error::Error),
 }
