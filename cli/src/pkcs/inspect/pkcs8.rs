@@ -2,33 +2,33 @@ use super::Config;
 use crate::error::Result;
 use crate::output::OutputFormat;
 use crate::utils::{calculate_fingerprint, format_hex_dump};
-use pkcs::pkcs9::ParsedAttributes;
-use pkcs::{KeyAlgorithm, PrivateKeyExt, PublicKeyExt};
-use pkix_types::OidName;
-use pkix_types::algorithm::parameters::DsaParameters;
 use std::fmt::Write;
+use tsumiki_pkcs::pkcs9::ParsedAttributes;
+use tsumiki_pkcs::{KeyAlgorithm, PrivateKeyExt, PublicKeyExt};
+use tsumiki_pkix_types::OidName;
+use tsumiki_pkix_types::algorithm::parameters::DsaParameters;
 
 fn write_algorithm_parameters(
     output: &mut String,
-    elem: &asn1::Element,
+    elem: &tsumiki_asn1::Element,
     indent: usize,
 ) -> Result<()> {
     let prefix = " ".repeat(indent);
     match elem {
-        asn1::Element::ObjectIdentifier(oid) => {
+        tsumiki_asn1::Element::ObjectIdentifier(oid) => {
             writeln!(output, "{}OID: {}", prefix, oid)?;
         }
-        asn1::Element::Sequence(elems) => {
+        tsumiki_asn1::Element::Sequence(elems) => {
             writeln!(output, "{}Sequence: {} elements", prefix, elems.len())?;
             for (i, e) in elems.iter().enumerate() {
                 writeln!(output, "{}  [{}]:", prefix, i)?;
                 write_algorithm_parameters(output, e, indent + 4)?;
             }
         }
-        asn1::Element::Integer(int) => {
+        tsumiki_asn1::Element::Integer(int) => {
             writeln!(output, "{}Integer: {}", prefix, int.as_ref())?;
         }
-        asn1::Element::OctetString(oct) => {
+        tsumiki_asn1::Element::OctetString(oct) => {
             writeln!(
                 output,
                 "{}OctetString: {} bytes",
@@ -36,7 +36,7 @@ fn write_algorithm_parameters(
                 oct.as_ref().len()
             )?;
         }
-        asn1::Element::BitString(bits) => {
+        tsumiki_asn1::Element::BitString(bits) => {
             writeln!(
                 output,
                 "{}BitString: {} bits ({} unused)",
@@ -53,7 +53,7 @@ fn write_algorithm_parameters(
 }
 
 pub(crate) fn output_private_key_info(
-    key: &pkcs::pkcs8::OneAsymmetricKey,
+    key: &tsumiki_pkcs::pkcs8::OneAsymmetricKey,
     config: &Config,
 ) -> Result<()> {
     // If --hex flag is set, output only HEX dump
@@ -91,10 +91,10 @@ pub(crate) fn output_private_key_info(
             )?;
             if let Some(params) = &key.private_key_algorithm.parameters {
                 match params {
-                    pkcs::pkcs8::AlgorithmParameters::Null => {
+                    tsumiki_pkcs::pkcs8::AlgorithmParameters::Null => {
                         writeln!(output, "Algorithm Parameters: NULL")?;
                     }
-                    pkcs::pkcs8::AlgorithmParameters::Other(raw) => {
+                    tsumiki_pkcs::pkcs8::AlgorithmParameters::Other(raw) => {
                         writeln!(output, "Algorithm Parameters:")?;
                         write_algorithm_parameters(&mut output, raw.element(), 2)?;
                     }
@@ -167,7 +167,7 @@ pub(crate) fn output_private_key_info(
 }
 
 pub(crate) fn output_encrypted_private_key_info(
-    key: &pkcs::pkcs8::EncryptedPrivateKeyInfo,
+    key: &tsumiki_pkcs::pkcs8::EncryptedPrivateKeyInfo,
     config: &Config,
 ) -> Result<()> {
     // If --hex flag is set, output only HEX dump
@@ -199,10 +199,10 @@ pub(crate) fn output_encrypted_private_key_info(
             writeln!(output, "Encryption Algorithm: {}", algorithm_display)?;
             if let Some(params) = &key.encryption_algorithm.parameters {
                 match params {
-                    pkcs::pkcs8::AlgorithmParameters::Null => {
+                    tsumiki_pkcs::pkcs8::AlgorithmParameters::Null => {
                         writeln!(output, "Encryption Parameters: NULL")?;
                     }
-                    pkcs::pkcs8::AlgorithmParameters::Other(_) => {
+                    tsumiki_pkcs::pkcs8::AlgorithmParameters::Other(_) => {
                         writeln!(output, "Encryption Parameters: Present (PBES2 scheme)")?;
                     }
                 }
@@ -270,12 +270,13 @@ pub(crate) fn output_encrypted_private_key_info(
 }
 
 fn output_dsa_parameters_to_string(
-    key: &pkcs::pkcs8::PublicKey,
+    key: &tsumiki_pkcs::pkcs8::PublicKey,
     output: &mut String,
 ) -> Result<()> {
     // Access SubjectPublicKeyInfo::algorithm() via AsRef to avoid conflict with PublicKeyExt::algorithm()
-    let spki: &pkix_types::SubjectPublicKeyInfo = key.as_ref();
-    if let Some(pkcs::pkcs8::AlgorithmParameters::Other(raw)) = spki.algorithm().parameters.as_ref()
+    let spki: &tsumiki_pkix_types::SubjectPublicKeyInfo = key.as_ref();
+    if let Some(tsumiki_pkcs::pkcs8::AlgorithmParameters::Other(raw)) =
+        spki.algorithm().parameters.as_ref()
     {
         if let Ok(dsa_params) = DsaParameters::try_from(raw) {
             writeln!(output, "  Prime (p): {} bits", dsa_params.p.bits())?;
@@ -286,7 +287,10 @@ fn output_dsa_parameters_to_string(
     Ok(())
 }
 
-pub(crate) fn output_public_key(key: &pkcs::pkcs8::PublicKey, config: &Config) -> Result<()> {
+pub(crate) fn output_public_key(
+    key: &tsumiki_pkcs::pkcs8::PublicKey,
+    config: &Config,
+) -> Result<()> {
     let algorithm_oid = key.algorithm_oid().to_string();
     let algorithm_name = key.oid_name().unwrap_or("Unknown");
     let key_bits = key.key_bits();
@@ -342,7 +346,7 @@ pub(crate) fn output_public_key(key: &pkcs::pkcs8::PublicKey, config: &Config) -
                 }
                 KeyAlgorithm::Unknown | _ => {
                     // Check if DSA
-                    if algorithm_oid == pkix_types::AlgorithmIdentifier::OID_ID_DSA {
+                    if algorithm_oid == tsumiki_pkix_types::AlgorithmIdentifier::OID_ID_DSA {
                         output_dsa_parameters_to_string(key, &mut output)?;
                     }
                 }
@@ -398,7 +402,7 @@ pub(crate) fn output_public_key(key: &pkcs::pkcs8::PublicKey, config: &Config) -
 }
 
 pub(crate) fn output_public_key_fingerprint(
-    key: &pkcs::pkcs8::PublicKey,
+    key: &tsumiki_pkcs::pkcs8::PublicKey,
     config: &Config,
 ) -> Result<()> {
     let fingerprint =
@@ -408,7 +412,7 @@ pub(crate) fn output_public_key_fingerprint(
 }
 
 pub(crate) fn output_private_key_info_fingerprint(
-    key: &pkcs::pkcs8::OneAsymmetricKey,
+    key: &tsumiki_pkcs::pkcs8::OneAsymmetricKey,
     config: &Config,
 ) -> Result<()> {
     let fingerprint = calculate_fingerprint(key.private_key.as_ref(), config.fingerprint_alg);
@@ -417,7 +421,7 @@ pub(crate) fn output_private_key_info_fingerprint(
 }
 
 pub(crate) fn output_encrypted_private_key_info_fingerprint(
-    key: &pkcs::pkcs8::EncryptedPrivateKeyInfo,
+    key: &tsumiki_pkcs::pkcs8::EncryptedPrivateKeyInfo,
     config: &Config,
 ) -> Result<()> {
     let fingerprint = calculate_fingerprint(key.encrypted_data.as_ref(), config.fingerprint_alg);

@@ -1,10 +1,10 @@
-use asn1::{ASN1Object, Element, Integer};
-use der::Der;
 use num_bigint::BigInt;
-use pem::{Label, Pem, ToPem};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, Element, Integer};
+use tsumiki_der::Der;
+use tsumiki_pem::{Label, Pem, ToPem};
 
 use super::error::{Error, Result};
 use crate::PublicKey;
@@ -240,9 +240,9 @@ impl Encoder<RSAPublicKey, Element> for RSAPublicKey {
 }
 
 // Pem -> RSAPrivateKey decoder
-impl DecodableFrom<pem::Pem> for RSAPrivateKey {}
+impl DecodableFrom<tsumiki_pem::Pem> for RSAPrivateKey {}
 
-impl Decoder<pem::Pem, RSAPrivateKey> for pem::Pem {
+impl Decoder<tsumiki_pem::Pem, RSAPrivateKey> for tsumiki_pem::Pem {
     type Error = Error;
 
     fn decode(&self) -> Result<RSAPrivateKey> {
@@ -532,14 +532,15 @@ EB7VTM4mzawmSqcOq3/aYDSYqcRBlk5lfWc43qcPVNoKZ9x993MFIgkCAwEAAQ==
     #[case(RSA_4096_PUBLIC_KEY)]
     fn test_real_rsa_public_key_decode_encode(#[case] pem_str: &str) {
         // Decode PEM
-        let pem = pem::Pem::from_str(pem_str).expect("Failed to parse PEM");
-        assert_eq!(pem.label(), pem::Label::RSAPublicKey);
+        let pem = tsumiki_pem::Pem::from_str(pem_str).expect("Failed to parse PEM");
+        assert_eq!(pem.label(), tsumiki_pem::Label::RSAPublicKey);
 
         // Decode PEM to DER
-        let der: der::Der = pem.decode().expect("Failed to decode PEM to DER");
+        let der: tsumiki_der::Der = pem.decode().expect("Failed to decode PEM to DER");
 
         // Decode DER to ASN1Object
-        let asn1_obj: asn1::ASN1Object = der.decode().expect("Failed to decode DER to ASN1Object");
+        let asn1_obj: tsumiki_asn1::ASN1Object =
+            der.decode().expect("Failed to decode DER to ASN1Object");
 
         // Get Element from ASN1Object (first element)
         assert!(
@@ -570,7 +571,7 @@ EB7VTM4mzawmSqcOq3/aYDSYqcRBlk5lfWc43qcPVNoKZ9x993MFIgkCAwEAAQ==
     #[case(RSA_2048_PRIVATE_KEY, 2048)]
     #[case(RSA_4096_PRIVATE_KEY, 4096)]
     fn test_rsa_private_key_size(#[case] pem_str: &str, #[case] expected_bits: u32) {
-        let pem = pem::Pem::from_str(pem_str).expect("Failed to parse PEM");
+        let pem = tsumiki_pem::Pem::from_str(pem_str).expect("Failed to parse PEM");
         let privkey: RSAPrivateKey = pem.decode().expect("Failed to decode RSAPrivateKey");
         assert_eq!(privkey.key_size(), expected_bits);
     }
@@ -580,7 +581,7 @@ EB7VTM4mzawmSqcOq3/aYDSYqcRBlk5lfWc43qcPVNoKZ9x993MFIgkCAwEAAQ==
     #[case(RSA_2048_PRIVATE_KEY, 2048)]
     #[case(RSA_4096_PRIVATE_KEY, 4096)]
     fn test_rsa_public_key_size(#[case] pem_str: &str, #[case] expected_bits: u32) {
-        let pem = pem::Pem::from_str(pem_str).expect("Failed to parse PEM");
+        let pem = tsumiki_pem::Pem::from_str(pem_str).expect("Failed to parse PEM");
         let privkey: RSAPrivateKey = pem.decode().expect("Failed to decode RSAPrivateKey");
         let pubkey = privkey.public_key().expect("Failed to get public key");
         assert_eq!(pubkey.key_size(), expected_bits);
@@ -592,14 +593,15 @@ EB7VTM4mzawmSqcOq3/aYDSYqcRBlk5lfWc43qcPVNoKZ9x993MFIgkCAwEAAQ==
     #[case(RSA_4096_PRIVATE_KEY)]
     fn test_real_rsa_private_key_decode_encode(#[case] pem_str: &str) {
         // Decode PEM
-        let pem = pem::Pem::from_str(pem_str).expect("Failed to parse PEM");
-        assert_eq!(pem.label(), pem::Label::RSAPrivateKey);
+        let pem = tsumiki_pem::Pem::from_str(pem_str).expect("Failed to parse PEM");
+        assert_eq!(pem.label(), tsumiki_pem::Label::RSAPrivateKey);
 
         // Decode PEM to DER
-        let der: der::Der = pem.decode().expect("Failed to decode PEM to DER");
+        let der: tsumiki_der::Der = pem.decode().expect("Failed to decode PEM to DER");
 
         // Decode DER to ASN1Object
-        let asn1_obj: asn1::ASN1Object = der.decode().expect("Failed to decode DER to ASN1Object");
+        let asn1_obj: tsumiki_asn1::ASN1Object =
+            der.decode().expect("Failed to decode DER to ASN1Object");
 
         // Get Element from ASN1Object (first element)
         assert!(
@@ -620,13 +622,13 @@ EB7VTM4mzawmSqcOq3/aYDSYqcRBlk5lfWc43qcPVNoKZ9x993MFIgkCAwEAAQ==
         let encoded_element = privkey.encode().expect("Failed to encode RSAPrivateKey");
 
         // Encode Element to ASN1Object and then to DER
-        let encoded_asn1 = asn1::ASN1Object::new(vec![encoded_element]);
-        let encoded_der: der::Der = encoded_asn1
+        let encoded_asn1 = tsumiki_asn1::ASN1Object::new(vec![encoded_element]);
+        let encoded_der: tsumiki_der::Der = encoded_asn1
             .encode()
             .expect("Failed to encode ASN1Object to Der");
 
         // Decode back and compare
-        let decoded_asn1: asn1::ASN1Object = encoded_der
+        let decoded_asn1: tsumiki_asn1::ASN1Object = encoded_der
             .decode()
             .expect("Failed to decode Der to ASN1Object");
         assert!(

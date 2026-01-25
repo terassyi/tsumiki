@@ -1,13 +1,13 @@
 use std::fmt;
 use std::str::FromStr;
 
-use asn1::{ASN1Object, BitString, Element, Integer, ObjectIdentifier};
 use chrono::{Datelike, NaiveDateTime};
-use pem::{FromPem, Pem};
-use pkix_types::OidName;
 use serde::{Deserialize, Serialize, ser::SerializeStruct};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, BitString, Element, Integer, ObjectIdentifier};
+use tsumiki_pem::{FromPem, Pem};
+use tsumiki_pkix_types::OidName;
 
 use crate::error::{CertificateField, Error};
 use crate::extensions::{Extensions, ParsedExtensions};
@@ -25,7 +25,7 @@ pub use chain::CertificateChain;
 pub use rustls_pki_types;
 
 // Re-export public types from pkix-types
-pub use pkix_types::{
+pub use tsumiki_pkix_types::{
     AlgorithmIdentifier, AlgorithmParameters, CertificateSerialNumber, DirectoryString, Name,
     RawAlgorithmParameter, SubjectPublicKeyInfo,
 };
@@ -452,9 +452,9 @@ impl Encoder<Certificate, ASN1Object> for Certificate {
 }
 
 // Pem -> Certificate decoder
-impl DecodableFrom<pem::Pem> for Certificate {}
+impl DecodableFrom<tsumiki_pem::Pem> for Certificate {}
 
-impl Decoder<pem::Pem, Certificate> for pem::Pem {
+impl Decoder<tsumiki_pem::Pem, Certificate> for tsumiki_pem::Pem {
     type Error = Error;
 
     fn decode(&self) -> Result<Certificate, Self::Error> {
@@ -462,14 +462,14 @@ impl Decoder<pem::Pem, Certificate> for pem::Pem {
     }
 }
 
-impl pem::FromPem for Certificate {
+impl tsumiki_pem::FromPem for Certificate {
     type Error = Error;
 
-    fn expected_label() -> pem::Label {
-        pem::Label::Certificate
+    fn expected_label() -> tsumiki_pem::Label {
+        tsumiki_pem::Label::Certificate
     }
 
-    fn from_pem(pem: &pem::Pem) -> Result<Self, Self::Error> {
+    fn from_pem(pem: &tsumiki_pem::Pem) -> Result<Self, Self::Error> {
         // Check label
         if pem.label() != Self::expected_label() {
             return Err(Error::UnexpectedPemLabel {
@@ -480,7 +480,7 @@ impl pem::FromPem for Certificate {
 
         // Decode PEM to DER bytes
         let der_bytes: Vec<u8> = pem.decode()?;
-        let der: der::Der = der_bytes.decode()?;
+        let der: tsumiki_der::Der = der_bytes.decode()?;
 
         // Decode DER to ASN1Object
         let asn1_obj = der
@@ -1053,12 +1053,12 @@ mod tests {
     use super::*;
     use crate::extensions::{Extension, Extensions, RawExtension};
     use crate::types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
-    use asn1::{BitString, OctetString};
     use chrono::NaiveDate;
-    use der::Der;
-    use pem::Pem;
     use rstest::rstest;
     use std::str::FromStr;
+    use tsumiki_asn1::{BitString, OctetString};
+    use tsumiki_der::Der;
+    use tsumiki_pem::Pem;
 
     // AlgorithmIdentifier tests
     #[rstest(
@@ -1067,47 +1067,47 @@ mod tests {
         // Test case: Algorithm without parameters (None = Absent)
         case(
             Element::Sequence(vec![
-                Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap()), // sha256WithRSAEncryption
+                Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap()), // sha256WithRSAEncryption
             ]),
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap(),
+                algorithm: ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap(),
                 parameters: None,
             }
         ),
         // Test case: Algorithm with NULL parameters
         case(
             Element::Sequence(vec![
-                Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap()),
+                Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap()),
                 Element::Null,
             ]),
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap(),
+                algorithm: ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap(),
                 parameters: Some(AlgorithmParameters::Null),
             }
         ),
         // Test case: Algorithm with OctetString parameters
         case(
             Element::Sequence(vec![
-                Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_ECDSA_WITH_SHA256).unwrap()), // ecdsa-with-SHA256
-                Element::OctetString(asn1::OctetString::from(vec![0x01, 0x02, 0x03])),
+                Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_ECDSA_WITH_SHA256).unwrap()), // ecdsa-with-SHA256
+                Element::OctetString(tsumiki_asn1::OctetString::from(vec![0x01, 0x02, 0x03])),
             ]),
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_ECDSA_WITH_SHA256).unwrap(),
+                algorithm: ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_ECDSA_WITH_SHA256).unwrap(),
                 parameters: Some(AlgorithmParameters::Other(
-                    RawAlgorithmParameter::new(Element::OctetString(asn1::OctetString::from(vec![0x01, 0x02, 0x03])))
+                    RawAlgorithmParameter::new(Element::OctetString(tsumiki_asn1::OctetString::from(vec![0x01, 0x02, 0x03])))
                 )),
             }
         ),
         // Test case: Algorithm with OID parameters - ECDSA curve
         case(
             Element::Sequence(vec![
-                Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap()), // ecPublicKey
-                Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()), // secp256r1 (prime256v1)
+                Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap()), // ecPublicKey
+                Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()), // secp256r1 (prime256v1)
             ]),
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(),
+                algorithm: ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(),
                 parameters: Some(AlgorithmParameters::Other(
-                    RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()))
+                    RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()))
                 )),
             }
         )
@@ -1219,7 +1219,7 @@ mod tests {
         },
         "InvalidVersion"
     )]
-    #[case::octet_string(Element::OctetString(asn1::OctetString::from(vec![0x00])), "InvalidVersion")]
+    #[case::octet_string(Element::OctetString(tsumiki_asn1::OctetString::from(vec![0x00])), "InvalidVersion")]
     #[case::utf8_string(Element::UTF8String("v1".to_string()), "InvalidVersion")]
     fn test_version_decode_failure(#[case] input: Element, #[case] expected_error_variant: &str) {
         let result: Result<Version, Error> = input.decode();
@@ -1260,21 +1260,21 @@ mod tests {
         #[case] input: Element,
         #[case] expected: CertificateSerialNumber,
     ) {
-        let result: Result<CertificateSerialNumber, pkix_types::Error> = input.decode();
+        let result: Result<CertificateSerialNumber, tsumiki_pkix_types::Error> = input.decode();
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), expected);
     }
 
     #[rstest]
     #[case::null(Element::Null, "CertificateSerialNumberExpectedInteger")]
-    #[case::octet_string(Element::OctetString(asn1::OctetString::from(vec![0x01])), "CertificateSerialNumberExpectedInteger")]
+    #[case::octet_string(Element::OctetString(tsumiki_asn1::OctetString::from(vec![0x01])), "CertificateSerialNumberExpectedInteger")]
     #[case::object_identifier(Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.3.4").unwrap()), "CertificateSerialNumberExpectedInteger")]
     #[case::utf8_string(Element::UTF8String("test".to_string()), "CertificateSerialNumberExpectedInteger")]
     fn test_certificate_serial_number_decode_failure(
         #[case] input: Element,
         #[case] expected_error_variant: &str,
     ) {
-        let result: Result<CertificateSerialNumber, pkix_types::Error> = input.decode();
+        let result: Result<CertificateSerialNumber, tsumiki_pkix_types::Error> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{:?}", err);
@@ -1409,7 +1409,7 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()), // rsaEncryption
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()), // rsaEncryption
                     Element::Null,
                 ]),
                 Element::BitString(BitString::new(0, vec![
@@ -1420,7 +1420,7 @@ mod tests {
             ]),
             SubjectPublicKeyInfo::new(
                 AlgorithmIdentifier::new_with_params(
-                    ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap(),
+                    ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap(),
                     AlgorithmParameters::Null,
                 ),
                 BitString::new(0, vec![
@@ -1434,8 +1434,8 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap()), // ecPublicKey
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()), // secp256r1
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap()), // ecPublicKey
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()), // secp256r1
                 ]),
                 Element::BitString(BitString::new(0, vec![
                     0x04, // Uncompressed point
@@ -1445,9 +1445,9 @@ mod tests {
             ]),
             SubjectPublicKeyInfo::new(
                 AlgorithmIdentifier::new_with_params(
-                    ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(),
+                    ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(),
                     AlgorithmParameters::Other(
-                        RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()))
+                        RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()))
                     ),
                 ),
                 BitString::new(0, vec![
@@ -1486,14 +1486,14 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()),
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()),
                     Element::Null,
                 ]),
                 Element::BitString(BitString::new(3, vec![0xFF, 0xE0])), // 13 bits (3 unused in last byte)
             ]),
             SubjectPublicKeyInfo::new(
                 AlgorithmIdentifier::new_with_params(
-                    ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap(),
+                    ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap(),
                     AlgorithmParameters::Null,
                 ),
                 BitString::new(3, vec![0xFF, 0xE0]),
@@ -1501,7 +1501,7 @@ mod tests {
         ),
     )]
     fn test_subject_public_key_info_decode_success(input: Element, expected: SubjectPublicKeyInfo) {
-        let result: Result<SubjectPublicKeyInfo, pkix_types::Error> = input.decode();
+        let result: Result<SubjectPublicKeyInfo, tsumiki_pkix_types::Error> = input.decode();
         assert!(result.is_ok());
         let spki = result.unwrap();
         assert_eq!(spki, expected);
@@ -1524,7 +1524,7 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()),
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()),
                 ]),
             ]),
             "expected 2 elements, got 1"
@@ -1533,7 +1533,7 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()),
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()),
                 ]),
                 Element::BitString(BitString::new(0, vec![0x00])),
                 Element::Null,
@@ -1552,7 +1552,7 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Sequence(vec![
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()),
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap()),
                 ]),
                 Element::OctetString(OctetString::from(vec![0x00])),
             ]),
@@ -1568,7 +1568,7 @@ mod tests {
         ),
     )]
     fn test_subject_public_key_info_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<SubjectPublicKeyInfo, pkix_types::Error> = input.decode();
+        let result: Result<SubjectPublicKeyInfo, tsumiki_pkix_types::Error> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);
@@ -1880,21 +1880,21 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         expected_len,
         case(
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap(),
+                algorithm: ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap(),
                 parameters: None,
             },
             1
         ),
         case(
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap(),
+                algorithm: ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION).unwrap(),
                 parameters: Some(AlgorithmParameters::Null),
             },
             2
         ),
         case(
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_ECDSA_WITH_SHA256).unwrap(),
+                algorithm: ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_ECDSA_WITH_SHA256).unwrap(),
                 parameters: Some(AlgorithmParameters::Other(
                     RawAlgorithmParameter::new(Element::OctetString(OctetString::from(vec![0x01, 0x02, 0x03])))
                 )),
@@ -2037,23 +2037,23 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         public_key_bytes,
         case(
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap(), // RSA
+                algorithm: ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_RSA_ENCRYPTION).unwrap(), // RSA
                 parameters: None,
             },
             vec![0x30, 0x0d, 0x06, 0x09] // Sample RSA public key bytes
         ),
         case(
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(), // EC public key
+                algorithm: ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(), // EC public key
                 parameters: Some(AlgorithmParameters::Other(
-                    RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap())) // prime256v1
+                    RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap())) // prime256v1
                 )),
             },
             vec![0x04, 0x41] // Sample EC public key bytes
         ),
         case(
             AlgorithmIdentifier {
-                algorithm: ObjectIdentifier::from_str(pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(), // EC public key
+                algorithm: ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(), // EC public key
                 parameters: Some(AlgorithmParameters::Null),
             },
             vec![0xff, 0xee, 0xdd] // Different key bytes
@@ -2100,7 +2100,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             rdn_sequence: vec![
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(tsumiki_pkix_types::AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
                         attribute_value: "Example CA".into(),
                     }],
                 },
@@ -2110,19 +2110,19 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             rdn_sequence: vec![
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COUNTRY_NAME).unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(tsumiki_pkix_types::AttributeTypeAndValue::OID_COUNTRY_NAME).unwrap(),
                         attribute_value: "US".into(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_STATE_OR_PROVINCE_NAME).unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(tsumiki_pkix_types::AttributeTypeAndValue::OID_STATE_OR_PROVINCE_NAME).unwrap(),
                         attribute_value: "California".into(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_ORGANIZATION_NAME).unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(tsumiki_pkix_types::AttributeTypeAndValue::OID_ORGANIZATION_NAME).unwrap(),
                         attribute_value: "Example Corp".into(),
                     }],
                 },
@@ -2132,31 +2132,31 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             rdn_sequence: vec![
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COUNTRY_NAME).unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(tsumiki_pkix_types::AttributeTypeAndValue::OID_COUNTRY_NAME).unwrap(),
                         attribute_value: "JP".into(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_STATE_OR_PROVINCE_NAME).unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(tsumiki_pkix_types::AttributeTypeAndValue::OID_STATE_OR_PROVINCE_NAME).unwrap(),
                         attribute_value: "Tokyo".into(),
                     }],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![
                         AttributeTypeAndValue {
-                            attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_ORGANIZATION_NAME).unwrap(),
+                            attribute_type: ObjectIdentifier::from_str(tsumiki_pkix_types::AttributeTypeAndValue::OID_ORGANIZATION_NAME).unwrap(),
                             attribute_value: "ACME Inc".into(),
                         },
                         AttributeTypeAndValue {
-                            attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_ORGANIZATIONAL_UNIT_NAME).unwrap(),
+                            attribute_type: ObjectIdentifier::from_str(tsumiki_pkix_types::AttributeTypeAndValue::OID_ORGANIZATIONAL_UNIT_NAME).unwrap(),
                             attribute_value: "Engineering".into(),
                         },
                     ],
                 },
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(tsumiki_pkix_types::AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
                         attribute_value: "www.example.com".into(),
                     }],
                 },
@@ -2166,7 +2166,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             rdn_sequence: vec![
                 RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
-                        attribute_type: ObjectIdentifier::from_str(pkix_types::AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
+                        attribute_type: ObjectIdentifier::from_str(tsumiki_pkix_types::AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
                         attribute_value: "日本語ドメイン.jp".into(),
                     }],
                 },
@@ -2339,7 +2339,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             serial_number: CertificateSerialNumber::from_bytes(vec![0x01, 0x02, 0x03]),
             signature: AlgorithmIdentifier {
                 algorithm: ObjectIdentifier::from_str(
-                    pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION,
+                    tsumiki_pkix_types::AlgorithmIdentifier::OID_SHA256_WITH_RSA_ENCRYPTION,
                 )
                 .unwrap(),
                 parameters: Some(AlgorithmParameters::Null),
@@ -2348,7 +2348,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                 rdn_sequence: vec![RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str(
-                            pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
+                            tsumiki_pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
                         )
                         .unwrap(),
                         attribute_value: "Test CA".into(),
@@ -2369,7 +2369,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                 rdn_sequence: vec![RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str(
-                            pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
+                            tsumiki_pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
                         )
                         .unwrap(),
                         attribute_value: "Test Subject".into(),
@@ -2407,7 +2407,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                 rdn_sequence: vec![RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str(
-                            pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
+                            tsumiki_pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
                         )
                         .unwrap(),
                         attribute_value: "CA".into(),
@@ -2428,7 +2428,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                 rdn_sequence: vec![RelativeDistinguishedName {
                     attributes: vec![AttributeTypeAndValue {
                         attribute_type: ObjectIdentifier::from_str(
-                            pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
+                            tsumiki_pkix_types::AttributeTypeAndValue::OID_COMMON_NAME,
                         )
                         .unwrap(),
                         attribute_value: "Subject".into(),

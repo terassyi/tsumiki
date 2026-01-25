@@ -1,11 +1,11 @@
+use serde::{Deserialize, Serialize};
+use std::fmt;
 /// PKCS#9: Selected Object Classes and Attribute Types
 /// RFC 2985
 ///
 /// This module provides definitions for PKCS#9 attributes.
-use asn1::{ASN1Object, AsOid, Element, ObjectIdentifier, OctetString};
-use der::Der;
-use serde::{Deserialize, Serialize};
-use std::fmt;
+use tsumiki_asn1::{ASN1Object, AsOid, Element, ObjectIdentifier, OctetString};
+use tsumiki_der::Der;
 
 use crate::pkcs9::error::{Error, Result};
 use tsumiki::decoder::{DecodableFrom, Decoder};
@@ -485,9 +485,9 @@ impl fmt::Display for ParsedAttributes {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::ObjectIdentifier;
     use rstest::rstest;
     use std::str::FromStr;
+    use tsumiki_asn1::ObjectIdentifier;
 
     fn create_attribute(oid: &str, value: Element) -> RawAttribute {
         let oid = ObjectIdentifier::from_str(oid).unwrap();
@@ -501,7 +501,7 @@ mod tests {
     #[case("My Certificate")]
     #[case("Production Key")]
     fn test_parsed_attributes_friendly_name(#[case] name: &str) {
-        let bmp_value = Element::BMPString(asn1::BMPString::new(name).unwrap());
+        let bmp_value = Element::BMPString(tsumiki_asn1::BMPString::new(name).unwrap());
         let raw_attr = create_attribute(FriendlyName::OID, bmp_value);
 
         let parsed = ParsedAttributes::from([raw_attr].as_slice());
@@ -528,7 +528,7 @@ mod tests {
         let key_id = vec![0xAB, 0xCD];
 
         // FriendlyName
-        let bmp_value = Element::BMPString(asn1::BMPString::new(name).unwrap());
+        let bmp_value = Element::BMPString(tsumiki_asn1::BMPString::new(name).unwrap());
         let raw_attr1 = create_attribute(FriendlyName::OID, bmp_value);
 
         // LocalKeyId
@@ -560,7 +560,7 @@ mod tests {
     #[case("My Certificate", "Friendly Name")]
     #[case("Test Key", "Friendly Name")]
     fn test_parsed_attributes_display(#[case] name: &str, #[case] expected: &str) {
-        let bmp_value = Element::BMPString(asn1::BMPString::new(name).unwrap());
+        let bmp_value = Element::BMPString(tsumiki_asn1::BMPString::new(name).unwrap());
         let raw_attr = create_attribute(FriendlyName::OID, bmp_value);
 
         let parsed = ParsedAttributes::from([raw_attr].as_slice());

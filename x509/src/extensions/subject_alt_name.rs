@@ -1,9 +1,9 @@
-use asn1::{ASN1Object, Element, OctetString};
-use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, Element, OctetString};
+use tsumiki_pkix_types::OidName;
 
 use super::error;
 use crate::error::Error;
@@ -121,11 +121,11 @@ impl fmt::Display for SubjectAltName {
 mod tests {
     use super::*;
     use crate::extensions::RawExtension;
-    use asn1::OctetString;
-    use asn1::{Element, ObjectIdentifier};
     use rstest::rstest;
     use std::net::IpAddr;
     use std::str::FromStr;
+    use tsumiki_asn1::OctetString;
+    use tsumiki_asn1::{Element, ObjectIdentifier};
 
     // ========== SubjectAltName Tests ==========
 
@@ -455,7 +455,8 @@ mod tests {
     #[test]
     fn test_general_name_x400_address() {
         // Test x400Address (stored as raw bytes)
-        let x400_elem = Element::OctetString(asn1::OctetString::from(vec![0x01, 0x02, 0x03]));
+        let x400_elem =
+            Element::OctetString(tsumiki_asn1::OctetString::from(vec![0x01, 0x02, 0x03]));
 
         let gn = GeneralName::parse_from_context_specific(3, &Box::new(x400_elem));
         assert!(gn.is_ok(), "Failed to parse x400Address: {:?}", gn);
@@ -472,7 +473,7 @@ mod tests {
     fn test_general_name_registered_id() {
         // Test registeredID [8] - IMPLICIT OID
         let oid_bytes = vec![0x2A, 0x86, 0x48, 0x86, 0xF7, 0x0D]; // 1.2.840.113549
-        let reg_id_elem = Element::OctetString(asn1::OctetString::from(oid_bytes));
+        let reg_id_elem = Element::OctetString(tsumiki_asn1::OctetString::from(oid_bytes));
 
         let gn = GeneralName::parse_from_context_specific(8, &Box::new(reg_id_elem));
         assert!(gn.is_ok(), "Failed to parse registeredID: {:?}", gn);

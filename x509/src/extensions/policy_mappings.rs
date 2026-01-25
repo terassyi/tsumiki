@@ -1,9 +1,9 @@
-use asn1::{ASN1Object, Element, OctetString};
-use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, Element, OctetString};
+use tsumiki_pkix_types::OidName;
 
 use super::error;
 use crate::error::Error;
@@ -200,9 +200,9 @@ impl fmt::Display for PolicyMappings {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::ObjectIdentifier;
     use rstest::rstest;
     use std::str::FromStr;
+    use tsumiki_asn1::ObjectIdentifier;
 
     /// Test successful parsing with single mapping
     #[rstest]
@@ -220,13 +220,13 @@ mod tests {
         None
     )]
     #[case::wrong_type(
-        Element::Integer(asn1::Integer::from(vec![42])),
+        Element::Integer(tsumiki_asn1::Integer::from(vec![42])),
         false,
         None
     )]
     #[case::non_oid_issuer(
         Element::Sequence(vec![Element::Sequence(vec![
-            Element::Integer(asn1::Integer::from(vec![1])),
+            Element::Integer(tsumiki_asn1::Integer::from(vec![1])),
             Element::ObjectIdentifier(ObjectIdentifier::from_str("5.6.7.8").unwrap()),
         ])]),
         false,
@@ -235,7 +235,7 @@ mod tests {
     #[case::non_oid_subject(
         Element::Sequence(vec![Element::Sequence(vec![
             Element::ObjectIdentifier(ObjectIdentifier::from_str("1.2.3.4").unwrap()),
-            Element::Integer(asn1::Integer::from(vec![1])),
+            Element::Integer(tsumiki_asn1::Integer::from(vec![1])),
         ])]),
         false,
         None

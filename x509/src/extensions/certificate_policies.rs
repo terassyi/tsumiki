@@ -1,9 +1,9 @@
-use asn1::{ASN1Object, Element, Integer, ObjectIdentifier, OctetString};
-use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, Element, Integer, ObjectIdentifier, OctetString};
+use tsumiki_pkix_types::OidName;
 
 use super::error;
 use crate::error::Error;
@@ -490,9 +490,9 @@ impl fmt::Display for CertificatePolicies {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::Element;
     use rstest::rstest;
     use std::str::FromStr;
+    use tsumiki_asn1::Element;
 
     #[rstest(
         input,

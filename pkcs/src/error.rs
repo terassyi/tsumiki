@@ -3,7 +3,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("ASN.1 error: {0}")]
-    Asn1(#[from] asn1::error::Error),
+    Asn1(#[from] tsumiki_asn1::error::Error),
 
     #[error("PKCS#1 error: {0}")]
     Pkcs1(#[from] crate::pkcs1::Error),
@@ -15,10 +15,10 @@ pub enum Error {
     Sec1(#[from] crate::sec1::Error),
 
     #[error(transparent)]
-    PKIXTypes(#[from] pkix_types::Error),
+    PKIXTypes(#[from] tsumiki_pkix_types::Error),
 
     #[error("DER error: {0}")]
-    Der(#[from] der::error::Error),
+    Der(#[from] tsumiki_der::error::Error),
 
     #[error("unrecognized private key format: pkcs8={pkcs8}, sec1={sec1}, pkcs1={pkcs1}")]
     UnrecognizedPrivateKeyFormat {

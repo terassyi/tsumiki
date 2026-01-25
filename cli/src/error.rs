@@ -6,34 +6,34 @@ pub(crate) enum Error {
     Io(#[from] std::io::Error),
 
     #[error("PEM decode error: {0}")]
-    Pem(#[from] pem::error::Error),
+    Pem(#[from] tsumiki_pem::error::Error),
 
     #[error("DER decode error: {0}")]
-    Der(#[from] der::error::Error),
+    Der(#[from] tsumiki_der::error::Error),
 
     #[error("ASN.1 decode error: {0}")]
-    Asn1(#[from] asn1::error::Error),
+    Asn1(#[from] tsumiki_asn1::error::Error),
 
     #[error("X.509 parse error: {0}")]
-    X509(#[from] x509::error::Error),
+    X509(#[from] tsumiki_x509::error::Error),
 
     #[error("PKCS#1 decode error: {0}")]
-    Pkcs1(#[from] pkcs::pkcs1::Error),
+    Pkcs1(#[from] tsumiki_pkcs::pkcs1::Error),
 
     #[error("PKCS#8 decode error: {0}")]
-    Pkcs8(#[from] pkcs::pkcs8::Error),
+    Pkcs8(#[from] tsumiki_pkcs::pkcs8::Error),
 
     #[error("SEC1 decode error: {0}")]
-    Sec1(#[from] pkcs::sec1::Error),
+    Sec1(#[from] tsumiki_pkcs::sec1::Error),
 
     #[error("PKCS error: {0}")]
-    Pkcs(#[from] pkcs::Error),
+    Pkcs(#[from] tsumiki_pkcs::Error),
 
     #[error("PKIX types error: {0}")]
-    PkixTypes(#[from] pkix_types::Error),
+    PkixTypes(#[from] tsumiki_pkix_types::Error),
 
     #[error("algorithm parameter error: {0}")]
-    AlgorithmParameter(#[from] pkix_types::algorithm::parameters::Error),
+    AlgorithmParameter(#[from] tsumiki_pkix_types::algorithm::parameters::Error),
 
     #[error("JSON serialization error: {0}")]
     Json(#[from] serde_json::Error),

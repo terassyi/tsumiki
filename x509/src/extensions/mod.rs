@@ -1,14 +1,14 @@
 use std::str::FromStr;
 
-use asn1::Element;
-use asn1::ObjectIdentifier;
-use asn1::OctetString;
 use serde::Deserialize;
 use serde::Serialize;
 use tsumiki::decoder::DecodableFrom;
 use tsumiki::decoder::Decoder;
 use tsumiki::encoder::EncodableTo;
 use tsumiki::encoder::Encoder;
+use tsumiki_asn1::Element;
+use tsumiki_asn1::ObjectIdentifier;
+use tsumiki_asn1::OctetString;
 
 use crate::error::Error;
 
@@ -32,7 +32,6 @@ mod subject_alt_name;
 mod subject_key_identifier;
 
 // Re-export public types
-use asn1::AsOid;
 pub use authority_info_access::{AccessDescription, AuthorityInfoAccess};
 pub use authority_key_identifier::AuthorityKeyIdentifier;
 pub use basic_constraints::BasicConstraints;
@@ -54,16 +53,17 @@ pub use policy_constraints::{PolicyConstraints, SkipCerts};
 pub use policy_mappings::{PolicyMapping, PolicyMappings};
 pub use subject_alt_name::SubjectAltName;
 pub use subject_key_identifier::SubjectKeyIdentifier;
+use tsumiki_asn1::AsOid;
 
-/// RawExtension wraps pkix_types::Extension for X.509-specific operations
+/// RawExtension wraps tsumiki_pkix_types::Extension for X.509-specific operations
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct RawExtension(pkix_types::Extension);
+pub struct RawExtension(tsumiki_pkix_types::Extension);
 
 impl RawExtension {
     /// Create a new RawExtension
     pub fn new(oid: ObjectIdentifier, critical: bool, value: OctetString) -> Self {
-        Self(pkix_types::Extension::new(oid, critical, value))
+        Self(tsumiki_pkix_types::Extension::new(oid, critical, value))
     }
 
     /// Get the extension OID
@@ -94,19 +94,19 @@ impl RawExtension {
         T::parse(self.value())
     }
 
-    /// Get a reference to the inner pkix_types::Extension
-    pub fn inner(&self) -> &pkix_types::Extension {
+    /// Get a reference to the inner tsumiki_pkix_types::Extension
+    pub fn inner(&self) -> &tsumiki_pkix_types::Extension {
         &self.0
     }
 
-    /// Convert into the inner pkix_types::Extension
-    pub fn into_inner(self) -> pkix_types::Extension {
+    /// Convert into the inner tsumiki_pkix_types::Extension
+    pub fn into_inner(self) -> tsumiki_pkix_types::Extension {
         self.0
     }
 }
 
 // Implement OidName for RawExtension
-impl pkix_types::OidName for RawExtension {
+impl tsumiki_pkix_types::OidName for RawExtension {
     fn oid_name(&self) -> Option<&'static str> {
         // Map OID to standard extension names using constants from each extension type
         match self.oid().to_string().as_str() {
@@ -134,26 +134,26 @@ impl pkix_types::OidName for RawExtension {
     }
 }
 
-impl From<pkix_types::Extension> for RawExtension {
-    fn from(ext: pkix_types::Extension) -> Self {
+impl From<tsumiki_pkix_types::Extension> for RawExtension {
+    fn from(ext: tsumiki_pkix_types::Extension) -> Self {
         Self(ext)
     }
 }
 
-impl From<RawExtension> for pkix_types::Extension {
+impl From<RawExtension> for tsumiki_pkix_types::Extension {
     fn from(ext: RawExtension) -> Self {
         ext.0
     }
 }
 
-impl AsRef<pkix_types::Extension> for RawExtension {
-    fn as_ref(&self) -> &pkix_types::Extension {
+impl AsRef<tsumiki_pkix_types::Extension> for RawExtension {
+    fn as_ref(&self) -> &tsumiki_pkix_types::Extension {
         &self.0
     }
 }
 
 impl std::ops::Deref for RawExtension {
-    type Target = pkix_types::Extension;
+    type Target = tsumiki_pkix_types::Extension;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -166,17 +166,17 @@ impl EncodableTo<RawExtension> for Element {}
 
 // Implement Decoder for Element -> RawExtension
 impl Decoder<Element, RawExtension> for Element {
-    type Error = pkix_types::Error;
+    type Error = tsumiki_pkix_types::Error;
 
     fn decode(&self) -> Result<RawExtension, Self::Error> {
-        let ext: pkix_types::Extension = self.decode()?;
+        let ext: tsumiki_pkix_types::Extension = self.decode()?;
         Ok(RawExtension(ext))
     }
 }
 
 // Implement Encoder for RawExtension -> Element
 impl Encoder<RawExtension, Element> for RawExtension {
-    type Error = pkix_types::Error;
+    type Error = tsumiki_pkix_types::Error;
 
     fn encode(&self) -> Result<Element, Self::Error> {
         self.0.encode()
@@ -508,13 +508,13 @@ mod tests {
             Element::ContextSpecific {
                 constructed: true,
             slot: 3,
-                element: Box::new(Element::Integer(asn1::Integer::from(vec![0x01]))),
+                element: Box::new(Element::Integer(tsumiki_asn1::Integer::from(vec![0x01]))),
             },
             "expected SEQUENCE inside context-specific tag [3]"
         ),
         // Test case: Not a Sequence or ContextSpecific
         case(
-            Element::Integer(asn1::Integer::from(vec![0x01])),
+            Element::Integer(tsumiki_asn1::Integer::from(vec![0x01])),
             "invalid structure - expected context-specific tag [3] or SEQUENCE"
         ),
     )]
@@ -586,7 +586,7 @@ mod tests {
         expected_error_msg,
         // Test case: Not a Sequence
         case(
-            Element::Integer(asn1::Integer::from(vec![0x01])),
+            Element::Integer(tsumiki_asn1::Integer::from(vec![0x01])),
             "Extension: expected SEQUENCE"
         ),
         // Test case: Empty sequence
@@ -614,7 +614,7 @@ mod tests {
         // Test case: First element is not OID
         case(
             Element::Sequence(vec![
-                Element::Integer(asn1::Integer::from(vec![0x01])),
+                Element::Integer(tsumiki_asn1::Integer::from(vec![0x01])),
                 Element::OctetString(OctetString::from(vec![0x30, 0x00])),
             ]),
             "expected OBJECT IDENTIFIER for extnID"
@@ -623,7 +623,7 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.29.19").unwrap()),
-                Element::Integer(asn1::Integer::from(vec![0x01])),
+                Element::Integer(tsumiki_asn1::Integer::from(vec![0x01])),
                 Element::OctetString(OctetString::from(vec![0x30, 0x00])),
             ]),
             "expected BOOLEAN for critical or OCTET STRING for extnValue"
@@ -632,7 +632,7 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.29.19").unwrap()),
-                Element::Integer(asn1::Integer::from(vec![0x01])),
+                Element::Integer(tsumiki_asn1::Integer::from(vec![0x01])),
             ]),
             "expected BOOLEAN for critical or OCTET STRING for extnValue"
         ),

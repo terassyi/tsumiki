@@ -31,10 +31,10 @@
 //! Unlike structured addresses, unstructured addresses can be arbitrary text
 //! and don't follow a specific format.
 
-use asn1::{ASN1Object, Element, OctetString};
-use pkix_types::DirectoryString;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeStruct};
 use std::fmt;
+use tsumiki_asn1::{ASN1Object, Element, OctetString};
+use tsumiki_pkix_types::DirectoryString;
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -152,10 +152,10 @@ impl Attribute for UnstructuredAddress {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::Element;
-    use der::Der;
     use rstest::rstest;
     use tsumiki::encoder::Encoder;
+    use tsumiki_asn1::Element;
+    use tsumiki_der::Der;
 
     #[test]
     fn test_unstructured_address_oid() {

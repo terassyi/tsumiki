@@ -1,9 +1,9 @@
-use asn1::{ASN1Object, Element, Integer, OctetString};
-use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, Element, Integer, OctetString};
+use tsumiki_pkix_types::OidName;
 
 use super::error;
 use crate::error::Error;
@@ -150,7 +150,7 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Boolean(true),
-                Element::Integer(asn1::Integer::from(vec![0x00])),
+                Element::Integer(tsumiki_asn1::Integer::from(vec![0x00])),
             ]),
             BasicConstraints {
                 ca: true,
@@ -161,7 +161,7 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Boolean(true),
-                Element::Integer(asn1::Integer::from(vec![0x01])),
+                Element::Integer(tsumiki_asn1::Integer::from(vec![0x01])),
             ]),
             BasicConstraints {
                 ca: true,
@@ -172,7 +172,7 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::Boolean(false),
-                Element::Integer(asn1::Integer::from(vec![0x0a])),
+                Element::Integer(tsumiki_asn1::Integer::from(vec![0x0a])),
             ]),
             BasicConstraints {
                 ca: false,

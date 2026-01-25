@@ -9,8 +9,8 @@
 use std::ops::Deref;
 use std::str::FromStr;
 
-use pem::FromPem;
 use serde::{Deserialize, Serialize};
+use tsumiki_pem::FromPem;
 
 use crate::Certificate;
 use crate::error::Error;
@@ -159,11 +159,11 @@ impl IntoIterator for CertificateChain {
 impl FromPem for CertificateChain {
     type Error = Error;
 
-    fn expected_label() -> pem::Label {
-        pem::Label::Certificate
+    fn expected_label() -> tsumiki_pem::Label {
+        tsumiki_pem::Label::Certificate
     }
 
-    fn from_pem(pem: &pem::Pem) -> Result<Self, Self::Error> {
+    fn from_pem(pem: &tsumiki_pem::Pem) -> Result<Self, Self::Error> {
         let cert = Certificate::from_pem(pem)?;
         Ok(Self::from(cert))
     }
@@ -173,10 +173,10 @@ impl FromStr for CertificateChain {
     type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let pems = pem::parse_many(s)?;
+        let pems = tsumiki_pem::parse_many(s)?;
         let certs = pems
             .iter()
-            .filter(|p| p.label() == pem::Label::Certificate)
+            .filter(|p| p.label() == tsumiki_pem::Label::Certificate)
             .map(Certificate::from_pem)
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Self::new(certs))

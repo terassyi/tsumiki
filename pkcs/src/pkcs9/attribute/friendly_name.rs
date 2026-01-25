@@ -15,9 +15,9 @@
 //! for the object it belongs to. This is commonly used in PKCS#12
 //! to provide human-readable names for certificates and private keys.
 
-use asn1::{Element, OctetString};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
 use std::fmt;
+use tsumiki_asn1::{Element, OctetString};
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -141,11 +141,11 @@ impl Attribute for FriendlyName {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::{ASN1Object, ObjectIdentifier};
     use rstest::rstest;
     use std::str::FromStr;
     use tsumiki::decoder::Decoder;
     use tsumiki::encoder::Encoder;
+    use tsumiki_asn1::{ASN1Object, ObjectIdentifier};
 
     use crate::pkcs9::attribute::RawAttribute;
 
@@ -173,7 +173,7 @@ mod tests {
     #[case("Hello World")]
     fn test_friendly_name_parse(#[case] name: &str) {
         // Create a BMPString element
-        let bmp_value = Element::BMPString(asn1::BMPString::new(name).unwrap());
+        let bmp_value = Element::BMPString(tsumiki_asn1::BMPString::new(name).unwrap());
 
         // Wrap in SET
         let set = Element::Set(vec![bmp_value]);
@@ -195,7 +195,7 @@ mod tests {
     #[case("証明書")]
     fn test_friendly_name_via_raw_attribute(#[case] name: &str) {
         // Create a complete RawAttribute with friendlyName
-        let bmp_value = Element::BMPString(asn1::BMPString::new(name).unwrap());
+        let bmp_value = Element::BMPString(tsumiki_asn1::BMPString::new(name).unwrap());
         let set = Element::Set(vec![bmp_value]);
         let oid = ObjectIdentifier::from_str(FriendlyName::OID).unwrap();
 
@@ -216,7 +216,7 @@ mod tests {
     #[case("Ελληνικά")]
     fn test_friendly_name_unicode(#[case] name: &str) {
         // BMPString supports Unicode (UCS-2)
-        let bmp_value = Element::BMPString(asn1::BMPString::new(name).unwrap());
+        let bmp_value = Element::BMPString(tsumiki_asn1::BMPString::new(name).unwrap());
         let set = Element::Set(vec![bmp_value]);
 
         let asn1_obj = ASN1Object::new(vec![set]);
@@ -234,7 +234,7 @@ mod tests {
     #[case("Hello 👋 World")]
     fn test_friendly_name_emoji_not_supported(#[case] input: &str) {
         // Emoji (U+1F600 and above) are outside BMP and should fail
-        let result = asn1::BMPString::new(input);
+        let result = tsumiki_asn1::BMPString::new(input);
         assert!(result.is_err());
     }
 

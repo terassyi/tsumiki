@@ -70,7 +70,7 @@ pub enum Error {
 
     // DER errors
     #[error("invalid DER encoding: {0}")]
-    FailedToDecodeDer(#[source] der::error::Error),
+    FailedToDecodeDer(#[source] tsumiki_der::error::Error),
 
     // Element errors
     #[error("element: cannot encode {0}")]

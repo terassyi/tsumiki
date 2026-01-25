@@ -2,8 +2,8 @@ use std::io::{self, Write};
 use std::str::FromStr;
 
 use clap::Args;
-use pem::Pem;
 use tsumiki::decoder::Decoder;
+use tsumiki_pem::Pem;
 
 use crate::error::Result;
 use crate::utils::{format_hex_dump, read_input};

@@ -1,9 +1,9 @@
-use asn1::{ASN1Object, BitString, Element, OctetString};
-use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, BitString, Element, OctetString};
+use tsumiki_pkix_types::OidName;
 
 use super::error;
 use crate::error::Error;
@@ -176,7 +176,7 @@ mod tests {
         // Test case: digitalSignature only (bit 0)
         // BitString: 0x80 (10000000 in binary, bit 0 set)
         case(
-            Element::BitString(asn1::BitString::try_from(vec![0x07, 0x80]).unwrap()),
+            Element::BitString(tsumiki_asn1::BitString::try_from(vec![0x07, 0x80]).unwrap()),
             KeyUsage {
                 digital_signature: true,
                 content_commitment: false,
@@ -193,7 +193,7 @@ mod tests {
         // BitString: 0x06 (00000110 in binary)
         // unused=1, so bits 0-6 are valid, bits 5 and 6 are set
         case(
-            Element::BitString(asn1::BitString::try_from(vec![0x01, 0x06]).unwrap()),
+            Element::BitString(tsumiki_asn1::BitString::try_from(vec![0x01, 0x06]).unwrap()),
             KeyUsage {
                 digital_signature: false,
                 content_commitment: false,
@@ -210,7 +210,7 @@ mod tests {
         // Bit 0 = 0x80, Bit 2 = 0x20, Bit 3 = 0x10, together = 0xB0
         // unused=4, so bits 0-3 are valid
         case(
-            Element::BitString(asn1::BitString::try_from(vec![0x04, 0xB0]).unwrap()),
+            Element::BitString(tsumiki_asn1::BitString::try_from(vec![0x04, 0xB0]).unwrap()),
             KeyUsage {
                 digital_signature: true,
                 content_commitment: false,
@@ -226,7 +226,7 @@ mod tests {
         // Test case: All bits set
         // BitString: 0xFF 0x80 (11111111 10000000)
         case(
-            Element::BitString(asn1::BitString::try_from(vec![0x07, 0xFF, 0x80]).unwrap()),
+            Element::BitString(tsumiki_asn1::BitString::try_from(vec![0x07, 0xFF, 0x80]).unwrap()),
             KeyUsage {
                 digital_signature: true,
                 content_commitment: true,

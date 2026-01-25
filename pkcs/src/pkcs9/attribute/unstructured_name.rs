@@ -31,10 +31,10 @@
 //! Unlike structured names (Distinguished Names), unstructured names can
 //! be arbitrary text and don't follow the X.500 naming hierarchy.
 
-use asn1::{ASN1Object, Element, OctetString};
-use pkix_types::DirectoryString;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, ser::SerializeStruct};
 use std::fmt;
+use tsumiki_asn1::{ASN1Object, Element, OctetString};
+use tsumiki_pkix_types::DirectoryString;
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -147,9 +147,9 @@ impl Attribute for UnstructuredName {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use der::Der;
     use rstest::rstest;
     use tsumiki::encoder::Encoder;
+    use tsumiki_der::Der;
 
     #[test]
     fn test_unstructured_name_oid() {

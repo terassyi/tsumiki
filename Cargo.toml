@@ -4,11 +4,13 @@ members = [ "asn1", "cli", "der", "examples", "pem", "pkcs", "pkix-types", "tsum
 
 [workspace.package]
 version = "0.0.1"
-authors = [ "terassyi" ]
+authors = ["terassyi"]
 edition = "2024"
 rust-version = "1.87.0"
 license = "MIT"
 repository = "https://github.com/terassyi/tsumiki"
+keywords = ["x509", "certificate", "asn1", "der", "pem"]
+categories = ["cryptography", "parser-implementations"]
 
 [workspace.dependencies]
 chrono = { version = "0.4.43", features = ["serde"] }

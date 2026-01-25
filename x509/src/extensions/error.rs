@@ -228,7 +228,7 @@ pub enum Error {
 
     /// Invalid ASN.1 structure
     #[error("invalid ASN.1: {0}")]
-    InvalidAsn1(#[source] asn1::error::Error),
+    InvalidAsn1(#[source] tsumiki_asn1::error::Error),
 }
 
 /// Result type for extension operations

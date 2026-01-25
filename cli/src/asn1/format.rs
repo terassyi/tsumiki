@@ -1,5 +1,5 @@
-use asn1::{ASN1Object, Element};
 use tsumiki::decoder::Decoder;
+use tsumiki_asn1::{ASN1Object, Element};
 
 use crate::error::Result;
 
@@ -16,7 +16,7 @@ pub fn format_asn1(obj: &ASN1Object, parse_implicit: bool) -> String {
 
 /// Parse OCTET STRING content as ASN.1 structure
 /// Returns formatted string if successfully parsed, Err with the decode error otherwise
-fn parse_implicit_octets(octets: &asn1::OctetString, depth: usize) -> Result<String> {
+fn parse_implicit_octets(octets: &tsumiki_asn1::OctetString, depth: usize) -> Result<String> {
     let bytes = octets.as_bytes();
 
     let der = bytes.decode()?;

@@ -5,7 +5,7 @@
 //! - [RFC 3279](https://datatracker.ietf.org/doc/html/rfc3279) - DSA, RSA, DH
 //! - [RFC 5480](https://datatracker.ietf.org/doc/html/rfc5480) - Elliptic Curve Cryptography
 
-use asn1::Element;
+use tsumiki_asn1::Element;
 
 pub mod dsa;
 pub mod ec;
@@ -60,8 +60,8 @@ impl From<RawAlgorithmParameter> for Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::ObjectIdentifier;
     use std::str::FromStr;
+    use tsumiki_asn1::ObjectIdentifier;
 
     #[test]
     fn test_raw_parameter_roundtrip() {

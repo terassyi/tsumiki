@@ -18,11 +18,11 @@
 //! signed data. In such data, the contentType attribute type is
 //! required if there are any PKCS #7 authenticated attributes.
 
-use asn1::{Element, ObjectIdentifier, OctetString};
-use pkix_types::OidName;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
 use std::fmt;
 use std::str::FromStr;
+use tsumiki_asn1::{Element, ObjectIdentifier, OctetString};
+use tsumiki_pkix_types::OidName;
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -104,7 +104,7 @@ impl Serialize for ContentType {
     where
         S: Serializer,
     {
-        let use_oid = pkix_types::get_use_oid_values();
+        let use_oid = tsumiki_pkix_types::get_use_oid_values();
         let display_value = if use_oid {
             self.content_type.to_string()
         } else {
@@ -186,9 +186,9 @@ impl Attribute for ContentType {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::ASN1Object;
     use rstest::rstest;
     use tsumiki::encoder::Encoder;
+    use tsumiki_asn1::ASN1Object;
 
     use crate::pkcs9::attribute::RawAttribute;
 

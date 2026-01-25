@@ -9,7 +9,7 @@
 //! KeyIdentifier is used to identify a public key. It is typically
 //! a SHA-1 hash (160 bits / 20 bytes) of the SubjectPublicKeyInfo.
 
-use asn1::OctetString;
+use tsumiki_asn1::OctetString;
 
 /// Key Identifier
 ///

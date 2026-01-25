@@ -21,9 +21,9 @@
 //! println!("Key size: {} bits", key.key_size());
 //! ```
 
-use asn1::{ASN1Object, Element};
-use der::Der;
-use pem::{Label, Pem, ToPem};
+use tsumiki_asn1::{ASN1Object, Element};
+use tsumiki_der::Der;
+use tsumiki_pem::{Label, Pem, ToPem};
 
 use tsumiki::decoder::{DecodableFrom, Decoder};
 
@@ -48,7 +48,7 @@ use crate::private_key::KeyAlgorithm;
 /// ```ignore
 /// use pkcs::{PublicKey, PublicKeyExt};
 /// use tsumiki::decoder::Decoder;
-/// use pem::Pem;
+/// use tsumiki_pem::Pem;
 ///
 /// let pem: Pem = "-----BEGIN PUBLIC KEY-----...".parse()?;
 /// let key: PublicKey = pem.decode()?;

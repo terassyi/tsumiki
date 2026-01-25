@@ -1,30 +1,30 @@
 //! SEC1 (RFC 5915) error types
 
-use asn1::ObjectIdentifier;
 use thiserror::Error;
+use tsumiki_asn1::ObjectIdentifier;
 
 /// Errors that can occur when parsing or encoding SEC1 structures.
 #[derive(Debug, Error)]
 pub enum Error {
     /// ASN.1 parsing error
     #[error("ASN.1 error: {0}")]
-    Asn1(#[from] asn1::error::Error),
+    Asn1(#[from] tsumiki_asn1::error::Error),
 
     /// PEM parsing error
     #[error("PEM error: {0}")]
-    Pem(#[from] pem::error::Error),
+    Pem(#[from] tsumiki_pem::error::Error),
 
     /// DER parsing error
     #[error("DER error: {0}")]
-    Der(#[from] der::error::Error),
+    Der(#[from] tsumiki_der::error::Error),
 
     /// PKIX types error
     #[error("PKIX types error: {0}")]
-    PkixTypes(#[from] pkix_types::Error),
+    PkixTypes(#[from] tsumiki_pkix_types::Error),
 
     /// Algorithm parameter error
     #[error("algorithm parameter error: {0}")]
-    AlgorithmParameter(#[from] pkix_types::algorithm::parameters::Error),
+    AlgorithmParameter(#[from] tsumiki_pkix_types::algorithm::parameters::Error),
 
     /// Expected a SEQUENCE element but got something else
     #[error("expected SEQUENCE")]

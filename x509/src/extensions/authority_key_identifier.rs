@@ -1,9 +1,9 @@
-use asn1::{ASN1Object, Element, OctetString};
-use pkix_types::{CertificateSerialNumber, KeyIdentifier, OidName};
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, Element, OctetString};
+use tsumiki_pkix_types::{CertificateSerialNumber, KeyIdentifier, OidName};
 
 use super::error;
 use crate::error::Error;
@@ -233,10 +233,10 @@ mod tests {
     use crate::CertificateSerialNumber;
     use crate::extensions::RawExtension;
 
-    use asn1::OctetString;
-    use asn1::{Element, ObjectIdentifier};
     use rstest::rstest;
     use std::str::FromStr;
+    use tsumiki_asn1::OctetString;
+    use tsumiki_asn1::{Element, ObjectIdentifier};
 
     // AuthorityKeyIdentifier tests
     #[rstest(
@@ -263,7 +263,7 @@ mod tests {
                 Element::ContextSpecific {
                     constructed: false,
             slot: 2,
-                    element: Box::new(Element::Integer(asn1::Integer::from(vec![0x01, 0x23, 0x45]))),
+                    element: Box::new(Element::Integer(tsumiki_asn1::Integer::from(vec![0x01, 0x23, 0x45]))),
                 },
             ]),
             AuthorityKeyIdentifier {
@@ -283,7 +283,7 @@ mod tests {
                 Element::ContextSpecific {
                     constructed: false,
             slot: 2,
-                    element: Box::new(Element::Integer(asn1::Integer::from(vec![0xFF]))),
+                    element: Box::new(Element::Integer(tsumiki_asn1::Integer::from(vec![0xFF]))),
                 },
             ]),
             AuthorityKeyIdentifier {
@@ -326,7 +326,7 @@ mod tests {
                 Element::ContextSpecific {
                     constructed: false,
             slot: 0,
-                    element: Box::new(Element::Integer(asn1::Integer::from(vec![0x01]))),
+                    element: Box::new(Element::Integer(tsumiki_asn1::Integer::from(vec![0x01]))),
                 },
             ]),
             "keyIdentifier must be OCTET STRING"
@@ -337,7 +337,7 @@ mod tests {
                 Element::ContextSpecific {
                     constructed: false,
             slot: 2,
-                    element: Box::new(Element::BitString(asn1::BitString::try_from(vec![0x00, 0x01]).unwrap())),
+                    element: Box::new(Element::BitString(tsumiki_asn1::BitString::try_from(vec![0x00, 0x01]).unwrap())),
                 },
             ]),
             "serialNumber must be OCTET STRING or INTEGER"

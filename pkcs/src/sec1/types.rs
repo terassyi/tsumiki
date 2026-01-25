@@ -3,16 +3,18 @@
 //! This module implements the ECPrivateKey structure as defined in
 //! [RFC 5915](https://datatracker.ietf.org/doc/html/rfc5915).
 
-use asn1::{ASN1Object, BitString, Element, Integer, OctetString};
-use der::Der;
 use num_bigint::BigInt;
-use pem::{Label, Pem, ToPem};
-use pkix_types::algorithm::parameters::ec::NamedCurve;
-use pkix_types::algorithm::{AlgorithmIdentifier, AlgorithmParameters, RawAlgorithmParameter};
-use pkix_types::{OidName, SubjectPublicKeyInfo};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, BitString, Element, Integer, OctetString};
+use tsumiki_der::Der;
+use tsumiki_pem::{Label, Pem, ToPem};
+use tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve;
+use tsumiki_pkix_types::algorithm::{
+    AlgorithmIdentifier, AlgorithmParameters, RawAlgorithmParameter,
+};
+use tsumiki_pkix_types::{OidName, SubjectPublicKeyInfo};
 
 use super::error::{Error, Result};
 use crate::PublicKey;

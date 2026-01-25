@@ -32,13 +32,13 @@ pub enum Error {
     UnexpectedKeyFormat { expected: &'static str },
 
     #[error("ASN.1 error: {0}")]
-    Asn1(#[from] asn1::error::Error),
+    Asn1(#[from] tsumiki_asn1::error::Error),
 
     #[error("DER error: {0}")]
-    Der(#[from] der::error::Error),
+    Der(#[from] tsumiki_der::error::Error),
 
     #[error("PKIX types error: {0}")]
-    PkixTypes(#[from] pkix_types::Error),
+    PkixTypes(#[from] tsumiki_pkix_types::Error),
 
     #[error("Invalid algorithm identifier")]
     InvalidAlgorithmIdentifier,

@@ -8,4 +8,4 @@ pub use attribute::{Attribute, Attributes, ParsedAttributes, RawAttribute};
 pub use error::{Error, Result};
 
 // Re-export DirectoryString from pkix-types for convenience
-pub use pkix_types::DirectoryString;
+pub use tsumiki_pkix_types::DirectoryString;

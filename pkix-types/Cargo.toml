@@ -1,10 +1,17 @@
 [package]
-name = "pkix-types"
-version = "0.0.1"
-edition = "2021"
+name = "tsumiki-pkix-types"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "PKIX types (AlgorithmIdentifier, Name, etc.) for X.509 certificates"
 
 [dependencies]
-asn1 = { path = "../asn1" }
+tsumiki-asn1 = { path = "../asn1" }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tsumiki = { path = "../tsumiki" }

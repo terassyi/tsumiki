@@ -49,7 +49,7 @@ jobs:
       - uses: rui314/setup-mold@v1
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --package cli --test '*'
+      - run: cargo test --package tsumiki-cli --test '*'
 
   rustls-integration:
     runs-on: ubuntu-24.04

@@ -15,9 +15,9 @@
 //! for a key or certificate. This is commonly used in PKCS#12
 //! to link private keys with their corresponding certificates.
 
-use asn1::{Element, OctetString};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de, ser::SerializeStruct};
 use std::fmt;
+use tsumiki_asn1::{Element, OctetString};
 
 use crate::pkcs9::error::{Error, Result};
 
@@ -145,11 +145,11 @@ impl Attribute for LocalKeyId {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::{ASN1Object, Element, ObjectIdentifier};
     use rstest::rstest;
     use std::str::FromStr;
     use tsumiki::decoder::Decoder;
     use tsumiki::encoder::Encoder;
+    use tsumiki_asn1::{ASN1Object, Element, ObjectIdentifier};
 
     use crate::pkcs9::attribute::RawAttribute;
 

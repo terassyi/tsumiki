@@ -1,9 +1,9 @@
-use asn1::{ASN1Object, Element, Integer, OctetString};
-use pkix_types::OidName;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, Element, Integer, OctetString};
+use tsumiki_pkix_types::OidName;
 
 use super::error;
 use crate::error::Error;
@@ -204,8 +204,8 @@ impl fmt::Display for PolicyConstraints {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use asn1::Integer;
     use rstest::rstest;
+    use tsumiki_asn1::Integer;
 
     #[rstest]
     #[case(Some(0), None, "requireExplicitPolicy only with value 0")]
@@ -303,7 +303,9 @@ mod tests {
         let elem = Element::Sequence(vec![Element::ContextSpecific {
             constructed: false,
             slot: 0,
-            element: Box::new(Element::OctetString(asn1::OctetString::from(vec![0x00]))),
+            element: Box::new(Element::OctetString(tsumiki_asn1::OctetString::from(vec![
+                0x00,
+            ]))),
         }]);
         let result: Result<PolicyConstraints, Error> = elem.decode();
 

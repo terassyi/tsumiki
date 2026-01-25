@@ -3,7 +3,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("ASN.1 error: {0}")]
-    Asn1(#[from] asn1::error::Error),
+    Asn1(#[from] tsumiki_asn1::error::Error),
 
     #[error("expected SEQUENCE")]
     ExpectedSequence,
@@ -33,10 +33,10 @@ pub enum Error {
     VersionOutOfRange,
 
     #[error("Invalid PEM: {0}")]
-    InvalidPem(#[from] pem::error::Error),
+    InvalidPem(#[from] tsumiki_pem::error::Error),
 
     #[error("Invalid DER: {0}")]
-    InvalidDer(#[from] der::error::Error),
+    InvalidDer(#[from] tsumiki_der::error::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

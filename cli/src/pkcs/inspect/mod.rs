@@ -3,18 +3,18 @@ pub(crate) mod pkcs8;
 pub(crate) mod sec1;
 
 use clap::Args;
-use pem::Label;
-use pem::Pem;
-use pem::ToPem;
 use std::str::FromStr;
+use tsumiki_pem::Label;
+use tsumiki_pem::Pem;
+use tsumiki_pem::ToPem;
 
 use crate::error::Result;
 use crate::inspect::decode;
 use crate::output::OutputFormat;
 use crate::utils::{FingerprintAlgorithm, read_input};
-use pkcs::PrivateKey;
-use pkcs::PublicKey;
 use tsumiki::decoder::Decoder;
+use tsumiki_pkcs::PrivateKey;
+use tsumiki_pkcs::PublicKey;
 
 #[derive(Args)]
 pub(crate) struct Config {
@@ -95,7 +95,7 @@ pub(crate) fn execute(config: Config) -> Result<()> {
                 pkcs8::output_encrypted_private_key_info_fingerprint(&key, &config)
             }
             Label::PublicKey => {
-                let key: pkcs::pkcs8::PublicKey = decode(pem)?;
+                let key: tsumiki_pkcs::pkcs8::PublicKey = decode(pem)?;
                 pkcs8::output_public_key_fingerprint(&key, &config)
             }
             Label::ECPrivateKey => {
@@ -112,7 +112,7 @@ pub(crate) fn execute(config: Config) -> Result<()> {
     if config.show_key_size {
         return match pem.label() {
             Label::RSAPrivateKey | Label::PrivateKey | Label::ECPrivateKey => {
-                let key: PrivateKey = pem.decode().map_err(|e: pkcs::Error| {
+                let key: PrivateKey = pem.decode().map_err(|e: tsumiki_pkcs::Error| {
                     crate::error::Error::PrivateKeyDecodeFailed(e.to_string())
                 })?;
                 let key_size = key.key_size();
@@ -124,7 +124,7 @@ pub(crate) fn execute(config: Config) -> Result<()> {
                 Ok(())
             }
             Label::RSAPublicKey | Label::PublicKey => {
-                let key: PublicKey = pem.decode().map_err(|e: pkcs::Error| {
+                let key: PublicKey = pem.decode().map_err(|e: tsumiki_pkcs::Error| {
                     crate::error::Error::PublicKeyDecodeFailed(e.to_string())
                 })?;
                 println!("Key Size: {} bits", key.key_size());
@@ -155,7 +155,7 @@ pub(crate) fn execute(config: Config) -> Result<()> {
             pkcs8::output_encrypted_private_key_info(&key, &config)
         }
         Label::PublicKey => {
-            let key: pkcs::pkcs8::PublicKey = decode(pem)?;
+            let key: tsumiki_pkcs::pkcs8::PublicKey = decode(pem)?;
             pkcs8::output_public_key(&key, &config)
         }
         Label::ECPrivateKey => {

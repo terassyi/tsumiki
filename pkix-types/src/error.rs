@@ -60,5 +60,5 @@ pub enum Error {
 
     /// ASN.1 encoding/decoding error
     #[error("ASN.1 error: {0}")]
-    ASN1Error(#[from] asn1::error::Error),
+    ASN1Error(#[from] tsumiki_asn1::error::Error),
 }

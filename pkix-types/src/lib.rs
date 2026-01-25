@@ -21,8 +21,8 @@ pub mod serial_number;
 pub mod subject_public_key_info;
 
 pub use algorithm::{
-    parameters::{AlgorithmParameter, DsaParameters, EcParameters, RawAlgorithmParameter},
     AlgorithmIdentifier, AlgorithmParameters,
+    parameters::{AlgorithmParameter, DsaParameters, EcParameters, RawAlgorithmParameter},
 };
 pub use directory_string::DirectoryString;
 pub use error::{Error, Result};

@@ -1,9 +1,9 @@
-use asn1::{ASN1Object, Element, OctetString};
-use pkix_types::OidName;
 use serde::{Deserialize, Serialize, Serializer, ser::SerializeStruct};
 use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{ASN1Object, Element, OctetString};
+use tsumiki_pkix_types::OidName;
 
 use super::error;
 use crate::error::Error;
@@ -20,7 +20,7 @@ subjectPublicKey (excluding the tag, length, and number of unused bits).
 */
 
 // Re-export KeyIdentifier from pkix-types for backward compatibility
-pub use pkix_types::KeyIdentifier;
+pub use tsumiki_pkix_types::KeyIdentifier;
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct SubjectKeyIdentifier {
@@ -123,10 +123,10 @@ impl fmt::Display for SubjectKeyIdentifier {
 mod tests {
     use super::*;
     use crate::extensions::RawExtension;
-    use asn1::Element;
-    use asn1::{ObjectIdentifier, OctetString};
     use rstest::rstest;
     use std::str::FromStr;
+    use tsumiki_asn1::Element;
+    use tsumiki_asn1::{ObjectIdentifier, OctetString};
 
     // ========== SubjectKeyIdentifier Tests ==========
 
@@ -173,7 +173,7 @@ mod tests {
         expected_error_msg,
         // Test case: Not an OctetString (Integer)
         case(
-            Element::Integer(asn1::Integer::from(vec![0x01, 0x02])),
+            Element::Integer(tsumiki_asn1::Integer::from(vec![0x01, 0x02])),
             "expected OCTET STRING"
         ),
         // Test case: Not an OctetString (Sequence)

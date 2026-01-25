@@ -156,15 +156,15 @@ pub enum Error {
 
     /// Failed to parse ASN.1 structure
     #[error("ASN.1 error: {0}")]
-    ASN1Error(#[from] asn1::error::Error),
+    ASN1Error(#[from] tsumiki_asn1::error::Error),
 
     /// Failed to encode/decode DER
     #[error("DER encoding/decoding error: {0}")]
-    DerError(#[from] der::error::Error),
+    DerError(#[from] tsumiki_der::error::Error),
 
     /// PKIX types error
     #[error("PKIX types error: {0}")]
-    PkixTypesError(#[from] pkix_types::Error),
+    PkixTypesError(#[from] tsumiki_pkix_types::Error),
 
     /// Unsupported attribute type
     #[error("unsupported attribute type: {0}")]

@@ -46,11 +46,11 @@ test-name package name:
 
 # Run e2e tests (cli/tests only)
 e2e:
-    cargo test --package cli --test '*'
+    cargo test --package tsumiki-cli --test '*'
 
 # Run e2e tests with verbose output
 e2ev:
-    cargo test --package cli --test '*' -- --nocapture
+    cargo test --package tsumiki-cli --test '*' -- --nocapture
 
 # Run all tests (unit + e2e)
 test-all: test e2e
@@ -69,6 +69,15 @@ test-rustls-integration:
 # Clean build artifacts
 clean:
     cargo clean
+
+# Bump version (updates workspace version in Cargo.toml)
+bump-version version:
+    cargo install cargo-edit --quiet 2>/dev/null || true
+    cargo set-version --workspace {{ version }}
+
+# Show current version
+version:
+    @cargo metadata --format-version 1 --no-deps | jq -r '.packages[0].version'
 
 # Run CI checks locally
 ci: format-check lint test e2e

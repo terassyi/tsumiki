@@ -2,13 +2,13 @@
 //!
 //! Defined in [RFC 5280 Section 4.1.1.2](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.1.2)
 
-use asn1::{Element, ObjectIdentifier};
-use serde::{ser::SerializeStruct, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, ser::SerializeStruct};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{Element, ObjectIdentifier};
 
-use crate::algorithm::parameters::ec::NamedCurve;
 use crate::OidName;
+use crate::algorithm::parameters::ec::NamedCurve;
 
 pub mod error;
 pub mod parameters;

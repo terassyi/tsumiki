@@ -4,7 +4,7 @@
 
 use super::{AlgorithmParameter, Error, RawAlgorithmParameter, Result};
 use crate::AlgorithmParameters;
-use asn1::{Element, Integer};
+use tsumiki_asn1::{Element, Integer};
 
 /// DSA Parameters
 ///
@@ -70,7 +70,7 @@ impl TryFrom<&RawAlgorithmParameter> for DsaParameters {
                         return Err(Error::TypeMismatch {
                             expected: "INTEGER (p)".into(),
                             actual: "non-INTEGER".into(),
-                        })
+                        });
                     }
                 };
 
@@ -80,7 +80,7 @@ impl TryFrom<&RawAlgorithmParameter> for DsaParameters {
                         return Err(Error::TypeMismatch {
                             expected: "INTEGER (q)".into(),
                             actual: "non-INTEGER".into(),
-                        })
+                        });
                     }
                 };
 
@@ -90,7 +90,7 @@ impl TryFrom<&RawAlgorithmParameter> for DsaParameters {
                         return Err(Error::TypeMismatch {
                             expected: "INTEGER (g)".into(),
                             actual: "non-INTEGER".into(),
-                        })
+                        });
                     }
                 };
 

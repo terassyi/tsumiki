@@ -22,14 +22,14 @@
 
 use std::fmt;
 
-use asn1::{Element, ObjectIdentifier};
-use serde::{ser::SerializeStruct, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, ser::SerializeStruct};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
+use tsumiki_asn1::{Element, ObjectIdentifier};
 
+use crate::OidName;
 use crate::directory_string::DirectoryString;
 use crate::error::{Error, Result};
-use crate::OidName;
 
 /// X.509 Distinguished Name
 ///

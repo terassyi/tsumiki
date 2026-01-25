@@ -1,9 +1,14 @@
 [package]
-name = "x509"
+name = "tsumiki-x509"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "X.509 certificate parsing and handling with full v3 extensions support"
 
 [features]
 default = []
@@ -11,12 +16,12 @@ rustls = ["dep:rustls-pki-types"]
 
 [dependencies]
 rustls-pki-types = { workspace = true, optional = true }
-asn1 = { path = "../asn1" }
+tsumiki-asn1 = { path = "../asn1" }
 chrono = { workspace = true }
-der = { path = "../der" }
+tsumiki-der = { path = "../der" }
 ipnet = { version = "2.10.1", features = ["serde"] }
-pem = { path = "../pem" }
-pkix-types = { path = "../pkix-types" }
+tsumiki-pem = { path = "../pem" }
+tsumiki-pkix-types = { path = "../pkix-types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

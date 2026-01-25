@@ -13,9 +13,9 @@ name = "tls-echo-client"
 path = "tls_echo_client.rs"
 
 [dependencies]
-x509 = { path = "../x509", features = ["rustls"] }
-pkcs = { path = "../pkcs", features = ["rustls"] }
-pem = { path = "../pem" }
+tsumiki-x509 = { path = "../x509", features = ["rustls"] }
+tsumiki-pkcs = { path = "../pkcs", features = ["rustls"] }
+tsumiki-pem = { path = "../pem" }
 tsumiki = { path = "../tsumiki" }
 
 rustls = "0.23"

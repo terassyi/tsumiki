@@ -1,21 +1,26 @@
 [package]
-name = "cli"
+name = "tsumiki-cli"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Command-line tool for X.509 certificate inspection and PKCS handling"
 
 [[bin]]
 name = "tsumiki"
 path = "src/main.rs"
 
 [dependencies]
-x509 = { path = "../x509", features = ["rustls"] }
-pem = { path = "../pem" }
-der = { path = "../der" }
-asn1 = { path = "../asn1" }
-pkcs = { path = "../pkcs" }
-pkix-types = { path = "../pkix-types" }
+tsumiki-x509 = { path = "../x509", features = ["rustls"] }
+tsumiki-pem = { path = "../pem" }
+tsumiki-der = { path = "../der" }
+tsumiki-asn1 = { path = "../asn1" }
+tsumiki-pkcs = { path = "../pkcs" }
+tsumiki-pkix-types = { path = "../pkix-types" }
 tsumiki = { path = "../tsumiki" }
 clap = { version = "4.5", features = ["derive"] }
 thiserror.workspace = true
