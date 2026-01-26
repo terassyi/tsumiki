@@ -18,6 +18,6 @@ tsumiki-pkcs = { path = "../pkcs", features = ["rustls"] }
 tsumiki-pem = { path = "../pem" }
 tsumiki = { path = "../tsumiki" }
 
-rustls = "0.23"
+rustls = { workspace = true }
 tokio = { version = "1", features = ["full"] }
 tokio-rustls = "0.26"

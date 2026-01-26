@@ -12,7 +12,7 @@ description = "PEM format parser and encoder for X.509 certificates"
 
 [dependencies]
 base64.workspace = true
-regex = "1.11.1"
+regex = "1.11"
 thiserror = { workspace = true }
 tsumiki = { path = "../tsumiki" }
 
