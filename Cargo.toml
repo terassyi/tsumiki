@@ -12,12 +12,12 @@ keywords = ["x509", "certificate", "asn1", "der", "pem"]
 categories = ["cryptography", "parser-implementations"]
 
 [workspace.dependencies]
-chrono = { version = "0.4.43", features = ["serde"] }
-thiserror = "2.0.17"
-rstest = "0.26.1"
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.149"
-num-bigint = "0.4.6"
-base64 = "0.22.1"
-rustls-pki-types = "1.14.0"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2.0"
+rstest = "0.26"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+num-bigint = "0.4"
+base64 = "0.22"
+rustls-pki-types = "1.14"
 rustls = "0.23"

@@ -19,7 +19,7 @@ rustls-pki-types = { workspace = true, optional = true }
 tsumiki-asn1 = { path = "../asn1" }
 chrono = { workspace = true }
 tsumiki-der = { path = "../der" }
-ipnet = { version = "2.10.1", features = ["serde"] }
+ipnet = { version = "2.10", features = ["serde"] }
 tsumiki-pem = { path = "../pem" }
 tsumiki-pkix-types = { path = "../pkix-types" }
 serde = { workspace = true }

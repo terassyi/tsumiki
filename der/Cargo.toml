@@ -12,7 +12,7 @@ description = "DER (Distinguished Encoding Rules) parser for ASN.1 structures"
 
 [dependencies]
 tsumiki-pem = { path = "../pem" }
-nom = "8.0.0"
+nom = "8.0"
 thiserror = { workspace = true }
 tsumiki = { path = "../tsumiki" }
 
