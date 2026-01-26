@@ -3,9 +3,8 @@
 //! These types have been moved to pkix-types crate for reuse across
 //! X.509, PKCS, CMS, and other PKI standards.
 
-// Re-export types that are now in pkix-types for backward compatibility
-#[allow(unused_imports)]
-pub use tsumiki_pkix_types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
+#[cfg(test)]
+use tsumiki_pkix_types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
 
 #[cfg(test)]
 mod tests {

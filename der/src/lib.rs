@@ -44,6 +44,8 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+#![forbid(unsafe_code)]
+
 use error::Error;
 use nom::{IResult, Parser};
 use tsumiki::decoder::{DecodableFrom, Decoder};
@@ -139,7 +141,6 @@ impl Decoder<&[u8], Der> for &[u8] {
 
     fn decode(&self) -> Result<Der, Self::Error> {
         let mut tlvs = Vec::new();
-        #[warn(suspicious_double_ref_op)]
         let mut input = *self;
         while !input.is_empty() {
             let (new_input, tlv) = Tlv::parse(input).map_err(|e| match e {
@@ -205,33 +206,6 @@ impl Tag {
         match self {
             Tag::Primitive(_, inner) => (*inner) & TAG_CONSTRUCTED != 0,
             Tag::ContextSpecific { constructed, .. } => *constructed,
-        }
-    }
-
-    /// Returns whether this is a context-specific tag.
-    #[allow(dead_code)]
-    pub(crate) fn is_context_specific(&self) -> bool {
-        match self {
-            Tag::Primitive(_, _) => false,
-            Tag::ContextSpecific { .. } => true,
-        }
-    }
-
-    /// Returns the primitive tag type if this is a primitive tag.
-    #[allow(dead_code)]
-    pub(crate) fn primitive_tag(&self) -> Option<PrimitiveTag> {
-        match self {
-            Tag::Primitive(primitive, _) => Some(*primitive),
-            Tag::ContextSpecific { .. } => None,
-        }
-    }
-
-    /// Returns the slot number if this is a context-specific tag.
-    #[allow(dead_code)]
-    pub(crate) fn slot_number(&self) -> Option<u8> {
-        match self {
-            Tag::Primitive(_, _) => None,
-            Tag::ContextSpecific { slot, .. } => Some(*slot),
         }
     }
 }

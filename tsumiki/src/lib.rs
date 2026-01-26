@@ -54,5 +54,7 @@
 //! let bytes: Vec<u8> = der.encode().unwrap();
 //! ```
 
+#![forbid(unsafe_code)]
+
 pub mod decoder;
 pub mod encoder;

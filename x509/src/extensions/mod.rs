@@ -68,8 +68,9 @@ use tsumiki_asn1::AsOid;
 pub struct RawExtension(tsumiki_pkix_types::Extension);
 
 impl RawExtension {
-    /// Create a new RawExtension
-    pub fn new(oid: ObjectIdentifier, critical: bool, value: OctetString) -> Self {
+    /// Create a new RawExtension (for testing purposes)
+    #[cfg(test)]
+    pub(crate) fn new(oid: ObjectIdentifier, critical: bool, value: OctetString) -> Self {
         Self(tsumiki_pkix_types::Extension::new(oid, critical, value))
     }
 
@@ -99,16 +100,6 @@ impl RawExtension {
             });
         }
         T::parse(self.value())
-    }
-
-    /// Get a reference to the inner tsumiki_pkix_types::Extension
-    pub fn inner(&self) -> &tsumiki_pkix_types::Extension {
-        &self.0
-    }
-
-    /// Convert into the inner tsumiki_pkix_types::Extension
-    pub fn into_inner(self) -> tsumiki_pkix_types::Extension {
-        self.0
     }
 }
 
@@ -227,12 +218,13 @@ pub struct Extensions {
 }
 
 impl Extensions {
+    /// Get the raw extensions
     pub fn extensions(&self) -> &Vec<RawExtension> {
         &self.extensions
     }
 
     /// Get a specific extension by OID
-    pub fn get_by_oid<O: AsOid>(&self, oid: O) -> Result<Option<&RawExtension>, Error> {
+    fn get_by_oid<O: AsOid>(&self, oid: O) -> Result<Option<&RawExtension>, Error> {
         let oid_obj = oid.as_oid().map_err(Error::InvalidASN1)?;
         Ok(self.extensions.iter().find(|ext| ext.oid() == &oid_obj))
     }

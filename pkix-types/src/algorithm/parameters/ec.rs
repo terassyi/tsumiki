@@ -59,21 +59,21 @@ pub enum NamedCurve {
 
 impl NamedCurve {
     // Elliptic curve OID constants (RFC 5480 Section 2.1.1.1)
-    pub const OID_SECP192R1: &'static str = "1.2.840.10045.3.1.1";
-    pub const OID_SECP224R1: &'static str = "1.3.132.0.33";
-    pub const OID_SECP256R1: &'static str = "1.2.840.10045.3.1.7";
-    pub const OID_SECP384R1: &'static str = "1.3.132.0.34";
-    pub const OID_SECP521R1: &'static str = "1.3.132.0.35";
-    pub const OID_SECT163K1: &'static str = "1.3.132.0.1";
-    pub const OID_SECT163R2: &'static str = "1.3.132.0.15";
-    pub const OID_SECT233K1: &'static str = "1.3.132.0.26";
-    pub const OID_SECT233R1: &'static str = "1.3.132.0.27";
-    pub const OID_SECT283K1: &'static str = "1.3.132.0.16";
-    pub const OID_SECT283R1: &'static str = "1.3.132.0.17";
-    pub const OID_SECT409K1: &'static str = "1.3.132.0.36";
-    pub const OID_SECT409R1: &'static str = "1.3.132.0.37";
-    pub const OID_SECT571K1: &'static str = "1.3.132.0.38";
-    pub const OID_SECT571R1: &'static str = "1.3.132.0.39";
+    const OID_SECP192R1: &'static str = "1.2.840.10045.3.1.1";
+    const OID_SECP224R1: &'static str = "1.3.132.0.33";
+    const OID_SECP256R1: &'static str = "1.2.840.10045.3.1.7";
+    const OID_SECP384R1: &'static str = "1.3.132.0.34";
+    const OID_SECP521R1: &'static str = "1.3.132.0.35";
+    const OID_SECT163K1: &'static str = "1.3.132.0.1";
+    const OID_SECT163R2: &'static str = "1.3.132.0.15";
+    const OID_SECT233K1: &'static str = "1.3.132.0.26";
+    const OID_SECT233R1: &'static str = "1.3.132.0.27";
+    const OID_SECT283K1: &'static str = "1.3.132.0.16";
+    const OID_SECT283R1: &'static str = "1.3.132.0.17";
+    const OID_SECT409K1: &'static str = "1.3.132.0.36";
+    const OID_SECT409R1: &'static str = "1.3.132.0.37";
+    const OID_SECT571K1: &'static str = "1.3.132.0.38";
+    const OID_SECT571R1: &'static str = "1.3.132.0.39";
 
     /// Get the OID string for this named curve.
     ///

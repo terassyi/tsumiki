@@ -173,7 +173,10 @@ pub trait Attribute: Sized {
 ///
 /// # Returns
 /// The single Element contained in the SET, or an error if the structure is invalid.
-pub fn extract_single_value(values: &OctetString, attr_name: &'static str) -> Result<Element> {
+pub(crate) fn extract_single_value(
+    values: &OctetString,
+    attr_name: &'static str,
+) -> Result<Element> {
     let asn1_obj = ASN1Object::try_from(values).map_err(Error::from)?;
 
     let first_element = asn1_obj

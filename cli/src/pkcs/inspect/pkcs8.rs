@@ -5,8 +5,8 @@ use crate::utils::{calculate_fingerprint, format_hex_dump};
 use std::fmt::Write;
 use tsumiki_pkcs::pkcs9::ParsedAttributes;
 use tsumiki_pkcs::{KeyAlgorithm, PrivateKeyExt, PublicKeyExt};
-use tsumiki_pkix_types::OidName;
 use tsumiki_pkix_types::algorithm::parameters::DsaParameters;
+use tsumiki_pkix_types::{AlgorithmParameters, OidName};
 
 fn write_algorithm_parameters(
     output: &mut String,
@@ -91,10 +91,10 @@ pub(crate) fn output_private_key_info(
             )?;
             if let Some(params) = &key.private_key_algorithm.parameters {
                 match params {
-                    tsumiki_pkcs::pkcs8::AlgorithmParameters::Null => {
+                    AlgorithmParameters::Null => {
                         writeln!(output, "Algorithm Parameters: NULL")?;
                     }
-                    tsumiki_pkcs::pkcs8::AlgorithmParameters::Other(raw) => {
+                    AlgorithmParameters::Other(raw) => {
                         writeln!(output, "Algorithm Parameters:")?;
                         write_algorithm_parameters(&mut output, raw.element(), 2)?;
                     }
@@ -199,10 +199,10 @@ pub(crate) fn output_encrypted_private_key_info(
             writeln!(output, "Encryption Algorithm: {}", algorithm_display)?;
             if let Some(params) = &key.encryption_algorithm.parameters {
                 match params {
-                    tsumiki_pkcs::pkcs8::AlgorithmParameters::Null => {
+                    AlgorithmParameters::Null => {
                         writeln!(output, "Encryption Parameters: NULL")?;
                     }
-                    tsumiki_pkcs::pkcs8::AlgorithmParameters::Other(_) => {
+                    AlgorithmParameters::Other(_) => {
                         writeln!(output, "Encryption Parameters: Present (PBES2 scheme)")?;
                     }
                 }
@@ -275,9 +275,7 @@ fn output_dsa_parameters_to_string(
 ) -> Result<()> {
     // Access SubjectPublicKeyInfo::algorithm() via AsRef to avoid conflict with PublicKeyExt::algorithm()
     let spki: &tsumiki_pkix_types::SubjectPublicKeyInfo = key.as_ref();
-    if let Some(tsumiki_pkcs::pkcs8::AlgorithmParameters::Other(raw)) =
-        spki.algorithm().parameters.as_ref()
-    {
+    if let Some(AlgorithmParameters::Other(raw)) = spki.algorithm().parameters.as_ref() {
         if let Ok(dsa_params) = DsaParameters::try_from(raw) {
             writeln!(output, "  Prime (p): {} bits", dsa_params.p.bits())?;
             writeln!(output, "  Subprime (q): {} bits", dsa_params.q.bits())?;

@@ -3,7 +3,7 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 use tsumiki_asn1::{ASN1Object, Element, OctetString};
-use tsumiki_pkix_types::OidName;
+use tsumiki_pkix_types::{KeyIdentifier, OidName};
 
 use super::error;
 use crate::error::Error;
@@ -18,9 +18,6 @@ The SubjectKeyIdentifier extension provides a means of identifying certificates
 that contain a particular public key. Typically, this is a SHA-1 hash of the
 subjectPublicKey (excluding the tag, length, and number of unused bits).
 */
-
-/// Re-export KeyIdentifier from pkix-types for backward compatibility
-pub use tsumiki_pkix_types::KeyIdentifier;
 
 /// Subject Key Identifier extension ([RFC 5280 Section 4.2.1.2](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.2)).
 ///

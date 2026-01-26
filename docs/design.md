@@ -334,13 +334,17 @@ Tests use the [rstest](https://crates.io/crates/rstest) crate for parameterized 
 
 ```rust
 use rstest::rstest;
+use tsumiki_pkcs::sec1::ECPrivateKey;
+use tsumiki_pkcs::PrivateKeyExt;
+use tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve;
 
 #[rstest]
 #[case(NamedCurve::Secp256r1, 256)]
 #[case(NamedCurve::Secp384r1, 384)]
 #[case(NamedCurve::Secp521r1, 521)]
 fn test_key_size(#[case] curve: NamedCurve, #[case] expected: u32) {
-    let key = ECPrivateKey::with_curve(curve);
+    let private_key = vec![0u8; 32]; // dummy key bytes
+    let key = ECPrivateKey::new(private_key, Some(curve), None);
     assert_eq!(key.key_size(), expected);
 }
 ```

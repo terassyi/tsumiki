@@ -32,18 +32,19 @@ Pure Rust implementation of PKCS standards for tsumiki project.
 ## Usage
 
 ```rust
-use pkcs::pkcs8::PrivateKeyInfo;
-use pkcs::pkcs1::RsaPrivateKey;
-use pkcs::sec1::EcPrivateKey;
+use tsumiki_pkcs::pkcs8::OneAsymmetricKey;
+use tsumiki_pkcs::pkcs1::RSAPrivateKey;
+use tsumiki_pkcs::sec1::ECPrivateKey;
 use tsumiki::decoder::Decoder;
 use tsumiki::encoder::Encoder;
+use tsumiki_asn1::Element;
 
-// Decode PKCS#8 PrivateKeyInfo
-let pki: PrivateKeyInfo = element.decode()?;
+// Decode PKCS#8 OneAsymmetricKey
+let key: OneAsymmetricKey = element.decode()?;
 
 // Encode RSA private key
-let rsa_key = RsaPrivateKey { /* ... */ };
-let element: Element = rsa_key.encode()?;
+let rsa_key: RSAPrivateKey = element.decode()?;
+let encoded: Element = rsa_key.encode()?;
 ```
 
 ## References
