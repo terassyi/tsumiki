@@ -53,6 +53,8 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+#![forbid(unsafe_code)]
+
 pub mod error;
 
 use std::{

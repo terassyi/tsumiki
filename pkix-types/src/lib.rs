@@ -37,6 +37,8 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+#![forbid(unsafe_code)]
+
 use std::cell::Cell;
 
 pub mod algorithm;

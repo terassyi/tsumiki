@@ -32,6 +32,8 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
+#![forbid(unsafe_code)]
+
 use std::{fmt::Display, ops::Deref, str::FromStr};
 
 use chrono::NaiveDateTime;

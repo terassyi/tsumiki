@@ -6,10 +6,9 @@ use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 use tsumiki_asn1::{Element, ObjectIdentifier, OctetString};
+use tsumiki_pkix_types::{DirectoryString, Name};
 
 use super::error;
-use crate::DirectoryString;
-use crate::Name;
 use crate::error::Error;
 
 /// IP address or network range for use in X.509 extensions.

@@ -21,7 +21,8 @@ use crate::error::{Error, Result};
 ///
 /// Default is UTF8String as recommended by RFC 5280 Section 4.1.2.4.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub enum StringEncoding {
+#[allow(clippy::enum_variant_names)]
+enum StringEncoding {
     /// PrintableString (tag 0x13)
     PrintableString,
     /// UTF8String (tag 0x0C) - default as recommended by RFC 5280
@@ -66,8 +67,9 @@ impl DirectoryString {
         }
     }
 
-    /// Create a new DirectoryString with a specific encoding
-    pub fn with_encoding(value: String, encoding: StringEncoding) -> Self {
+    /// Create a new DirectoryString with a specific encoding (for testing)
+    #[cfg(test)]
+    fn with_encoding(value: String, encoding: StringEncoding) -> Self {
         Self { value, encoding }
     }
 
@@ -76,8 +78,9 @@ impl DirectoryString {
         &self.value
     }
 
-    /// Get the encoding type
-    pub fn encoding(&self) -> StringEncoding {
+    /// Get the encoding type (for testing)
+    #[cfg(test)]
+    fn encoding(&self) -> StringEncoding {
         self.encoding
     }
 }

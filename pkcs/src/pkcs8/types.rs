@@ -17,9 +17,9 @@ use crate::private_key::{KeyAlgorithm, PrivateKeyExt};
 
 // PKCS#8 specific algorithm OID constants (RFC 8410)
 /// OID for Ed25519 signature algorithm (RFC 8410).
-pub const OID_ED25519: &str = "1.3.101.112";
+pub(crate) const OID_ED25519: &str = "1.3.101.112";
 /// OID for Ed448 signature algorithm (RFC 8410).
-pub const OID_ED448: &str = "1.3.101.113";
+pub(crate) const OID_ED448: &str = "1.3.101.113";
 
 /*
 RFC 5958 - Asymmetric Key Packages
@@ -392,8 +392,8 @@ impl PrivateKeyExt for OneAsymmetricKey {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::pkcs8::AlgorithmParameters;
     use rstest::rstest;
+    use tsumiki_pkix_types::AlgorithmParameters;
 
     // Test constants for OIDs (dot notation strings)
     const RSA_ENCRYPTION_OID: &str = "1.2.840.113549.1.1.1";

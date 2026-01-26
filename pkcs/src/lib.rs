@@ -57,6 +57,8 @@
 //! let rustls_key: PrivateKeyDer = tsumiki_key.try_into()?;
 //! ```
 
+#![forbid(unsafe_code)]
+
 pub mod error;
 pub mod pkcs1;
 pub mod pkcs8;
@@ -70,4 +72,3 @@ pub mod sec1;
 pub use error::{Error, Result};
 pub use private_key::{KeyAlgorithm, PrivateKey, PrivateKeyExt};
 pub use public_key::{PublicKey, PublicKeyExt};
-pub use tsumiki_pem::ToPem;

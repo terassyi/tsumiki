@@ -52,6 +52,8 @@
 //! }
 //! ```
 
+#![forbid(unsafe_code)]
+
 use std::fmt;
 use std::str::FromStr;
 
@@ -61,7 +63,9 @@ use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 use tsumiki_asn1::{ASN1Object, BitString, Element, Integer, ObjectIdentifier};
 use tsumiki_pem::{FromPem, Pem};
-use tsumiki_pkix_types::OidName;
+use tsumiki_pkix_types::{
+    AlgorithmIdentifier, CertificateSerialNumber, Name, OidName, SubjectPublicKeyInfo,
+};
 
 use crate::error::{CertificateField, Error};
 use crate::extensions::{Extensions, ParsedExtensions};
@@ -74,15 +78,6 @@ mod rustls;
 mod types;
 
 pub use chain::CertificateChain;
-
-#[cfg(feature = "rustls")]
-pub use rustls_pki_types;
-
-// Re-export public types from pkix-types
-pub use tsumiki_pkix_types::{
-    AlgorithmIdentifier, AlgorithmParameters, CertificateSerialNumber, DirectoryString, Name,
-    RawAlgorithmParameter, SubjectPublicKeyInfo,
-};
 
 /*
 https://datatracker.ietf.org/doc/html/rfc5280#section-4.1
@@ -1182,13 +1177,14 @@ impl TryFrom<&TBSCertificate> for SerializableTBSCertificate {
 mod tests {
     use super::*;
     use crate::extensions::{Extension, Extensions, RawExtension};
-    use crate::types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
     use chrono::NaiveDate;
     use rstest::rstest;
     use std::str::FromStr;
     use tsumiki_asn1::{BitString, OctetString};
     use tsumiki_der::Der;
     use tsumiki_pem::Pem;
+    use tsumiki_pkix_types::{AlgorithmParameters, RawAlgorithmParameter};
+    use tsumiki_pkix_types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
 
     // AlgorithmIdentifier tests
     #[rstest(
@@ -1232,12 +1228,12 @@ mod tests {
         case(
             Element::Sequence(vec![
                 Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap()), // ecPublicKey
-                Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()), // secp256r1 (prime256v1)
+                Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::Secp256r1.oid_str()).unwrap()), // secp256r1 (prime256v1)
             ]),
             AlgorithmIdentifier {
                 algorithm: ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(),
                 parameters: Some(AlgorithmParameters::Other(
-                    RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()))
+                    RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::Secp256r1.oid_str()).unwrap()))
                 )),
             }
         )
@@ -1565,7 +1561,7 @@ mod tests {
             Element::Sequence(vec![
                 Element::Sequence(vec![
                     Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap()), // ecPublicKey
-                    Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()), // secp256r1
+                    Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::Secp256r1.oid_str()).unwrap()), // secp256r1
                 ]),
                 Element::BitString(BitString::new(0, vec![
                     0x04, // Uncompressed point
@@ -1577,7 +1573,7 @@ mod tests {
                 AlgorithmIdentifier::new_with_params(
                     ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(),
                     AlgorithmParameters::Other(
-                        RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap()))
+                        RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::Secp256r1.oid_str()).unwrap()))
                     ),
                 ),
                 BitString::new(0, vec![
@@ -2176,7 +2172,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             AlgorithmIdentifier {
                 algorithm: ObjectIdentifier::from_str(tsumiki_pkix_types::AlgorithmIdentifier::OID_EC_PUBLIC_KEY).unwrap(), // EC public key
                 parameters: Some(AlgorithmParameters::Other(
-                    RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::OID_SECP256R1).unwrap())) // prime256v1
+                    RawAlgorithmParameter::new(Element::ObjectIdentifier(ObjectIdentifier::from_str(tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve::Secp256r1.oid_str()).unwrap())) // prime256v1
                 )),
             },
             vec![0x04, 0x41] // Sample EC public key bytes
