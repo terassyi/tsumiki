@@ -68,11 +68,11 @@ test-all: test e2e test-doc
 test-rustls-integration:
     #!/bin/bash
     set -e
-    cargo run --package examples --bin tls-echo-server &
+    cargo run --package tsumiki-examples --bin tls-echo-server &
     SERVER_PID=$!
     trap "kill $SERVER_PID 2>/dev/null || true" EXIT
     sleep 2
-    cargo run --package examples --bin tls-echo-client -- --message "test" | grep -q "test"
+    cargo run --package tsumiki-examples --bin tls-echo-client -- --message "test" | grep -q "test"
     echo "rustls integration test passed"
 
 # Clean build artifacts
