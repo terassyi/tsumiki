@@ -27,7 +27,26 @@ pub struct DsaParameters {
 }
 
 impl DsaParameters {
-    /// Create new DSA parameters
+    /// Create new DSA parameters.
+    ///
+    /// # Arguments
+    ///
+    /// * `p` - Prime modulus
+    /// * `q` - Prime divisor (q divides p-1)
+    /// * `g` - Generator
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tsumiki_asn1::Integer;
+    /// use tsumiki_pkix_types::algorithm::parameters::dsa::DsaParameters;
+    ///
+    /// let p = Integer::from(vec![0x17u8]);
+    /// let q = Integer::from(vec![0x0bu8]);
+    /// let g = Integer::from(vec![0x02u8]);
+    ///
+    /// let params = DsaParameters::new(p, q, g);
+    /// ```
     pub fn new(p: Integer, q: Integer, g: Integer) -> Self {
         Self { p, q, g }
     }

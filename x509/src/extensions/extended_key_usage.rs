@@ -17,12 +17,9 @@ ExtendedKeyUsage ::= SEQUENCE SIZE (1..MAX) OF KeyPurposeId
 KeyPurposeId ::= OBJECT IDENTIFIER
 */
 
-/// Extended Key Usage extension
+/// Extended Key Usage extension ([RFC 5280 Section 4.2.1.12](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.12)).
 ///
 /// Indicates one or more purposes for which the certified public key may be used.
-///
-/// RFC 5280 Section 4.2.1.12: Extended Key Usage
-/// See: <https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.12>
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExtendedKeyUsage {
     pub purposes: Vec<ObjectIdentifier>,

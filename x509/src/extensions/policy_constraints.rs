@@ -41,7 +41,9 @@ of additional certificates that may appear in the path before policy mapping
 is no longer permitted.
 */
 
-/// PolicyConstraints extension
+/// Policy Constraints extension ([RFC 5280 Section 4.2.1.11](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.11)).
+///
+/// Constrains path validation by requiring explicit policy or inhibiting policy mapping.
 /// OID: 2.5.29.36
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PolicyConstraints {

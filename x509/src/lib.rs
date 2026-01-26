@@ -1,3 +1,57 @@
+//! # tsumiki-x509
+//!
+//! X.509 certificate parsing and handling.
+//!
+//! This crate implements [RFC 5280](https://datatracker.ietf.org/doc/html/rfc5280)
+//! with full support for X.509 v3 extensions.
+//!
+//! ## Features
+//!
+//! - Parse X.509 certificates (v1, v2, v3)
+//! - Type-safe extension access
+//! - Certificate chain handling
+//! - JSON/YAML serialization with serde
+//! - rustls integration (with `rustls` feature)
+//!
+//! ## Example
+//!
+//! ```no_run
+//! use std::str::FromStr;
+//! use tsumiki_x509::Certificate;
+//!
+//! let pem_data = "-----BEGIN CERTIFICATE-----
+//! ...
+//! -----END CERTIFICATE-----";
+//!
+//! let cert = Certificate::from_str(pem_data).unwrap();
+//!
+//! let tbs = cert.tbs_certificate();
+//! println!("Subject: {}", tbs.subject());
+//! println!("Issuer: {}", tbs.issuer());
+//! ```
+//!
+//! ## Type-Safe Extension Access
+//!
+//! ```no_run
+//! use tsumiki_x509::Certificate;
+//! use tsumiki_x509::extensions::BasicConstraints;
+//! use std::str::FromStr;
+//!
+//! let pem_data = "-----BEGIN CERTIFICATE-----
+//! ...
+//! -----END CERTIFICATE-----";
+//!
+//! let cert = Certificate::from_str(pem_data).unwrap();
+//!
+//! // Get extension with type safety
+//! if let Some(bc) = cert.extension::<BasicConstraints>().unwrap() {
+//!     println!("Is CA: {}", bc.ca);
+//!     if let Some(path_len) = bc.path_len_constraint {
+//!         println!("Path length: {}", path_len);
+//!     }
+//! }
+//! ```
+
 use std::fmt;
 use std::str::FromStr;
 
@@ -40,6 +94,28 @@ Certificate  ::=  SEQUENCE  {
 }
  */
 
+/// X.509 Certificate structure.
+///
+/// An X.509 certificate binds a public key to an identity (subject).
+/// It contains the certificate data (TBSCertificate), signature algorithm,
+/// and digital signature from the issuer.
+///
+/// Supports X.509 v1, v2, and v3 certificates with full extension support.
+///
+/// Defined in [RFC 5280 Section 4.1](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1).
+///
+/// # Example
+/// ```no_run
+/// use std::str::FromStr;
+/// use tsumiki_x509::Certificate;
+///
+/// let pem_data = "-----BEGIN CERTIFICATE-----
+/// ...
+/// -----END CERTIFICATE-----";
+///
+/// let cert = Certificate::from_str(pem_data).unwrap();
+/// println!("Subject: {}", cert.tbs_certificate().subject());
+/// ```
 #[derive(Debug, Clone, Deserialize)]
 pub struct Certificate {
     tbs_certificate: TBSCertificate,
@@ -66,11 +142,21 @@ impl Serialize for Certificate {
 }
 
 impl Certificate {
-    /// Get a specific extension by type
+    /// Get a specific extension by type.
+    ///
+    /// Returns `None` if the certificate has no extensions or the requested
+    /// extension is not present. Returns an error if parsing the extension fails.
     ///
     /// # Example
-    /// ```ignore
-    /// let basic_constraints = cert.extension::<BasicConstraints>()?;
+    /// ```no_run
+    /// use std::str::FromStr;
+    /// use tsumiki_x509::Certificate;
+    /// use tsumiki_x509::extensions::BasicConstraints;
+    ///
+    /// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
+    /// if let Some(bc) = cert.extension::<BasicConstraints>().unwrap() {
+    ///     println!("Is CA: {}", bc.ca);
+    /// }
     /// ```
     pub fn extension<T: extensions::Extension>(&self) -> Result<Option<T>, Error> {
         if let Some(ref exts) = self.tbs_certificate.extensions {
@@ -108,7 +194,11 @@ impl Certificate {
     /// This is useful to check which extensions are present without parsing them.
     ///
     /// # Example
-    /// ```ignore
+    /// ```no_run
+    /// use std::str::FromStr;
+    /// use tsumiki_x509::Certificate;
+    ///
+    /// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
     /// if let Some(oids) = cert.extension_oids() {
     ///     for oid in oids {
     ///         println!("Extension present: {}", oid);
@@ -522,6 +612,16 @@ TBSCertificate  ::=  SEQUENCE  {
 }
  */
 
+/// TBS (To Be Signed) Certificate structure.
+///
+/// Contains the actual certificate data that is signed by the issuer.
+/// This includes the subject, issuer, public key, validity period,
+/// and optional extensions.
+///
+/// The signature in the outer Certificate structure is computed over
+/// the DER encoding of this TBSCertificate.
+///
+/// Defined in [RFC 5280 Section 4.1](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TBSCertificate {
     version: Version,
@@ -765,14 +865,20 @@ SubjectPublicKeyInfo is now provided by pkix-types
 Extensions  ::=  SEQUENCE SIZE (1..MAX) OF Extension
 */
 
-// UniqueIdentifier is a BIT STRING used in X.509 v2 certificates
-// RFC 5280 Section 4.1.2.8: CAs conforming to this profile MUST NOT generate
-// certificates with unique identifiers. This field is deprecated.
-//
-// Note: In TBSCertificate, these appear as context-specific tagged fields:
-// - issuerUniqueID [1] IMPLICIT UniqueIdentifier OPTIONAL
-// - subjectUniqueID [2] IMPLICIT UniqueIdentifier OPTIONAL
-// The decoder must handle Element::ContextSpecific { slot: 1 or 2, element: BitString }
+/// Unique identifier for issuer or subject.
+///
+/// UniqueIdentifier is a BIT STRING used in X.509 v2 certificates to provide
+/// unique identifiers for certificate issuers and subjects when names are reused.
+///
+/// Defined in [RFC 5280 Section 4.1.2.8](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.8).
+///
+/// **Note**: RFC 5280 specifies that CAs conforming to this profile MUST NOT
+/// generate certificates with unique identifiers. This field is deprecated and
+/// should not be used in new certificates.
+///
+/// In TBSCertificate, these appear as context-specific tagged fields:
+/// - issuerUniqueID \[1\] IMPLICIT UniqueIdentifier OPTIONAL
+/// - subjectUniqueID \[2\] IMPLICIT UniqueIdentifier OPTIONAL
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UniqueIdentifier(BitString);
 
@@ -845,17 +951,26 @@ Extension  ::=  SEQUENCE  {
 }
 */
 
-// Version field in TBSCertificate
-// RFC 5280: version [0] EXPLICIT Version DEFAULT v1
-//
-// Note: In TBSCertificate, this appears as a context-specific tagged field:
-// - Element::ContextSpecific { slot: 0, element: Box<Element::Integer> }
-// - If slot 0 is absent, defaults to V1
-// - EXPLICIT tagging means the element is wrapped: [0] contains a full INTEGER
+/// X.509 certificate version.
+///
+/// Indicates the version of the encoded certificate:
+/// - V1: Basic certificate (no extensions, no unique identifiers)
+/// - V2: Added issuerUniqueID and subjectUniqueID fields (rarely used)
+/// - V3: Added extensions support (most common modern format)
+///
+/// Defined in [RFC 5280 Section 4.1.2.1](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.1).
+///
+/// In TBSCertificate, this appears as:
+/// - \[0\] EXPLICIT Version with DEFAULT v1
+/// - If the \[0\] tag is absent, the version defaults to V1
+/// - V2 and V3 certificates must include the version field
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Version {
+    /// Version 1: Basic certificate format
     V1 = 0,
+    /// Version 2: Adds unique identifiers (deprecated)
     V2 = 1,
+    /// Version 3: Adds extensions support (modern standard)
     V3 = 2,
 }
 
@@ -931,6 +1046,21 @@ Validity ::= SEQUENCE {
 }
 */
 
+/// Certificate validity period.
+///
+/// Specifies the time interval during which the CA warrants that it will
+/// maintain information about the status of the certificate.
+///
+/// The validity period is defined by two dates:
+/// - `not_before`: Certificate is not valid before this date
+/// - `not_after`: Certificate is not valid after this date
+///
+/// Defined in [RFC 5280 Section 4.1.2.5](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.5).
+///
+/// # Time Encoding
+/// RFC 5280 specifies:
+/// - UTCTime for dates from 1950 to 2049
+/// - GeneralizedTime for dates outside this range
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Validity {
     not_before: NaiveDateTime,

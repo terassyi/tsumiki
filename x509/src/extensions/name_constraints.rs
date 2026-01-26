@@ -172,13 +172,14 @@ impl Encoder<GeneralSubtree, Element> for GeneralSubtree {
     }
 }
 
-/// NameConstraints extension (RFC 5280 Section 4.2.1.10)
-/// Defines name spaces within which all subject names in subsequent certificates must be located
+/// Name Constraints extension ([RFC 5280 Section 4.2.1.10](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.10)).
+///
+/// Defines name spaces within which all subject names in subsequent certificates must be located.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NameConstraints {
-    /// permittedSubtrees [0]: Names that are permitted
+    /// permittedSubtrees \[0\]: Names that are permitted
     pub permitted_subtrees: Option<Vec<GeneralSubtree>>,
-    /// excludedSubtrees [1]: Names that are excluded
+    /// excludedSubtrees \[1\]: Names that are excluded
     pub excluded_subtrees: Option<Vec<GeneralSubtree>>,
 }
 

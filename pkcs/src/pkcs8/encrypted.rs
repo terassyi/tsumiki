@@ -1,7 +1,11 @@
-//! RFC 5958 EncryptedPrivateKeyInfo
+//! Encrypted private key format (EncryptedPrivateKeyInfo).
 //!
-//! Encrypted private key container. The actual encryption/decryption
-//! implementation requires RFC 8018 PBKDF2/PBES2 (not yet implemented).
+//! This module implements RFC 5958 EncryptedPrivateKeyInfo, which provides
+//! a container for encrypted private keys. The actual encryption/decryption
+//! operations require RFC 8018 PBKDF2/PBES2 support (not yet implemented).
+//!
+//! The structure stores the encryption algorithm parameters and the encrypted
+//! key data, allowing the key to be stored securely and decrypted when needed.
 
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
@@ -14,19 +18,38 @@ use super::Result;
 use super::error::Error;
 use tsumiki_pkix_types::AlgorithmIdentifier;
 
-/// EncryptedPrivateKeyInfo
+/// Encrypted private key container (EncryptedPrivateKeyInfo).
 ///
+/// Contains an encrypted private key along with the algorithm used for encryption.
+/// The encrypted data can be decrypted to obtain a OneAsymmetricKey structure.
+///
+/// # ASN.1 Definition
+///
+/// ```asn1
 /// EncryptedPrivateKeyInfo ::= SEQUENCE {
 ///     encryptionAlgorithm  EncryptionAlgorithmIdentifier,
 ///     encryptedData        EncryptedData
 /// }
 ///
 /// EncryptedData ::= OCTET STRING
+/// ```
+///
+/// # Example
+///
+/// ```no_run
+/// use tsumiki::decoder::Decoder;
+/// use tsumiki_pem::Pem;
+/// use tsumiki_pkcs::pkcs8::EncryptedPrivateKeyInfo;
+///
+/// let pem: Pem = "-----BEGIN ENCRYPTED PRIVATE KEY-----...".parse().unwrap();
+/// let encrypted: EncryptedPrivateKeyInfo = pem.decode().unwrap();
+/// println!("Encryption algorithm: {}", encrypted.encryption_algorithm.algorithm);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EncryptedPrivateKeyInfo {
-    /// Encryption algorithm identifier
+    /// Encryption algorithm identifier (includes parameters like IV, salt, etc.)
     pub encryption_algorithm: AlgorithmIdentifier,
-    /// Encrypted private key data
+    /// Encrypted private key data as octet string
     pub encrypted_data: OctetString,
 }
 

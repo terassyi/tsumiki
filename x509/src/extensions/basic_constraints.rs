@@ -17,9 +17,41 @@ BasicConstraints ::= SEQUENCE {
 }
 */
 
+/// Basic Constraints extension ([RFC 5280 Section 4.2.1.9](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.9)).
+///
+/// Identifies whether the subject of the certificate is a CA and the maximum
+/// depth of valid certification paths that include this certificate.
+///
+/// # Fields
+/// - `ca`: Whether the certified public key may be used to verify certificate signatures
+/// - `path_len_constraint`: Maximum number of non-self-issued intermediate certificates
+///   that may follow this certificate in a valid certification path
+///
+/// # Usage
+/// This extension is critical for PKI operation and should always be marked as critical
+/// in CA certificates. For end-entity certificates, `ca` should be FALSE.
+///
+/// # Example
+/// ```no_run
+/// use std::str::FromStr;
+/// use tsumiki_x509::Certificate;
+/// use tsumiki_x509::extensions::BasicConstraints;
+///
+/// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
+/// if let Some(bc) = cert.extension::<BasicConstraints>().unwrap() {
+///     if bc.ca {
+///         println!("This is a CA certificate");
+///         if let Some(pathlen) = bc.path_len_constraint {
+///             println!("Maximum path length: {}", pathlen);
+///         }
+///     }
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BasicConstraints {
+    /// Whether this certificate represents a CA
     pub ca: bool,
+    /// Optional maximum path length for certificate chains
     pub path_len_constraint: Option<u32>,
 }
 

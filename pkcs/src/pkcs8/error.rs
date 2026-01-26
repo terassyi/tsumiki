@@ -1,7 +1,9 @@
 use thiserror::Error;
 
+/// Result type alias for PKCS#8 operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Error type for PKCS#8 operations.
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Invalid version: {0}")]

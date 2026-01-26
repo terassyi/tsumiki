@@ -35,18 +35,54 @@ use crate::error::{Error, Result};
 ///
 /// A Name identifies an entity in an X.509 certificate. It consists of
 /// a sequence of Relative Distinguished Names (RDNs).
+///
+/// Defined in [RFC 5280 Section 4.1.2.4](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.4).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Name {
     pub rdn_sequence: Vec<RelativeDistinguishedName>,
 }
 
 impl Name {
-    /// Create a new Name with the given RDN sequence
+    /// Create a new Name with the given RDN sequence.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use tsumiki_asn1::ObjectIdentifier;
+    /// use tsumiki_pkix_types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
+    ///
+    /// let cn = AttributeTypeAndValue::new(
+    ///     ObjectIdentifier::from_str("2.5.4.3")?, // CN
+    ///     "example.com"
+    /// );
+    /// let rdn = RelativeDistinguishedName::new_single(cn);
+    /// let name = Name::new(vec![rdn]);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn new(rdn_sequence: Vec<RelativeDistinguishedName>) -> Self {
         Self { rdn_sequence }
     }
 
-    /// Get a reference to the RDN sequence
+    /// Get a reference to the RDN sequence.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use tsumiki_asn1::ObjectIdentifier;
+    /// use tsumiki_pkix_types::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
+    ///
+    /// let cn = AttributeTypeAndValue::new(
+    ///     ObjectIdentifier::from_str("2.5.4.3")?,
+    ///     "example.com"
+    /// );
+    /// let rdn = RelativeDistinguishedName::new_single(cn);
+    /// let name = Name::new(vec![rdn]);
+    ///
+    /// assert_eq!(name.rdn_sequence().len(), 1);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn rdn_sequence(&self) -> &[RelativeDistinguishedName] {
         &self.rdn_sequence
     }
@@ -113,20 +149,61 @@ impl Encoder<Name, Element> for Name {
 /// A set of attribute-value pairs that together form one component of a Name.
 /// Typically contains a single AttributeTypeAndValue, but can contain multiple
 /// for multi-valued RDNs.
+///
+/// Defined in [RFC 5280 Section 4.1.2.4](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.4).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RelativeDistinguishedName {
     pub attributes: Vec<AttributeTypeAndValue>,
 }
 
 impl RelativeDistinguishedName {
-    /// Create a new RDN with a single attribute
+    /// Create a new RDN with a single attribute.
+    ///
+    /// This is the most common case where an RDN contains exactly one
+    /// attribute-value pair (e.g., CN=example.com).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use tsumiki_asn1::ObjectIdentifier;
+    /// use tsumiki_pkix_types::{AttributeTypeAndValue, RelativeDistinguishedName};
+    ///
+    /// let attr = AttributeTypeAndValue::new(
+    ///     ObjectIdentifier::from_str("2.5.4.10")?, // O
+    ///     "Example Corp"
+    /// );
+    /// let rdn = RelativeDistinguishedName::new_single(attr);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn new_single(attribute: AttributeTypeAndValue) -> Self {
         Self {
             attributes: vec![attribute],
         }
     }
 
-    /// Create a new RDN with multiple attributes
+    /// Create a new RDN with multiple attributes.
+    ///
+    /// Multi-valued RDNs are less common but supported (e.g., CN=John+SN=Doe).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use tsumiki_asn1::ObjectIdentifier;
+    /// use tsumiki_pkix_types::{AttributeTypeAndValue, RelativeDistinguishedName};
+    ///
+    /// let cn = AttributeTypeAndValue::new(
+    ///     ObjectIdentifier::from_str("2.5.4.3")?,
+    ///     "John Doe"
+    /// );
+    /// let email = AttributeTypeAndValue::new(
+    ///     ObjectIdentifier::from_str("1.2.840.113549.1.9.1")?,
+    ///     "john@example.com"
+    /// );
+    /// let rdn = RelativeDistinguishedName::new(vec![cn, email]);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn new(attributes: Vec<AttributeTypeAndValue>) -> Self {
         Self { attributes }
     }
@@ -170,6 +247,8 @@ impl Encoder<RelativeDistinguishedName, Element> for RelativeDistinguishedName {
 ///
 /// The attribute value preserves its original encoding (PrintableString,
 /// UTF8String, etc.) to enable byte-identical re-encoding.
+///
+/// Defined in [RFC 5280 Section 4.1.2.4](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.4).
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct AttributeTypeAndValue {
     pub attribute_type: ObjectIdentifier,
@@ -221,7 +300,26 @@ impl AttributeTypeAndValue {
     /// OID for emailAddress
     pub const OID_EMAIL_ADDRESS: &'static str = "1.2.840.113549.1.9.1";
 
-    /// Create a new AttributeTypeAndValue with default UTF8String encoding
+    /// Create a new AttributeTypeAndValue with default UTF8String encoding.
+    ///
+    /// # Arguments
+    ///
+    /// * `attribute_type` - The OID identifying the attribute type (e.g., 2.5.4.3 for CN)
+    /// * `attribute_value` - The attribute value (automatically converted to DirectoryString)
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use tsumiki_asn1::ObjectIdentifier;
+    /// use tsumiki_pkix_types::AttributeTypeAndValue;
+    ///
+    /// // Using the CN OID constant
+    /// let cn_oid = ObjectIdentifier::from_str(AttributeTypeAndValue::OID_COMMON_NAME)?;
+    /// let attr = AttributeTypeAndValue::new(cn_oid, "example.com");
+    /// assert_eq!(attr.value_str(), "example.com");
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn new(
         attribute_type: ObjectIdentifier,
         attribute_value: impl Into<DirectoryString>,
@@ -232,7 +330,22 @@ impl AttributeTypeAndValue {
         }
     }
 
-    /// Get the string value of the attribute
+    /// Get the string value of the attribute.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use tsumiki_asn1::ObjectIdentifier;
+    /// use tsumiki_pkix_types::AttributeTypeAndValue;
+    ///
+    /// let attr = AttributeTypeAndValue::new(
+    ///     ObjectIdentifier::from_str("2.5.4.10")?,
+    ///     "Example Organization"
+    /// );
+    /// assert_eq!(attr.value_str(), "Example Organization");
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn value_str(&self) -> &str {
         self.attribute_value.as_str()
     }

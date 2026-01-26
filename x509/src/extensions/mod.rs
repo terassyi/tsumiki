@@ -55,7 +55,14 @@ pub use subject_alt_name::SubjectAltName;
 pub use subject_key_identifier::SubjectKeyIdentifier;
 use tsumiki_asn1::AsOid;
 
-/// RawExtension wraps tsumiki_pkix_types::Extension for X.509-specific operations
+/// Raw X.509 extension before type-specific parsing.
+///
+/// Wraps a generic extension (OID, critical flag, and DER-encoded value)
+/// and provides methods to parse it into specific extension types.
+///
+/// This is an intermediate representation used internally by the certificate
+/// parser. Most users should use the typed extension structs directly via
+/// `Certificate::extension::<T>()`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct RawExtension(tsumiki_pkix_types::Extension);
@@ -198,12 +205,22 @@ Extension  ::=  SEQUENCE  {
 }
 */
 
-/// Extensions is a sequence of RawExtension
-/// RFC 5280: Extensions ::= SEQUENCE SIZE (1..MAX) OF Extension
+/// Collection of X.509 v3 extensions ([RFC 5280 Section 4.1.2.9](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.9)).
 ///
-/// Note: In TBSCertificate, this appears as:
-/// - extensions [3] EXPLICIT Extensions OPTIONAL
-/// - Element::ContextSpecific { slot: 3, element: Box<Element::Sequence> }
+/// Extensions provide additional information and constraints for certificate
+/// usage, validation, and processing. Each extension has an OID, a critical flag,
+/// and a DER-encoded value.
+///
+/// # Critical vs Non-Critical
+/// - Critical extensions MUST be processed and understood by the certificate user
+/// - Non-critical extensions MAY be ignored if not understood
+///
+/// # ASN.1 Structure
+/// ```text
+/// Extensions ::= SEQUENCE SIZE (1..MAX) OF Extension
+/// ```
+///
+/// In TBSCertificate, this appears as \[3\] EXPLICIT Extensions OPTIONAL.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Extensions {
     pub(crate) extensions: Vec<RawExtension>,
@@ -301,17 +318,47 @@ impl Encoder<Extensions, Element> for Extensions {
     }
 }
 
-/// Trait for X.509 extensions that can be parsed from RawExtension.value
+/// Trait for typed X.509 extensions.
+///
+/// Implementors of this trait represent specific X.509 extensions
+/// and can be parsed from the raw extension value (DER-encoded ASN.1).
+///
+/// # Example
+/// ```no_run
+/// use std::str::FromStr;
+/// use tsumiki_x509::Certificate;
+/// use tsumiki_x509::extensions::{Extension, BasicConstraints};
+///
+/// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
+/// // Parse extension from certificate
+/// if let Some(bc) = cert.extension::<BasicConstraints>().unwrap() {
+///     println!("CA: {}, PathLen: {:?}", bc.ca, bc.path_len_constraint);
+/// }
+/// ```
 pub trait Extension: Sized {
+    /// The OID of this extension type as a string (e.g., "2.5.29.19" for BasicConstraints)
     const OID: &'static str;
 
+    /// Get the OID as an ObjectIdentifier.
+    ///
+    /// # Errors
+    /// Returns an error if the OID string is invalid.
     fn oid() -> Result<ObjectIdentifier, Error> {
         ObjectIdentifier::from_str(Self::OID).map_err(|e| Error::InvalidOidString {
             oid: Self::OID.to_string(),
             message: e.to_string(),
         })
     }
-    /// Parse the extension value (DER-encoded ASN.1 in OctetString)
+
+    /// Parse the extension from its DER-encoded value.
+    ///
+    /// The value is the content of the extension's OCTET STRING,
+    /// which itself contains DER-encoded ASN.1 data specific to
+    /// the extension type.
+    ///
+    /// # Errors
+    /// Returns an error if the extension value is malformed or
+    /// cannot be parsed according to the extension's schema.
     fn parse(value: &OctetString) -> Result<Self, Error>;
 }
 

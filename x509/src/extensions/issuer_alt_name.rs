@@ -24,7 +24,9 @@ DNS names, IP addresses, and URIs. Multiple instances of a name form may appear.
 This extension MUST be non-critical.
 */
 
-/// IssuerAltName represents the Issuer Alternative Name extension
+/// Issuer Alternative Name extension ([RFC 5280 Section 4.2.1.7](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.7)).
+///
+/// Allows additional identities to be bound to the issuer of the certificate.
 /// OID: 2.5.29.18
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IssuerAltName {

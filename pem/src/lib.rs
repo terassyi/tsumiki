@@ -1,3 +1,58 @@
+//! # tsumiki-pem
+//!
+//! PEM (Privacy Enhanced Mail) format handling for cryptographic data.
+//!
+//! This crate implements [RFC 7468](https://datatracker.ietf.org/doc/html/rfc7468)
+//! for encoding and decoding PEM format.
+//!
+//! ## What is PEM?
+//!
+//! PEM is a text-based format for encoding binary data. It wraps base64-encoded
+//! data with boundary markers like:
+//! ```text
+//! -----BEGIN CERTIFICATE-----
+//! MIIBkTCB+wIJAKHHCgVZU...
+//! -----END CERTIFICATE-----
+//! ```
+//!
+//! ## Supported Labels
+//!
+//! - `CERTIFICATE` - X.509 certificates
+//! - `PRIVATE KEY` - PKCS#8 private keys
+//! - `ENCRYPTED PRIVATE KEY` - PKCS#8 encrypted private keys
+//! - `RSA PRIVATE KEY` - PKCS#1 RSA private keys
+//! - `EC PRIVATE KEY` - SEC1 EC private keys
+//! - `PUBLIC KEY` - X.509 SubjectPublicKeyInfo
+//! - `RSA PUBLIC KEY` - PKCS#1 RSA public keys
+//!
+//! ## Example
+//!
+//! ```
+//! use std::str::FromStr;
+//! use tsumiki_pem::{Pem, Label};
+//!
+//! let pem_text = "-----BEGIN CERTIFICATE-----\nAAA=\n-----END CERTIFICATE-----";
+//! let pem = Pem::from_str(pem_text)?;
+//!
+//! assert_eq!(pem.label(), Label::Certificate);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Decoding to Raw Bytes
+//!
+//! ```
+//! use std::str::FromStr;
+//! use tsumiki::decoder::Decoder;
+//! use tsumiki_pem::Pem;
+//!
+//! let pem_text = "-----BEGIN CERTIFICATE-----\nAAA=\n-----END CERTIFICATE-----";
+//! let pem = Pem::from_str(pem_text)?;
+//!
+//! // Decode to raw bytes
+//! let bytes: Vec<u8> = pem.decode()?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+
 pub mod error;
 
 use std::{
@@ -18,6 +73,14 @@ const PUBLIC_KEY_LABEL: &str = "PUBLIC KEY";
 const RSA_PUBLIC_KEY_LABEL: &str = "RSA PUBLIC KEY";
 const CERTIFICATE_LABEL: &str = "CERTIFICATE";
 
+/// PEM label identifying the type of data enclosed.
+///
+/// Labels appear in the boundary markers of PEM format:
+/// ```text
+/// -----BEGIN <LABEL>-----
+/// ...
+/// -----END <LABEL>-----
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Label {
     /// PKCS#8 private key (non-encrypted)
@@ -34,6 +97,7 @@ pub enum Label {
     RSAPublicKey,
     /// X.509 Certificate
     Certificate,
+    /// Unknown or unrecognized label (for internal use)
     Unknown,
 }
 
@@ -87,10 +151,23 @@ impl Label {
     }
 }
 
-/*
-ref: https://www.rfc-editor.org/rfc/rfc7468.html#section-3
-*/
-
+/// A PEM-encoded data structure.
+///
+/// Represents data in PEM (Privacy Enhanced Mail) format, consisting of
+/// a label and base64-encoded content wrapped in boundary markers.
+///
+/// # Example
+/// ```
+/// use tsumiki_pem::{Pem, Label};
+/// use std::str::FromStr;
+///
+/// let pem_text = "-----BEGIN CERTIFICATE-----\nAAA=\n-----END CERTIFICATE-----";
+/// let pem = Pem::from_str(pem_text)?;
+/// assert_eq!(pem.label(), Label::Certificate);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
+///
+/// Reference: [RFC 7468](https://www.rfc-editor.org/rfc/rfc7468.html#section-3)
 #[derive(Debug, Clone)]
 pub struct Pem {
     label: Label,
@@ -98,19 +175,39 @@ pub struct Pem {
 }
 
 impl Pem {
+    /// Creates a new PEM structure from a label and base64-encoded data.
+    ///
+    /// # Example
+    /// ```
+    /// use tsumiki_pem::{Pem, Label};
+    ///
+    /// let pem = Pem::new(Label::Certificate, "AAAA".to_string());
+    /// assert_eq!(pem.label(), Label::Certificate);
+    /// ```
     pub fn new(label: Label, base64_data: String) -> Self {
         Pem { label, base64_data }
     }
 
+    /// Creates a PEM structure from raw bytes, encoding them as base64.
+    ///
+    /// # Example
+    /// ```
+    /// use tsumiki_pem::{Pem, Label};
+    ///
+    /// let data = vec![0u8, 1, 2, 3];
+    /// let pem = Pem::from_bytes(Label::Certificate, &data);
+    /// ```
     pub fn from_bytes(label: Label, data: &[u8]) -> Self {
         let base64_data = STANDARD.encode(data);
         Pem { label, base64_data }
     }
 
+    /// Returns the PEM label identifying the type of data.
     pub fn label(&self) -> Label {
         self.label
     }
 
+    /// Returns the base64-encoded data as a string.
     pub fn data(&self) -> &str {
         &self.base64_data
     }
@@ -192,7 +289,7 @@ impl Decoder<&str, Pem> for &str {
 ///
 /// # Example
 /// ```
-/// use pem::parse_many;
+/// use tsumiki_pem::parse_many;
 ///
 /// let pem_data = "-----BEGIN CERTIFICATE-----\nAAA=\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nBBB=\n-----END CERTIFICATE-----";
 /// let pems = parse_many(pem_data).unwrap();

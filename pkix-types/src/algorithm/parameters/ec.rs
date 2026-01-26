@@ -75,7 +75,18 @@ impl NamedCurve {
     pub const OID_SECT571K1: &'static str = "1.3.132.0.38";
     pub const OID_SECT571R1: &'static str = "1.3.132.0.39";
 
-    /// Get the OID string for this named curve
+    /// Get the OID string for this named curve.
+    ///
+    /// Returns the dotted-decimal OID string (e.g., "1.2.840.10045.3.1.7" for secp256r1).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve;
+    ///
+    /// assert_eq!(NamedCurve::Secp256r1.oid_str(), "1.2.840.10045.3.1.7");
+    /// assert_eq!(NamedCurve::Secp384r1.oid_str(), "1.3.132.0.34");
+    /// ```
     pub const fn oid_str(&self) -> &'static str {
         match self {
             Self::Secp192r1 => Self::OID_SECP192R1,
@@ -96,12 +107,27 @@ impl NamedCurve {
         }
     }
 
-    /// Get the OID for this named curve
+    /// Get the OID for this named curve.
+    ///
+    /// Returns an `ObjectIdentifier` parsed from the curve's OID string.
     ///
     /// # Errors
+    ///
     /// This function returns an error if the OID string fails to parse.
     /// In practice, this should never happen as all OID strings are statically defined
     /// and known to be valid.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use tsumiki_asn1::ObjectIdentifier;
+    /// use tsumiki_pkix_types::algorithm::parameters::ec::NamedCurve;
+    ///
+    /// let oid = NamedCurve::Secp256r1.oid()?;
+    /// assert_eq!(oid, ObjectIdentifier::from_str("1.2.840.10045.3.1.7")?);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn oid(&self) -> Result<ObjectIdentifier> {
         self.oid_str()
             .parse()
@@ -188,20 +214,52 @@ pub struct EcParameters {
 }
 
 impl EcParameters {
-    /// Create new EC parameters with a named curve
+    /// Create new EC parameters with a named curve.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tsumiki_pkix_types::algorithm::parameters::ec::{EcParameters, NamedCurve};
+    ///
+    /// let params = EcParameters::new(NamedCurve::Secp256r1);
+    /// assert_eq!(params.named_curve(), NamedCurve::Secp256r1);
+    /// ```
     pub fn new(named_curve: NamedCurve) -> Self {
         Self { named_curve }
     }
 
-    /// Get the named curve
+    /// Get the named curve.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tsumiki_pkix_types::algorithm::parameters::ec::{EcParameters, NamedCurve};
+    ///
+    /// let params = EcParameters::new(NamedCurve::Secp384r1);
+    /// assert_eq!(params.named_curve(), NamedCurve::Secp384r1);
+    /// ```
     pub fn named_curve(&self) -> NamedCurve {
         self.named_curve
     }
 
-    /// Get the OID for the named curve
+    /// Get the OID for the named curve.
     ///
     /// # Errors
+    ///
     /// Returns an error if the OID string fails to parse (should never happen).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use tsumiki_asn1::ObjectIdentifier;
+    /// use tsumiki_pkix_types::algorithm::parameters::ec::{EcParameters, NamedCurve};
+    ///
+    /// let params = EcParameters::new(NamedCurve::Secp256r1);
+    /// let oid = params.oid()?;
+    /// assert_eq!(oid, ObjectIdentifier::from_str("1.2.840.10045.3.1.7")?);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn oid(&self) -> Result<ObjectIdentifier> {
         self.named_curve.oid()
     }

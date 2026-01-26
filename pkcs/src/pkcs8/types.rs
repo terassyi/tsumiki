@@ -16,7 +16,9 @@ use crate::pkcs9::Attributes;
 use crate::private_key::{KeyAlgorithm, PrivateKeyExt};
 
 // PKCS#8 specific algorithm OID constants (RFC 8410)
+/// OID for Ed25519 signature algorithm (RFC 8410).
 pub const OID_ED25519: &str = "1.3.101.112";
+/// OID for Ed448 signature algorithm (RFC 8410).
 pub const OID_ED448: &str = "1.3.101.113";
 
 /*
@@ -45,12 +47,14 @@ PublicKey ::= BIT STRING
 Attributes ::= SET OF Attribute
 */
 
-/// PKCS#8 OneAsymmetricKey version
+/// PKCS#8 OneAsymmetricKey version.
+///
+/// Indicates whether the key structure includes an optional public key field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Version {
-    /// Version 1 (no public key)
+    /// Version 1 (no public key field)
     V1 = 0,
-    /// Version 2 (with public key)
+    /// Version 2 (includes public key field)
     V2 = 1,
 }
 
@@ -78,9 +82,10 @@ impl From<Version> for Integer {
     }
 }
 
-/// OneAsymmetricKey Attributes wrapper
+/// Wrapper for PKCS#9 Attributes used in OneAsymmetricKey.
 ///
-/// This structure wraps the Attributes type for use in OneAsymmetricKey.
+/// This newtype wraps [`Attributes`] to provide a distinct type for
+/// the optional attributes field in OneAsymmetricKey structures.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OneAsymmetricKeyAttributes(Attributes);
 
@@ -155,11 +160,28 @@ impl Encoder<OneAsymmetricKeyAttributes, Element> for OneAsymmetricKeyAttributes
     }
 }
 
-/// OneAsymmetricKey (PKCS#8 v2)
+/// PKCS#8 private key structure (OneAsymmetricKey).
 ///
-/// This structure can contain both private and public keys.
-/// When publicKey is present, version MUST be v2.
-/// When publicKey is absent, version SHOULD be v1.
+/// This is the modern PKCS#8 private key format defined in RFC 5958,
+/// supporting any asymmetric key algorithm. It can optionally include
+/// the corresponding public key.
+///
+/// # Versions
+///
+/// - **V1**: Basic format without public key field
+/// - **V2**: Extended format that includes optional public key field
+///
+/// # Example
+///
+/// ```no_run
+/// use tsumiki::decoder::Decoder;
+/// use tsumiki_pem::Pem;
+/// use tsumiki_pkcs::pkcs8::OneAsymmetricKey;
+///
+/// let pem: Pem = "-----BEGIN PRIVATE KEY-----...".parse().unwrap();
+/// let key: OneAsymmetricKey = pem.decode().unwrap();
+/// println!("Algorithm: {}", key.private_key_algorithm.algorithm);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OneAsymmetricKey {
     /// Version (v1 or v2)
@@ -168,10 +190,10 @@ pub struct OneAsymmetricKey {
     pub private_key_algorithm: AlgorithmIdentifier,
     /// Private key bytes (algorithm-specific format)
     pub private_key: OctetString,
-    /// Optional attributes [0]
+    /// Optional attributes \[0\]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub attributes: Option<OneAsymmetricKeyAttributes>,
-    /// Optional public key [1] (only in v2)
+    /// Optional public key \[1\] (only in v2)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_key: Option<BitString>,
 }

@@ -2,7 +2,10 @@ use thiserror::Error;
 
 use crate::extensions::error;
 
-/// Context for certificate-level errors
+/// Context identifying which certificate field caused an error.
+///
+/// Used in error messages to provide specific context about where
+/// parsing or validation failed within a certificate structure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CertificateField {
     Certificate,
@@ -42,6 +45,11 @@ impl std::fmt::Display for CertificateField {
     }
 }
 
+/// Errors that can occur during X.509 certificate parsing and validation.
+///
+/// This type covers structural errors (invalid ASN.1, missing fields),
+/// validation errors (invalid formats, out-of-range values), and
+/// errors from underlying libraries (PEM, DER, ASN.1 parsing).
 #[derive(Debug, Error)]
 pub enum Error {
     // Structured certificate errors

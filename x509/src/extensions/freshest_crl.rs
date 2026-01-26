@@ -49,12 +49,12 @@ Example scenario:
 - Bandwidth savings: 99% reduction for hourly updates
 */
 
-/// FreshestCRL extension identifies the location of delta CRL distribution points
-/// OID: 2.5.29.46
+/// Freshest CRL extension ([RFC 5280 Section 4.2.1.15](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.15)).
 ///
-/// This extension MUST be marked as non-critical.
+/// Identifies the location of delta CRL distribution points.
 /// The syntax is identical to CRLDistributionPoints, but the referenced CRLs
 /// are delta CRLs containing only certificates revoked since the base CRL.
+/// OID: 2.5.29.46
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FreshestCRL {
     /// Distribution points for delta CRLs

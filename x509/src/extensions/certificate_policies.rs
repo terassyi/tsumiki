@@ -48,7 +48,10 @@ DisplayText ::= CHOICE {
 /// CertPolicyId is an Object Identifier representing a certificate policy (RFC 5280)
 pub type CertPolicyId = ObjectIdentifier;
 
-/// CertificatePolicies represents the Certificate Policies extension
+/// Certificate Policies extension ([RFC 5280 Section 4.2.1.4](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.4)).
+///
+/// Contains a sequence of policy information terms, each of which consists
+/// of an OID and optional qualifiers.
 /// OID: 2.5.29.32
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CertificatePolicies {

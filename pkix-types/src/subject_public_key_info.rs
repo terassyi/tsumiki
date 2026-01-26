@@ -26,6 +26,11 @@ use crate::error::{Error, Result};
 /// Subject Public Key Info
 ///
 /// Contains the algorithm identifier and the public key itself.
+///
+/// Defined in [RFC 5280 Section 4.1.2.7](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.2.7).
+/// Algorithm-specific formats:
+/// - [RFC 3279](https://datatracker.ietf.org/doc/html/rfc3279) - RSA, DSA, and Diffie-Hellman
+/// - [RFC 5480](https://datatracker.ietf.org/doc/html/rfc5480) - Elliptic Curve Cryptography
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubjectPublicKeyInfo {
     algorithm: AlgorithmIdentifier,
@@ -33,7 +38,28 @@ pub struct SubjectPublicKeyInfo {
 }
 
 impl SubjectPublicKeyInfo {
-    /// Create a new SubjectPublicKeyInfo
+    /// Create a new SubjectPublicKeyInfo.
+    ///
+    /// # Arguments
+    ///
+    /// * `algorithm` - The algorithm identifier specifying the public key algorithm
+    /// * `subject_public_key` - The public key as a BIT STRING
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use tsumiki_asn1::{BitString, ObjectIdentifier};
+    /// use tsumiki_pkix_types::{AlgorithmIdentifier, AlgorithmParameters, SubjectPublicKeyInfo};
+    ///
+    /// // RSA public key
+    /// let oid = ObjectIdentifier::from_str("1.2.840.113549.1.1.1")?; // rsaEncryption
+    /// let algorithm = AlgorithmIdentifier::new_with_params(oid, AlgorithmParameters::Null);
+    /// let public_key = BitString::new(0, vec![0x30, 0x0d, 0x06, 0x09]);
+    ///
+    /// let spki = SubjectPublicKeyInfo::new(algorithm, public_key);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn new(algorithm: AlgorithmIdentifier, subject_public_key: BitString) -> Self {
         Self {
             algorithm,
@@ -41,12 +67,40 @@ impl SubjectPublicKeyInfo {
         }
     }
 
-    /// Get the algorithm identifier
+    /// Get the algorithm identifier.
+    ///
+    /// Returns a reference to the `AlgorithmIdentifier` that specifies
+    /// the public key algorithm and any associated parameters.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use tsumiki_pkix_types::SubjectPublicKeyInfo;
+    ///
+    /// # fn example(spki: &SubjectPublicKeyInfo) {
+    /// let algorithm = spki.algorithm();
+    /// println!("Algorithm: {:?}", algorithm.algorithm());
+    /// # }
+    /// ```
     pub fn algorithm(&self) -> &AlgorithmIdentifier {
         &self.algorithm
     }
 
-    /// Get the subject public key
+    /// Get the subject public key.
+    ///
+    /// Returns a reference to the `BitString` containing the public key bytes.
+    /// The interpretation of these bytes depends on the algorithm.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use tsumiki_pkix_types::SubjectPublicKeyInfo;
+    ///
+    /// # fn example(spki: &SubjectPublicKeyInfo) {
+    /// let public_key = spki.subject_public_key();
+    /// println!("Public key length: {} bits", public_key.bit_len());
+    /// # }
+    /// ```
     pub fn subject_public_key(&self) -> &BitString {
         &self.subject_public_key
     }

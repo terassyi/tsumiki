@@ -24,16 +24,57 @@ KeyUsage ::= BIT STRING {
 }
 */
 
+/// Key Usage extension ([RFC 5280 Section 4.2.1.3](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.3)).
+///
+/// Defines the purpose of the key contained in the certificate.
+/// This extension is typically marked as critical.
+///
+/// # Key Usage Bits
+/// - `digital_signature`: Verify digital signatures (other than certificates and CRLs)
+/// - `content_commitment`: Non-repudiation, proof of origin (formerly nonRepudiation)
+/// - `key_encipherment`: Encrypt keys (e.g., for key transport)
+/// - `data_encipherment`: Directly encrypt user data (rarely used)
+/// - `key_agreement`: Key agreement (e.g., Diffie-Hellman)
+/// - `key_cert_sign`: Verify signatures on certificates
+/// - `crl_sign`: Verify signatures on CRLs
+/// - `encipher_only`: Only for encryption with key agreement
+/// - `decipher_only`: Only for decryption with key agreement
+///
+/// # Example
+/// ```no_run
+/// use std::str::FromStr;
+/// use tsumiki_x509::Certificate;
+/// use tsumiki_x509::extensions::KeyUsage;
+///
+/// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
+/// if let Some(ku) = cert.extension::<KeyUsage>().unwrap() {
+///     if ku.digital_signature {
+///         println!("Can be used for digital signatures");
+///     }
+///     if ku.key_cert_sign {
+///         println!("This is a CA certificate");
+///     }
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct KeyUsage {
+    /// Verify digital signatures on data
     pub digital_signature: bool,
+    /// Non-repudiation (content commitment)
     pub content_commitment: bool,
+    /// Encrypt keys for key transport
     pub key_encipherment: bool,
+    /// Directly encrypt user data
     pub data_encipherment: bool,
+    /// Key agreement protocol
     pub key_agreement: bool,
+    /// Verify certificate signatures (CA certificates)
     pub key_cert_sign: bool,
+    /// Verify CRL signatures
     pub crl_sign: bool,
+    /// Encryption only (with key agreement)
     pub encipher_only: bool,
+    /// Decryption only (with key agreement)
     pub decipher_only: bool,
 }
 

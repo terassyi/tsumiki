@@ -36,7 +36,9 @@ ReasonFlags ::= BIT STRING {
     aACompromise            (8) }
 */
 
-/// CRLDistributionPoints represents the CRL Distribution Points extension
+/// CRL Distribution Points extension ([RFC 5280 Section 4.2.1.13](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.13)).
+///
+/// Identifies how CRL information is obtained.
 /// OID: 2.5.29.31
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CRLDistributionPoints {
@@ -55,8 +57,8 @@ pub struct DistributionPoint {
 ///
 /// RFC 5280 Section 4.2.1.13:
 /// DistributionPointName ::= CHOICE {
-///     fullName                [0]     GeneralNames,
-///     nameRelativeToCRLIssuer [1]     RelativeDistinguishedName }
+///     fullName                \[0\]     GeneralNames,
+///     nameRelativeToCRLIssuer \[1\]     RelativeDistinguishedName }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum DistributionPointName {
     /// Full name as a sequence of GeneralNames

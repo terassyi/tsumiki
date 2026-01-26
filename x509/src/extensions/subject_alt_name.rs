@@ -16,8 +16,38 @@ SubjectAltName ::= GeneralNames
 GeneralNames ::= SEQUENCE SIZE (1..MAX) OF GeneralName
 */
 
+/// Subject Alternative Name extension ([RFC 5280 Section 4.2.1.6](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.6)).
+///
+/// Allows additional identities to be bound to the subject of the certificate.
+/// This extension is widely used for TLS certificates to specify hostnames,
+/// email addresses, and IP addresses.
+///
+/// # Common Uses
+/// - DNS names for TLS/SSL certificates (e.g., "www.example.com", "*.example.com")
+/// - Email addresses for S/MIME certificates
+/// - IP addresses for host certificates
+/// - URIs for web services
+///
+/// # Example
+/// ```no_run
+/// use std::str::FromStr;
+/// use tsumiki_x509::Certificate;
+/// use tsumiki_x509::extensions::{SubjectAltName, GeneralName};
+///
+/// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
+/// if let Some(san) = cert.extension::<SubjectAltName>().unwrap() {
+///     for name in &san.names {
+///         match name {
+///             GeneralName::DnsName(dns) => println!("DNS: {}", dns),
+///             GeneralName::IpAddress(ip) => println!("IP: {:?}", ip),
+///             _ => {}
+///         }
+///     }
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SubjectAltName {
+    /// List of alternative names for the certificate subject
     pub names: Vec<GeneralName>,
 }
 

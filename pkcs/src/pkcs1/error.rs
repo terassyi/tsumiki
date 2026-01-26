@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+/// Error type for PKCS#1 operations.
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("ASN.1 error: {0}")]
@@ -39,4 +40,5 @@ pub enum Error {
     InvalidDer(#[from] tsumiki_der::error::Error),
 }
 
+/// Result type alias for PKCS#1 operations.
 pub type Result<T> = std::result::Result<T, Error>;

@@ -32,10 +32,12 @@ ECPrivateKey ::= SEQUENCE {
 }
 */
 
-/// SEC1 ECPrivateKey version
+/// SEC1 ECPrivateKey version.
+///
+/// SEC1 defines only version 1 (ecPrivkeyVer1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Version {
-    /// ecPrivkeyVer1 (value 1)
+    /// ecPrivkeyVer1 - the only version defined in SEC1
     V1 = 1,
 }
 
@@ -78,17 +80,41 @@ impl Decoder<Element, Version> for Element {
     }
 }
 
-/// SEC1 EC Private Key structure (RFC 5915)
+/// SEC1 EC Private Key structure (RFC 5915).
+///
+/// Contains an elliptic curve private key along with optional curve parameters
+/// and corresponding public key. This format is specific to EC keys.
+///
+/// # Fields
+///
+/// - `version` - Always V1 for SEC1 keys
+/// - `private_key` - The EC private key value (scalar)
+/// - `parameters` - Optional named curve identifier \[0\]
+/// - `public_key` - Optional EC public key point \[1\]
+///
+/// # Example
+///
+/// ```no_run
+/// use tsumiki::decoder::Decoder;
+/// use tsumiki_pem::Pem;
+/// use tsumiki_pkcs::sec1::ECPrivateKey;
+///
+/// let pem: Pem = "-----BEGIN EC PRIVATE KEY-----...".parse().unwrap();
+/// let key: ECPrivateKey = pem.decode().unwrap();
+/// if let Some(curve) = key.curve_name() {
+///     println!("Curve: {}", curve);
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ECPrivateKey {
-    /// Version (always V1)
+    /// Version (always V1 for SEC1)
     pub version: Version,
-    /// Private key value as octet string
+    /// Private key scalar value as octet string
     pub private_key: OctetString,
-    /// EC parameters (named curve) - OPTIONAL [0]
+    /// Named curve parameters - OPTIONAL \[0\]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parameters: Option<NamedCurve>,
-    /// Public key - OPTIONAL [1]
+    /// EC public key point - OPTIONAL \[1\]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub public_key: Option<BitString>,
 }

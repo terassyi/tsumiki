@@ -45,12 +45,35 @@ impl Serialize for CertificateSerialNumber {
 }
 
 impl CertificateSerialNumber {
-    /// Create from raw bytes (IMPLICIT INTEGER encoding)
+    /// Create from raw bytes (IMPLICIT INTEGER encoding).
+    ///
+    /// The bytes are interpreted as a big-endian signed integer.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tsumiki_pkix_types::CertificateSerialNumber;
+    ///
+    /// let serial = CertificateSerialNumber::from_bytes(vec![0x01, 0x02, 0x03]);
+    /// assert_eq!(serial.format_hex(), "01:02:03");
+    /// ```
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
         Integer::from(bytes).into()
     }
 
-    /// Format as hex string with colon separators (e.g., "00:f7:e9:eb")
+    /// Format as hex string with colon separators.
+    ///
+    /// Returns a lowercase hexadecimal representation with colon separators
+    /// between each byte (e.g., "00:f7:e9:eb"), similar to OpenSSL's format.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tsumiki_pkix_types::CertificateSerialNumber;
+    ///
+    /// let serial = CertificateSerialNumber::from_bytes(vec![0x48, 0xc3, 0x54, 0x8e]);
+    /// assert_eq!(serial.format_hex(), "48:c3:54:8e");
+    /// ```
     pub fn format_hex(&self) -> String {
         let bytes = self.inner.as_ref().to_signed_bytes_be();
         bytes

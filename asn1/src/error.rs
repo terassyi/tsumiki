@@ -1,7 +1,10 @@
+//! Error types for ASN.1 parsing and encoding.
+
 use std::num::ParseIntError;
 
 use thiserror::Error;
 
+/// Errors that can occur during ASN.1 parsing and encoding operations.
 #[derive(Debug, Error)]
 pub enum Error {
     // Boolean errors

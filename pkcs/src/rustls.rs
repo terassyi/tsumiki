@@ -1,6 +1,31 @@
-//! Conversion between rustls-pki-types and tsumiki pkcs types.
+//! Integration with rustls-pki-types.
+//!
+//! This module provides bidirectional conversion between rustls-pki-types
+//! key structures and tsumiki's PKCS key types. It enables seamless
+//! interoperability with the rustls TLS library.
 //!
 //! This module is only compiled when the `rustls` feature is enabled.
+//!
+//! # Supported Conversions
+//!
+//! - `PrivateKeyDer` ↔ `PrivateKey` (unified enum)
+//! - `PrivatePkcs1KeyDer` ↔ `RSAPrivateKey`
+//! - `PrivateSec1KeyDer` ↔ `ECPrivateKey`
+//! - `PrivatePkcs8KeyDer` ↔ `OneAsymmetricKey`
+//!
+//! # Example
+//!
+//! ```ignore
+//! use rustls_pki_types::PrivateKeyDer;
+//! use tsumiki_pkcs::PrivateKey;
+//!
+//! // Convert from rustls to tsumiki
+//! let rustls_key: PrivateKeyDer = load_key()?;
+//! let tsumiki_key = PrivateKey::try_from(rustls_key)?;
+//!
+//! // Convert back to rustls
+//! let rustls_key: PrivateKeyDer = tsumiki_key.try_into()?;
+//! ```
 
 use rustls_pki_types::{PrivateKeyDer, PrivatePkcs1KeyDer, PrivatePkcs8KeyDer, PrivateSec1KeyDer};
 use tsumiki::decoder::Decoder;
@@ -18,6 +43,8 @@ use crate::sec1::{self, ECPrivateKey};
 // ============================================================================
 
 /// Decodes DER bytes into an ASN.1 element.
+///
+/// This is a helper function used internally for converting rustls key types.
 fn decode_der_to_element(der_bytes: &[u8]) -> Result<Element> {
     let der = der_bytes.decode()?;
     let asn1_obj = der.decode()?;
@@ -29,6 +56,8 @@ fn decode_der_to_element(der_bytes: &[u8]) -> Result<Element> {
 }
 
 /// Encodes an ASN.1 element into DER bytes.
+///
+/// This is a helper function used internally for converting tsumiki key types to rustls.
 fn encode_element_to_der(element: Element) -> Result<Vec<u8>> {
     let asn1_obj = ASN1Object::new(vec![element]);
     let der = asn1_obj.encode()?;

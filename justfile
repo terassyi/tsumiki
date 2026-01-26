@@ -52,8 +52,17 @@ e2e:
 e2ev:
     cargo test --package tsumiki-cli --test '*' -- --nocapture
 
+# Run doc tests (includes documentation warnings check)
+test-doc:
+    RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
+    cargo test --all-features --doc
+
+# Build and open documentation in browser
+doc:
+    cargo doc --no-deps --all-features --open
+
 # Run all tests (unit + e2e)
-test-all: test e2e
+test-all: test e2e test-doc
 
 # Run rustls integration test (mTLS connection)
 test-rustls-integration:
