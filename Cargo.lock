@@ -314,19 +314,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "examples"
-version = "0.0.1"
-dependencies = [
- "rustls",
- "tokio",
- "tokio-rustls",
- "tsumiki",
- "tsumiki-pem",
- "tsumiki-pkcs",
- "tsumiki-x509",
-]
-
-[[package]]
 name = "find-msvc-tools"
 version = "0.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1161,6 +1148,19 @@ dependencies = [
  "thiserror",
  "tsumiki",
  "tsumiki-pem",
+]
+
+[[package]]
+name = "tsumiki-examples"
+version = "0.0.1"
+dependencies = [
+ "rustls",
+ "tokio",
+ "tokio-rustls",
+ "tsumiki",
+ "tsumiki-pem",
+ "tsumiki-pkcs",
+ "tsumiki-x509",
 ]
 
 [[package]]
