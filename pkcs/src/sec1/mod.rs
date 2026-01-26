@@ -1,7 +1,9 @@
-//! SEC1 (RFC 5915) - Elliptic Curve Private Key Structure
+//! SEC1 - Elliptic Curve Private Key Structure
 //!
 //! This module implements the ECPrivateKey structure as defined in
-//! [RFC 5915](https://datatracker.ietf.org/doc/html/rfc5915).
+//! [RFC 5915](https://datatracker.ietf.org/doc/html/rfc5915) (Elliptic Curve Private Key Format).
+//!
+//! Provides a format for storing EC private keys with optional public key and curve parameters.
 
 pub mod error;
 mod types;

@@ -19,12 +19,38 @@ that contain a particular public key. Typically, this is a SHA-1 hash of the
 subjectPublicKey (excluding the tag, length, and number of unused bits).
 */
 
-// Re-export KeyIdentifier from pkix-types for backward compatibility
+/// Re-export KeyIdentifier from pkix-types for backward compatibility
 pub use tsumiki_pkix_types::KeyIdentifier;
 
+/// Subject Key Identifier extension ([RFC 5280 Section 4.2.1.2](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.2)).
+///
+/// Provides a means of identifying certificates that contain a particular public key.
+/// This extension facilitates certification path construction by providing a unique
+/// identifier for the certificate's public key.
+///
+/// # Key Identifier Format
+/// The key identifier is typically a SHA-1 hash (20 bytes) of the subject's public key,
+/// calculated over the subjectPublicKey field (excluding tag, length, and unused bits).
+///
+/// # Usage
+/// - Required for CA certificates
+/// - Recommended for all certificates
+/// - Used in conjunction with Authority Key Identifier extension
+///
+/// # Example
+/// ```no_run
+/// use std::str::FromStr;
+/// use tsumiki_x509::Certificate;
+/// use tsumiki_x509::extensions::SubjectKeyIdentifier;
+///
+/// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
+/// if let Some(ski) = cert.extension::<SubjectKeyIdentifier>().unwrap() {
+///     println!("Key ID: {:?}", ski.key_identifier.as_bytes());
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct SubjectKeyIdentifier {
-    /// KeyIdentifier: typically a SHA-1 hash of the subject's public key (20 bytes)
+    /// Key identifier, typically a SHA-1 hash of the subject's public key (20 bytes)
     pub key_identifier: KeyIdentifier,
 }
 

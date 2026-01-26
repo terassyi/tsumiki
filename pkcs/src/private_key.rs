@@ -14,10 +14,13 @@
 //! The [`PrivateKeyExt`] trait provides a unified interface for accessing
 //! common private key properties across different formats:
 //!
-//! ```ignore
-//! use pkcs::{PrivateKey, PrivateKeyExt};
+//! ```no_run
+//! use tsumiki::decoder::Decoder;
+//! use tsumiki_pem::Pem;
+//! use tsumiki_pkcs::{PrivateKey, PrivateKeyExt};
 //!
-//! let key: PrivateKey = /* ... */;
+//! let pem: Pem = "-----BEGIN PRIVATE KEY-----...".parse().unwrap();
+//! let key: PrivateKey = pem.decode().unwrap();
 //! println!("Algorithm: {:?}", key.algorithm());
 //! println!("Key size: {} bits", key.key_size());
 //! if let Some(pubkey) = key.public_key_bytes() {
@@ -101,13 +104,13 @@ impl std::fmt::Display for KeyAlgorithm {
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use pkcs::{PrivateKey, PrivateKeyExt};
+/// ```no_run
 /// use tsumiki::decoder::Decoder;
 /// use tsumiki_pem::Pem;
+/// use tsumiki_pkcs::{PrivateKey, PrivateKeyExt};
 ///
-/// let pem: Pem = "-----BEGIN RSA PRIVATE KEY-----...".parse()?;
-/// let key: PrivateKey = pem.decode()?;
+/// let pem: Pem = "-----BEGIN RSA PRIVATE KEY-----...".parse().unwrap();
+/// let key: PrivateKey = pem.decode().unwrap();
 ///
 /// println!("Algorithm: {}", key.algorithm());
 /// println!("Key size: {} bits", key.key_size());
@@ -129,10 +132,13 @@ pub trait PrivateKeyExt {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use pkcs::{PrivateKey, PrivateKeyExt};
+    /// ```no_run
+    /// use tsumiki::decoder::Decoder;
+    /// use tsumiki_pem::Pem;
+    /// use tsumiki_pkcs::{PrivateKey, PrivateKeyExt};
     ///
-    /// let key: PrivateKey = /* ... */;
+    /// let pem: Pem = "-----BEGIN PRIVATE KEY-----...".parse().unwrap();
+    /// let key: PrivateKey = pem.decode().unwrap();
     /// match key.key_size() {
     ///     0 => println!("Key size unknown"),
     ///     bits => println!("Key size: {} bits", bits),
@@ -144,16 +150,20 @@ pub trait PrivateKeyExt {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use pkcs::{PrivateKey, PrivateKeyExt, KeyAlgorithm};
+    /// ```no_run
+    /// use tsumiki::decoder::Decoder;
+    /// use tsumiki_pem::Pem;
+    /// use tsumiki_pkcs::{PrivateKey, PrivateKeyExt, KeyAlgorithm};
     ///
-    /// let key: PrivateKey = /* ... */;
+    /// let pem: Pem = "-----BEGIN PRIVATE KEY-----...".parse().unwrap();
+    /// let key: PrivateKey = pem.decode().unwrap();
     /// match key.algorithm() {
     ///     KeyAlgorithm::Rsa => println!("RSA key"),
     ///     KeyAlgorithm::Ec => println!("Elliptic curve key"),
     ///     KeyAlgorithm::Ed25519 => println!("Ed25519 key"),
     ///     KeyAlgorithm::Ed448 => println!("Ed448 key"),
     ///     KeyAlgorithm::Unknown => println!("Unknown algorithm"),
+    ///     _ => println!("Other algorithm"),
     /// }
     /// ```
     fn algorithm(&self) -> KeyAlgorithm;
@@ -173,10 +183,13 @@ pub trait PrivateKeyExt {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use pkcs::{PrivateKey, PrivateKeyExt};
+    /// ```no_run
+    /// use tsumiki::decoder::Decoder;
+    /// use tsumiki_pem::Pem;
+    /// use tsumiki_pkcs::{PrivateKey, PrivateKeyExt};
     ///
-    /// let key: PrivateKey = /* ... */;
+    /// let pem: Pem = "-----BEGIN PRIVATE KEY-----...".parse().unwrap();
+    /// let key: PrivateKey = pem.decode().unwrap();
     /// if let Some(bytes) = key.public_key_bytes() {
     ///     println!("Public key: {} bytes", bytes.len());
     /// }
@@ -201,14 +214,17 @@ pub trait PrivateKeyExt {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use pkcs::{PrivateKey, PrivateKeyExt, PublicKey};
+    /// ```no_run
+    /// use tsumiki::decoder::Decoder;
+    /// use tsumiki_pem::Pem;
+    /// use tsumiki_pkcs::{PrivateKey, PrivateKeyExt, PublicKey};
     /// use tsumiki_pem::ToPem;
     ///
-    /// let key: PrivateKey = /* ... */;
+    /// let pem: Pem = "-----BEGIN PRIVATE KEY-----...".parse().unwrap();
+    /// let key: PrivateKey = pem.decode().unwrap();
     /// if let Some(pubkey) = key.public_key() {
     ///     // Export to PEM format
-    ///     let pem = pubkey.to_pem()?;
+    ///     let pem = pubkey.to_pem().unwrap();
     ///     println!("{}", pem);
     ///
     ///     // Check the format

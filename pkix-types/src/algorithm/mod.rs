@@ -106,7 +106,11 @@ impl<'de> Deserialize<'de> for AlgorithmParameters {
 
 /// Algorithm Identifier
 ///
-/// [RFC 5280 Section 4.1.1.2](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.1.2):
+/// Defined in [RFC 5280 Section 4.1.1.2](https://datatracker.ietf.org/doc/html/rfc5280#section-4.1.1.2).
+/// Algorithm-specific formats defined in:
+/// - [RFC 3279](https://datatracker.ietf.org/doc/html/rfc3279) - Algorithms and Identifiers for X.509 PKI
+/// - [RFC 5480](https://datatracker.ietf.org/doc/html/rfc5480) - Elliptic Curve Cryptography SubjectPublicKeyInfo Format
+///
 /// ```asn1
 /// AlgorithmIdentifier ::= SEQUENCE {
 ///     algorithm   OBJECT IDENTIFIER,
@@ -157,7 +161,23 @@ impl AlgorithmIdentifier {
     pub const OID_PKCS12_PBE_SHA1_RC2_128: &'static str = "1.2.840.113549.1.12.1.5"; // pbeWithSHA1And128BitRC2-CBC
     pub const OID_PKCS12_PBE_SHA1_RC2_40: &'static str = "1.2.840.113549.1.12.1.6"; // pbeWithSHA1And40BitRC2-CBC
 
-    /// Create a new AlgorithmIdentifier with algorithm OID only
+    /// Create a new AlgorithmIdentifier with algorithm OID only.
+    ///
+    /// The parameters field will be `None`, indicating the field is omitted
+    /// (not the same as explicit NULL).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use tsumiki_asn1::ObjectIdentifier;
+    /// use tsumiki_pkix_types::AlgorithmIdentifier;
+    ///
+    /// let oid = ObjectIdentifier::from_str("1.2.840.10045.4.3.2")?; // ecdsa-with-SHA256
+    /// let alg = AlgorithmIdentifier::new(oid);
+    /// assert!(alg.parameters().is_none());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn new(algorithm: ObjectIdentifier) -> Self {
         Self {
             algorithm,
@@ -165,7 +185,20 @@ impl AlgorithmIdentifier {
         }
     }
 
-    /// Create a new AlgorithmIdentifier with parameters
+    /// Create a new AlgorithmIdentifier with parameters.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use tsumiki_asn1::ObjectIdentifier;
+    /// use tsumiki_pkix_types::{AlgorithmIdentifier, AlgorithmParameters};
+    ///
+    /// let oid = ObjectIdentifier::from_str("1.2.840.113549.1.1.1")?; // rsaEncryption
+    /// let alg = AlgorithmIdentifier::new_with_params(oid, AlgorithmParameters::Null);
+    /// assert!(alg.parameters().is_some());
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn new_with_params(algorithm: ObjectIdentifier, parameters: AlgorithmParameters) -> Self {
         Self {
             algorithm,
@@ -173,21 +206,61 @@ impl AlgorithmIdentifier {
         }
     }
 
-    /// Get the algorithm OID
+    /// Get the algorithm OID.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::str::FromStr;
+    /// use tsumiki_asn1::ObjectIdentifier;
+    /// use tsumiki_pkix_types::AlgorithmIdentifier;
+    ///
+    /// let oid = ObjectIdentifier::from_str("1.2.840.113549.1.1.1")?;
+    /// let alg = AlgorithmIdentifier::new(oid.clone());
+    /// assert_eq!(alg.algorithm(), &oid);
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
     pub fn algorithm(&self) -> &ObjectIdentifier {
         &self.algorithm
     }
 
-    /// Get the parameters
+    /// Get the parameters.
+    ///
+    /// Returns `None` if the parameters field is omitted, `Some(AlgorithmParameters::Null)`
+    /// if explicitly set to NULL (common for RSA), or `Some(AlgorithmParameters::Other(...))`
+    /// for other parameter types.
     pub fn parameters(&self) -> &Option<AlgorithmParameters> {
         &self.parameters
     }
 
-    /// Get typed parameters
-    pub fn parameter<P: AlgorithmParameter>(&self) -> crate::error::Result<Option<P>> {
+    /// Get typed parameters.
+    ///
+    /// This method attempts to parse the parameters into a specific type that implements
+    /// `AlgorithmParameter` (e.g., `EcParameters`, `DsaParameters`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The parameters are explicitly NULL (cannot convert NULL to typed parameter)
+    /// - The parameter format does not match the expected type
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use tsumiki_pkix_types::{AlgorithmIdentifier, EcParameters};
+    ///
+    /// # fn example(alg_id: AlgorithmIdentifier) -> Result<(), Box<dyn std::error::Error>> {
+    /// // Try to get EC parameters
+    /// if let Some(ec_params) = alg_id.parameter::<EcParameters>()? {
+    ///     println!("Curve: {:?}", ec_params.named_curve());
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn parameter<P: AlgorithmParameter>(&self) -> Result<Option<P>> {
         match &self.parameters {
             None => Ok(None),
-            Some(AlgorithmParameters::Null) => Err(Error::NullParameterNotSupported.into()),
+            Some(AlgorithmParameters::Null) => Err(Error::NullParameterNotSupported),
             Some(AlgorithmParameters::Other(raw)) => {
                 Ok(Some(P::parse(raw).map_err(Error::ParameterError)?))
             }

@@ -1,3 +1,49 @@
+//! # tsumiki-der
+//!
+//! DER (Distinguished Encoding Rules) parsing and encoding.
+//!
+//! This crate implements DER encoding as defined in
+//! [ITU-T X.690](https://www.itu.int/rec/T-REC-X.690).
+//!
+//! ## What is DER?
+//!
+//! DER is a binary encoding format for ASN.1 data structures. It uses a
+//! Tag-Length-Value (TLV) structure where:
+//! - **Tag**: Identifies the data type (INTEGER, SEQUENCE, etc.)
+//! - **Length**: The size of the value in bytes
+//! - **Value**: The actual data
+//!
+//! ## Example
+//!
+//! ```
+//! use tsumiki::decoder::Decoder;
+//! use tsumiki_der::Der;
+//!
+//! // DER-encoded SEQUENCE with one INTEGER (value 42)
+//! let bytes = vec![0x30, 0x03, 0x02, 0x01, 0x2a];
+//!
+//! // Parse DER
+//! let der: Der = bytes.decode()?;
+//!
+//! assert_eq!(der.elements().len(), 1);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+//!
+//! ## Encoding
+//!
+//! ```
+//! use tsumiki::encoder::Encoder;
+//! use tsumiki_der::{Der, Tlv, Tag, PrimitiveTag};
+//!
+//! // Create DER structure
+//! let tlv = Tlv::new_primitive(Tag::Primitive(PrimitiveTag::Integer, 0x02), vec![0x2a]);
+//! let der = Der::new(vec![tlv]);
+//!
+//! // Encode to bytes
+//! let bytes: Vec<u8> = der.encode()?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+
 use error::Error;
 use nom::{IResult, Parser};
 use tsumiki::decoder::{DecodableFrom, Decoder};
@@ -6,16 +52,46 @@ use tsumiki_pem::Pem;
 
 pub mod error;
 
+/// Represents a DER (Distinguished Encoding Rules) encoded structure.
+///
+/// A DER structure consists of one or more TLV (Tag-Length-Value) elements.
+/// DER is a binary encoding format for ASN.1 data structures, commonly used
+/// in cryptographic standards like X.509 certificates and PKCS formats.
+///
+/// Defined in [ITU-T X.690](https://www.itu.int/rec/T-REC-X.690) Section 8.
+///
+/// # Example
+///
+/// ```
+/// use tsumiki::decoder::Decoder;
+/// use tsumiki_der::Der;
+///
+/// // DER-encoded INTEGER with value 42
+/// let bytes = vec![0x02, 0x01, 0x2a];
+/// let der: Der = bytes.decode()?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Der {
     elements: Vec<Tlv>,
 }
 
 impl Der {
+    /// Returns a slice of TLV elements in this DER structure.
     pub fn elements(&self) -> &[Tlv] {
         &self.elements
     }
 
+    /// Creates a new DER structure from a vector of TLV elements.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tsumiki_der::{Der, Tlv, Tag, PrimitiveTag};
+    ///
+    /// let tlv = Tlv::new_primitive(Tag::Primitive(PrimitiveTag::Integer, 0x02), vec![0x2a]);
+    /// let der = Der::new(vec![tlv]);
+    /// ```
     pub fn new(elements: Vec<Tlv>) -> Self {
         Der { elements }
     }
@@ -90,41 +166,69 @@ impl Decoder<Pem, Der> for Pem {
     }
 }
 
-/// Tag byte constructed flag (bit 5)
+/// Tag byte constructed flag (bit 5).
+///
+/// This bit is set in the tag byte to indicate that the TLV contains constructed
+/// data (i.e., nested TLVs) rather than primitive data.
 pub const TAG_CONSTRUCTED: u8 = 0b0010_0000;
 
+/// Represents a DER tag that identifies the type of data in a TLV structure.
+///
+/// Tags can be either primitive ASN.1 types (INTEGER, SEQUENCE, etc.) or
+/// context-specific tags used in structured data like X.509 extensions.
+///
+/// # Example
+///
+/// ```
+/// use tsumiki_der::{Tag, PrimitiveTag};
+///
+/// // Primitive tag for INTEGER
+/// let int_tag = Tag::Primitive(PrimitiveTag::Integer, 0x02);
+///
+/// // Context-specific tag [0] EXPLICIT
+/// let ctx_tag = Tag::ContextSpecific { slot: 0, constructed: true };
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tag {
-    Primitive(PrimitiveTag, u8), // This variant has a primitive tag number and an actual value.
-    ContextSpecific { slot: u8, constructed: bool }, // Context-specific tag with slot number and constructed flag
+    /// Primitive ASN.1 tag with the primitive type and raw tag byte.
+    Primitive(PrimitiveTag, u8),
+    /// Context-specific tag with slot number and constructed flag.
+    ContextSpecific { slot: u8, constructed: bool },
 }
 
 impl Tag {
-    fn is_constructed(&self) -> bool {
+    /// Returns whether this tag represents constructed data.
+    ///
+    /// Constructed data contains nested TLV structures, while primitive data
+    /// contains raw bytes.
+    pub(crate) fn is_constructed(&self) -> bool {
         match self {
             Tag::Primitive(_, inner) => (*inner) & TAG_CONSTRUCTED != 0,
             Tag::ContextSpecific { constructed, .. } => *constructed,
         }
     }
 
+    /// Returns whether this is a context-specific tag.
     #[allow(dead_code)]
-    fn is_context_specific(&self) -> bool {
+    pub(crate) fn is_context_specific(&self) -> bool {
         match self {
             Tag::Primitive(_, _) => false,
             Tag::ContextSpecific { .. } => true,
         }
     }
 
+    /// Returns the primitive tag type if this is a primitive tag.
     #[allow(dead_code)]
-    fn primitive_tag(&self) -> Option<PrimitiveTag> {
+    pub(crate) fn primitive_tag(&self) -> Option<PrimitiveTag> {
         match self {
             Tag::Primitive(primitive, _) => Some(*primitive),
             Tag::ContextSpecific { .. } => None,
         }
     }
 
+    /// Returns the slot number if this is a context-specific tag.
     #[allow(dead_code)]
-    fn slot_number(&self) -> Option<u8> {
+    pub(crate) fn slot_number(&self) -> Option<u8> {
         match self {
             Tag::Primitive(_, _) => None,
             Tag::ContextSpecific { slot, .. } => Some(*slot),
@@ -169,27 +273,55 @@ impl From<u8> for Tag {
     }
 }
 
+/// Primitive ASN.1 tag types.
+///
+/// These tags identify the data type in ASN.1 structures. The numeric values
+/// correspond to the standard ASN.1 universal tag numbers defined in
+/// [ITU-T X.680](https://www.itu.int/rec/T-REC-X.680) and encoded according to
+/// [ITU-T X.690](https://www.itu.int/rec/T-REC-X.690).
+///
+/// # Example
+///
+/// ```
+/// use tsumiki_der::PrimitiveTag;
+///
+/// let tag = PrimitiveTag::Integer;
+/// assert_eq!(u8::from(&tag), 0x02);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(u8)]
 pub enum PrimitiveTag {
+    /// BOOLEAN type (tag 0x01).
     Boolean = 0x01,
+    /// INTEGER type (tag 0x02).
     Integer = 0x02,
+    /// BIT STRING type (tag 0x03).
     BitString = 0x03,
+    /// OCTET STRING type (tag 0x04).
     OctetString = 0x04,
+    /// NULL type (tag 0x05).
     Null = 0x05,
+    /// OBJECT IDENTIFIER type (tag 0x06).
     ObjectIdentifier = 0x06,
+    /// UTF8String type (tag 0x0c).
     UTF8String = 0x0c,
+    /// SEQUENCE and SEQUENCE OF type (tag 0x10).
     Sequence = 0x10,
+    /// SET and SET OF type (tag 0x11).
     Set = 0x11,
+    /// PrintableString type (tag 0x13).
     PrintableString = 0x13,
+    /// IA5String type (tag 0x16).
     IA5String = 0x16,
+    /// UTCTime type (tag 0x17).
     UTCTime = 0x17,
+    /// GeneralizedTime type (tag 0x18).
     GeneralizedTime = 0x18,
+    /// BMPString type (tag 0x1e).
     BMPString = 0x1e,
+    /// Unimplemented or unknown tag type.
     Unimplemented(u8),
 }
-
-impl PrimitiveTag {}
 
 impl From<u8> for PrimitiveTag {
     fn from(value: u8) -> Self {
@@ -235,6 +367,24 @@ impl From<&PrimitiveTag> for u8 {
     }
 }
 
+/// Tag-Length-Value structure representing a single DER element.
+///
+/// TLV is the basic building block of DER encoding. Each TLV consists of:
+/// - **Tag**: Identifies the data type
+/// - **Length**: Size of the value in bytes
+/// - **Value**: The actual data (either primitive bytes or nested TLVs)
+///
+/// Defined in [ITU-T X.690](https://www.itu.int/rec/T-REC-X.690) Section 8.1.1.
+///
+/// # Example
+///
+/// ```
+/// use tsumiki_der::{Tlv, Tag, PrimitiveTag};
+///
+/// // Create a primitive TLV for INTEGER with value 42
+/// let tlv = Tlv::new_primitive(Tag::Primitive(PrimitiveTag::Integer, 0x02), vec![0x2a]);
+/// assert_eq!(tlv.data(), Some(&[0x2a][..]));
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Tlv {
     tag: Tag,
@@ -249,10 +399,22 @@ enum Value {
 }
 
 impl Tlv {
+    /// Returns the tag identifying the type of this TLV element.
     pub fn tag(&self) -> &Tag {
         &self.tag
     }
 
+    /// Creates a new primitive TLV with raw byte data.
+    ///
+    /// Use this for primitive types like INTEGER, OCTET STRING, etc.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tsumiki_der::{Tlv, Tag, PrimitiveTag};
+    ///
+    /// let tlv = Tlv::new_primitive(Tag::Primitive(PrimitiveTag::Integer, 0x02), vec![0x2a]);
+    /// ```
     pub fn new_primitive(tag: Tag, data: Vec<u8>) -> Self {
         Tlv {
             tag,
@@ -260,6 +422,18 @@ impl Tlv {
         }
     }
 
+    /// Creates a new constructed TLV containing nested TLV elements.
+    ///
+    /// Use this for structured types like SEQUENCE or SET.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use tsumiki_der::{Tlv, Tag, PrimitiveTag};
+    ///
+    /// let inner = Tlv::new_primitive(Tag::Primitive(PrimitiveTag::Integer, 0x02), vec![0x2a]);
+    /// let sequence = Tlv::new_constructed(Tag::Primitive(PrimitiveTag::Sequence, 0x30), vec![inner]);
+    /// ```
     pub fn new_constructed(tag: Tag, tlvs: Vec<Tlv>) -> Self {
         Tlv {
             tag,
@@ -267,6 +441,9 @@ impl Tlv {
         }
     }
 
+    /// Returns the primitive data if this is a primitive TLV.
+    ///
+    /// Returns `None` if this is a constructed TLV containing nested elements.
     pub fn data(&self) -> Option<&[u8]> {
         match &self.value {
             Value::Data(data) => Some(data),
@@ -274,6 +451,9 @@ impl Tlv {
         }
     }
 
+    /// Returns the nested TLV elements if this is a constructed TLV.
+    ///
+    /// Returns `None` if this is a primitive TLV containing raw data.
     pub fn tlvs(&self) -> Option<&[Tlv]> {
         match &self.value {
             Value::Tlv(tlvs) => Some(tlvs),
@@ -281,7 +461,10 @@ impl Tlv {
         }
     }
 
-    fn parse(input: &[u8]) -> IResult<&[u8], Tlv> {
+    /// Parses a TLV structure from DER-encoded bytes.
+    ///
+    /// This is an internal parsing function used by the decoder implementation.
+    pub(crate) fn parse(input: &[u8]) -> IResult<&[u8], Tlv> {
         let (input, tag) = parse_tag(input)?;
         let (input, length) = parse_length(input)?;
         let (input, data) = nom::bytes::complete::take(length).parse(input)?;
@@ -341,7 +524,11 @@ impl Encoder<Tlv, Vec<u8>> for Tlv {
     }
 }
 
-fn encode_length(length: usize) -> Vec<u8> {
+/// Encodes a length value in DER format.
+///
+/// Uses short form (single byte) for lengths 0-127, and long form for larger lengths.
+/// Defined in [ITU-T X.690](https://www.itu.int/rec/T-REC-X.690) Section 8.1.3.
+pub(crate) fn encode_length(length: usize) -> Vec<u8> {
     if length < 0x80 {
         // Short form: length fits in 7 bits (0-127)
         vec![length as u8]
@@ -360,12 +547,17 @@ fn encode_length(length: usize) -> Vec<u8> {
     }
 }
 
-fn parse_tag(input: &[u8]) -> IResult<&[u8], Tag> {
+/// Parses a tag byte from DER-encoded input.
+pub(crate) fn parse_tag(input: &[u8]) -> IResult<&[u8], Tag> {
     let (input, n) = nom::number::be_u8().parse(input)?;
     Ok((input, Tag::from(n)))
 }
 
-fn parse_length(input: &[u8]) -> IResult<&[u8], u64> {
+/// Parses a length field from DER-encoded input.
+///
+/// Supports both short form (0-127) and long form (128+) length encodings.
+/// Defined in [ITU-T X.690](https://www.itu.int/rec/T-REC-X.690) Section 8.1.3.
+pub(crate) fn parse_length(input: &[u8]) -> IResult<&[u8], u64> {
     let (input, n) = nom::number::be_u8().parse(input)?;
     if n & 0x80 == 0x80 {
         // long form

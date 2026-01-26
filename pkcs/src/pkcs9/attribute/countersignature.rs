@@ -118,7 +118,7 @@ impl TryFrom<&Integer> for CMSVersion {
 pub enum SignerIdentifier {
     /// IssuerAndSerialNumber
     IssuerAndSerialNumber(IssuerAndSerialNumber),
-    /// SubjectKeyIdentifier [0] IMPLICIT
+    /// SubjectKeyIdentifier \[0\] IMPLICIT
     SubjectKeyIdentifier(KeyIdentifier),
 }
 

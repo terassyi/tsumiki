@@ -1,12 +1,41 @@
-//! PKIX (Public Key Infrastructure using X.509) Common Types
+//! # tsumiki-pkix-types
 //!
-//! This crate provides common type definitions used across PKI standards,
-//! particularly X.509 certificates (RFC 5280) and PKCS standards.
+//! Common types for PKIX (Public Key Infrastructure using X.509).
 //!
-//! These types are defined in various RFCs including:
-//! - RFC 5280: Internet X.509 Public Key Infrastructure Certificate and CRL Profile
-//! - RFC 4519: Lightweight Directory Access Protocol (LDAP): Schema for User Applications
-//! - X.500 Directory Standards
+//! This crate provides shared type definitions used by both X.509 certificates
+//! and PKCS standards.
+//!
+//! ## Standards
+//!
+//! - [RFC 5280](https://datatracker.ietf.org/doc/html/rfc5280) - X.509 Certificate and CRL Profile
+//! - [RFC 3279](https://datatracker.ietf.org/doc/html/rfc3279) - Algorithm identifiers
+//! - [RFC 5480](https://datatracker.ietf.org/doc/html/rfc5480) - Elliptic Curve algorithms
+//!
+//! ## Key Types
+//!
+//! - `AlgorithmIdentifier` - Algorithm OID with optional parameters
+//! - `Name` - X.500 distinguished name (e.g., "CN=example.com, O=Example Org")
+//! - `SubjectPublicKeyInfo` - Public key with algorithm information
+//! - `CertificateSerialNumber` - Certificate serial number
+//!
+//! ## Example
+//!
+//! ```
+//! use std::str::FromStr;
+//! use tsumiki_asn1::{Element, ObjectIdentifier};
+//! use tsumiki::decoder::Decoder;
+//! use tsumiki::encoder::Encoder;
+//! use tsumiki_pkix_types::AlgorithmIdentifier;
+//!
+//! // Create AlgorithmIdentifier for RSA
+//! let oid = ObjectIdentifier::from_str("1.2.840.113549.1.1.1")?; // rsaEncryption
+//! let alg = AlgorithmIdentifier::new(oid);
+//!
+//! // Encode and decode
+//! let element: Element = alg.encode()?;
+//! let decoded: AlgorithmIdentifier = element.decode()?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
 
 use std::cell::Cell;
 
@@ -38,12 +67,45 @@ thread_local! {
     static USE_OID_VALUES: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Set whether to use OID values instead of human-readable names in serialization
+/// Set whether to use OID values instead of human-readable names in serialization.
+///
+/// When set to `true`, types like `AlgorithmIdentifier` and `AttributeTypeAndValue`
+/// will serialize using raw OID strings (e.g., "1.2.840.10045.3.1.7").
+///
+/// When set to `false` (default), they use human-readable names when available
+/// (e.g., "secp256r1", "CN").
+///
+/// # Example
+///
+/// ```
+/// use tsumiki_pkix_types::set_use_oid_values;
+///
+/// // Use human-readable names (default)
+/// set_use_oid_values(false);
+///
+/// // Use raw OID values
+/// set_use_oid_values(true);
+/// ```
 pub fn set_use_oid_values(use_oid: bool) {
     USE_OID_VALUES.with(|flag| flag.set(use_oid));
 }
 
-/// Get whether to use OID values instead of human-readable names in serialization
+/// Get whether to use OID values instead of human-readable names in serialization.
+///
+/// Returns `true` if raw OID values should be used, `false` if human-readable
+/// names should be used when available.
+///
+/// # Example
+///
+/// ```
+/// use tsumiki_pkix_types::{get_use_oid_values, set_use_oid_values};
+///
+/// set_use_oid_values(true);
+/// assert!(get_use_oid_values());
+///
+/// set_use_oid_values(false);
+/// assert!(!get_use_oid_values());
+/// ```
 pub fn get_use_oid_values() -> bool {
     USE_OID_VALUES.with(|flag| flag.get())
 }

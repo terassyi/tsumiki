@@ -30,7 +30,9 @@ of one indicates that anyPolicy may be processed in certificates issued by
 the subject of this certificate, but not in additional certificates in the path.
 */
 
-/// InhibitAnyPolicy extension
+/// Inhibit Any Policy extension ([RFC 5280 Section 4.2.1.14](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.14)).
+///
+/// Indicates when the special anyPolicy OID is no longer considered an explicit match.
 /// OID: 2.5.29.54
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InhibitAnyPolicy {

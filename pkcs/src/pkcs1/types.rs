@@ -31,10 +31,14 @@ Version ::= INTEGER { two-prime(0), multi(1) }
     (CONSTRAINED BY {-- version must be multi if otherPrimeInfos present --})
 */
 
-/// PKCS#1 RSAPrivateKey version
+/// PKCS#1 RSAPrivateKey version.
+///
+/// Indicates whether the RSA key uses two primes (standard) or multi-prime format.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Version {
+    /// Two-prime RSA key (standard format)
     TwoPrime = 0,
+    /// Multi-prime RSA key
     Multi = 1,
 }
 
@@ -76,19 +80,55 @@ impl Decoder<Element, Version> for Element {
     }
 }
 
-/// PKCS#1 RSA Private Key structure
+/// PKCS#1 RSA Private Key structure.
+///
+/// Contains all components of an RSA private key as defined in RFC 8017.
+/// The structure includes the modulus, public exponent, private exponent,
+/// and CRT (Chinese Remainder Theorem) components for efficient computation.
+///
+/// # Fields
+///
+/// - `modulus` (n) - The RSA modulus
+/// - `public_exponent` (e) - The RSA public exponent
+/// - `private_exponent` (d) - The RSA private exponent
+/// - `prime1` (p) - First prime factor
+/// - `prime2` (q) - Second prime factor
+/// - `exponent1` - d mod (p-1), for CRT
+/// - `exponent2` - d mod (q-1), for CRT
+/// - `coefficient` - (inverse of q) mod p, for CRT
+///
+/// # Example
+///
+/// ```no_run
+/// use tsumiki::decoder::Decoder;
+/// use tsumiki_pem::Pem;
+/// use tsumiki_pkcs::pkcs1::RSAPrivateKey;
+///
+/// let pem: Pem = "-----BEGIN RSA PRIVATE KEY-----...".parse().unwrap();
+/// let key: RSAPrivateKey = pem.decode().unwrap();
+/// println!("Modulus bits: {}", key.modulus.bits());
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RSAPrivateKey {
+    /// Key version (TwoPrime or Multi)
     pub version: Version,
-    pub modulus: Integer,          // n
-    pub public_exponent: Integer,  // e
-    pub private_exponent: Integer, // d
-    pub prime1: Integer,           // p
-    pub prime2: Integer,           // q
-    pub exponent1: Integer,        // d mod (p-1)
-    pub exponent2: Integer,        // d mod (q-1)
-    pub coefficient: Integer,      // (inverse of q) mod p
-                                   // otherPrimeInfos is rarely used, omitted for now
+    /// RSA modulus (n)
+    pub modulus: Integer,
+    /// Public exponent (e)
+    pub public_exponent: Integer,
+    /// Private exponent (d)
+    pub private_exponent: Integer,
+    /// First prime factor (p)
+    pub prime1: Integer,
+    /// Second prime factor (q)
+    pub prime2: Integer,
+    /// d mod (p-1) for CRT
+    pub exponent1: Integer,
+    /// d mod (q-1) for CRT
+    pub exponent2: Integer,
+    /// (inverse of q) mod p for CRT
+    pub coefficient: Integer,
+    // otherPrimeInfos is rarely used, omitted for now
 }
 
 impl DecodableFrom<Element> for RSAPrivateKey {}
@@ -185,11 +225,27 @@ RSAPublicKey ::= SEQUENCE {
 }
 */
 
-/// PKCS#1 RSA Public Key structure
+/// PKCS#1 RSA Public Key structure.
+///
+/// Contains the public components of an RSA key: modulus and public exponent.
+///
+/// # Example
+///
+/// ```no_run
+/// use tsumiki::decoder::Decoder;
+/// use tsumiki_pem::Pem;
+/// use tsumiki_pkcs::pkcs1::RSAPublicKey;
+///
+/// let pem: Pem = "-----BEGIN RSA PUBLIC KEY-----...".parse().unwrap();
+/// let key: RSAPublicKey = pem.decode().unwrap();
+/// println!("Key size: {} bits", key.key_size());
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RSAPublicKey {
-    pub modulus: Integer,         // n
-    pub public_exponent: Integer, // e
+    /// RSA modulus (n)
+    pub modulus: Integer,
+    /// Public exponent (e)
+    pub public_exponent: Integer,
 }
 
 impl DecodableFrom<Element> for RSAPublicKey {}

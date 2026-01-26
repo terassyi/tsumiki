@@ -86,13 +86,10 @@ impl Encoder<AccessDescription, Element> for AccessDescription {
     }
 }
 
-/// AuthorityInfoAccess extension
+/// Authority Information Access extension ([RFC 5280 Section 4.2.2.1](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.2.1)).
 ///
 /// Contains information about how to access CA information and services,
 /// such as OCSP responders and CA certificate issuers.
-///
-/// RFC 5280 Section 4.2.2.1: Authority Information Access
-/// See: <https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.2.1>
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuthorityInfoAccess {
     pub descriptors: Vec<AccessDescription>,

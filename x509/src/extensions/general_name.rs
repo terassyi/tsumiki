@@ -12,7 +12,16 @@ use crate::DirectoryString;
 use crate::Name;
 use crate::error::Error;
 
-/// Represents an IP address or an IP network range (for NameConstraints)
+/// IP address or network range for use in X.509 extensions.
+///
+/// Used in Subject Alternative Name (single addresses) and Name Constraints
+/// (address ranges) extensions.
+///
+/// # Encoding
+/// - Single IPv4 address: 4 bytes
+/// - IPv4 network: 8 bytes (address + netmask)
+/// - Single IPv6 address: 16 bytes
+/// - IPv6 network: 32 bytes (address + netmask)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum IpAddressOrRange {
     /// Single IP address (4 bytes for IPv4, 16 bytes for IPv6)
@@ -76,29 +85,54 @@ EDIPartyName ::= SEQUENCE {
 }
 */
 
+/// General name for subject and issuer alternative names (RFC 5280 Section 4.2.1.6).
+///
+/// Represents various types of names that can be associated with a certificate.
+/// Used in Subject Alternative Name, Issuer Alternative Name, and other extensions.
+///
+/// # Common Types
+/// - `DnsName`: DNS hostname (e.g., "www.example.com", "*.example.com")
+/// - `IpAddress`: IPv4 or IPv6 address
+/// - `Rfc822Name`: Email address
+/// - `Uri`: Uniform Resource Identifier
+/// - `DirectoryName`: X.500 Distinguished Name
+///
+/// # Example
+/// ```no_run
+/// use tsumiki_x509::extensions::GeneralName;
+///
+/// fn print_name(general_name: &GeneralName) {
+///     match general_name {
+///         GeneralName::DnsName(dns) => println!("DNS: {}", dns),
+///         GeneralName::IpAddress(ip) => println!("IP: {}", ip),
+///         GeneralName::Rfc822Name(email) => println!("Email: {}", email),
+///         _ => println!("Other name type"),
+///     }
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GeneralName {
-    /// otherName [0] - structured OtherName
+    /// otherName \[0\] - structured OtherName
     OtherName(OtherName),
-    /// rfc822Name [1] - Email address (IA5String)
+    /// rfc822Name \[1\] - Email address (IA5String)
     Rfc822Name(String),
-    /// dNSName [2] - DNS hostname (IA5String)
+    /// dNSName \[2\] - DNS hostname (IA5String)
     DnsName(String),
-    /// x400Address [3] - X.400 address (ORAddress, rarely used)
+    /// x400Address \[3\] - X.400 address (ORAddress, rarely used)
     X400Address(Vec<u8>),
-    /// directoryName [4] - X.500 Name
+    /// directoryName \[4\] - X.500 Name
     DirectoryName(Name),
-    /// ediPartyName [5] - EDI party name
+    /// ediPartyName \[5\] - EDI party name
     EdiPartyName(EdiPartyName),
-    /// uniformResourceIdentifier [6] - URI (IA5String)
+    /// uniformResourceIdentifier \[6\] - URI (IA5String)
     Uri(String),
-    /// iPAddress [7] - IP address or network range
+    /// iPAddress \[7\] - IP address or network range
     /// - 4 bytes: single IPv4 address
     /// - 8 bytes: IPv4 network (address + mask) for NameConstraints
     /// - 16 bytes: single IPv6 address
     /// - 32 bytes: IPv6 network (address + mask) for NameConstraints
     IpAddress(IpAddressOrRange),
-    /// registeredID [8] - Registered OBJECT IDENTIFIER
+    /// registeredID \[8\] - Registered OBJECT IDENTIFIER
     RegisteredId(ObjectIdentifier),
 }
 
@@ -511,22 +545,26 @@ impl Encoder<GeneralName, Element> for GeneralName {
     }
 }
 
-/// OtherName structure for [0] IMPLICIT OtherName
+/// Other name type for application-specific identifiers.
+///
+/// Used when none of the standard GeneralName types are appropriate.
+/// The type-id OID defines the format of the value field.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct OtherName {
-    /// type-id: OBJECT IDENTIFIER identifying the type
+    /// OID identifying the name type
     pub type_id: ObjectIdentifier,
-    /// value: [0] EXPLICIT - The actual value as raw DER-encoded bytes
-    /// Type interpretation depends on type-id
-    /// Note: This is the DER-encoded content of the EXPLICIT [0] tag
+    /// DER-encoded value (interpretation depends on type_id)
     pub value: Vec<u8>,
 }
 
-/// EDIPartyName structure for [5] IMPLICIT EDIPartyName
+/// EDI party name for Electronic Data Interchange.
+///
+/// Rarely used in modern certificates. Provides a way to identify
+/// parties in EDI transactions.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EdiPartyName {
-    /// nameAssigner [0] OPTIONAL
+    /// Optional name of the assigning authority
     pub name_assigner: Option<String>,
-    /// partyName [1]
+    /// Name of the party
     pub party_name: String,
 }

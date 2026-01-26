@@ -39,7 +39,10 @@ Constraints:
 - Policy mappings are typically marked as critical.
 */
 
-/// PolicyMappings extension defines policy equivalences between CAs
+/// Policy Mappings extension ([RFC 5280 Section 4.2.1.5](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.5)).
+///
+/// Defines policy equivalences between CAs, allowing a CA in one domain
+/// to recognize the policies of a CA in another domain.
 /// OID: 2.5.29.33
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PolicyMappings {

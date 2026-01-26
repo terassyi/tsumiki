@@ -22,15 +22,43 @@ KeyIdentifier ::= OCTET STRING
 CertificateSerialNumber ::= INTEGER
 */
 
-// KeyIdentifier is already imported above, no need to re-export here
-
+/// Authority Key Identifier extension ([RFC 5280 Section 4.2.1.1](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.1)).
+///
+/// Identifies the public key corresponding to the private key used to sign a certificate.
+/// This extension facilitates certification path construction by identifying the issuer's
+/// certificate.
+///
+/// # Fields
+/// All fields are optional, but at least one should be present:
+/// - `key_identifier`: Hash of the CA's public key (most commonly used)
+/// - `authority_cert_issuer`: Issuer name(s) from the CA certificate
+/// - `authority_cert_serial_number`: Serial number of the CA certificate
+///
+/// # Usage
+/// - Should be included in all certificates except self-signed root CA certificates
+/// - The `key_identifier` field is the most commonly used
+/// - Matches the Subject Key Identifier of the issuing CA certificate
+///
+/// # Example
+/// ```no_run
+/// use std::str::FromStr;
+/// use tsumiki_x509::Certificate;
+/// use tsumiki_x509::extensions::AuthorityKeyIdentifier;
+///
+/// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
+/// if let Some(aki) = cert.extension::<AuthorityKeyIdentifier>().unwrap() {
+///     if let Some(key_id) = &aki.key_identifier {
+///         println!("Authority Key ID: {:?}", key_id.as_bytes());
+///     }
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct AuthorityKeyIdentifier {
-    /// KeyIdentifier: typically a SHA-1 hash of the CA's public key
+    /// Key identifier, typically a SHA-1 hash of the CA's public key
     pub key_identifier: Option<KeyIdentifier>,
-    /// GeneralNames: issuer name(s) of the CA certificate
+    /// Issuer name(s) of the CA certificate
     pub authority_cert_issuer: Option<Vec<GeneralName>>,
-    /// CertificateSerialNumber: serial number of the CA certificate
+    /// Serial number of the CA certificate
     pub authority_cert_serial_number: Option<CertificateSerialNumber>,
 }
 

@@ -13,10 +13,13 @@
 //! The [`PublicKeyExt`] trait provides a unified interface for accessing
 //! common public key properties across different formats:
 //!
-//! ```ignore
-//! use pkcs::{PublicKey, PublicKeyExt};
+//! ```no_run
+//! use tsumiki::decoder::Decoder;
+//! use tsumiki_pem::Pem;
+//! use tsumiki_pkcs::{PublicKey, PublicKeyExt};
 //!
-//! let key: PublicKey = /* ... */;
+//! let pem: Pem = "-----BEGIN PUBLIC KEY-----...".parse().unwrap();
+//! let key: PublicKey = pem.decode().unwrap();
 //! println!("Algorithm: {:?}", key.algorithm());
 //! println!("Key size: {} bits", key.key_size());
 //! ```
@@ -45,13 +48,13 @@ use crate::private_key::KeyAlgorithm;
 ///
 /// # Examples
 ///
-/// ```ignore
-/// use pkcs::{PublicKey, PublicKeyExt};
+/// ```no_run
 /// use tsumiki::decoder::Decoder;
 /// use tsumiki_pem::Pem;
+/// use tsumiki_pkcs::{PublicKey, PublicKeyExt};
 ///
-/// let pem: Pem = "-----BEGIN PUBLIC KEY-----...".parse()?;
-/// let key: PublicKey = pem.decode()?;
+/// let pem: Pem = "-----BEGIN PUBLIC KEY-----...".parse().unwrap();
+/// let key: PublicKey = pem.decode().unwrap();
 ///
 /// println!("Algorithm: {}", key.algorithm());
 /// println!("Key size: {} bits", key.key_size());
@@ -74,10 +77,13 @@ pub trait PublicKeyExt {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use pkcs::{PublicKey, PublicKeyExt};
+    /// ```no_run
+    /// use tsumiki::decoder::Decoder;
+    /// use tsumiki_pem::Pem;
+    /// use tsumiki_pkcs::{PublicKey, PublicKeyExt};
     ///
-    /// let key: PublicKey = /* ... */;
+    /// let pem: Pem = "-----BEGIN PUBLIC KEY-----...".parse().unwrap();
+    /// let key: PublicKey = pem.decode().unwrap();
     /// println!("Key size: {} bits", key.key_size());
     /// ```
     fn key_size(&self) -> u32;
@@ -86,16 +92,20 @@ pub trait PublicKeyExt {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use pkcs::{PublicKey, PublicKeyExt, KeyAlgorithm};
+    /// ```no_run
+    /// use tsumiki::decoder::Decoder;
+    /// use tsumiki_pem::Pem;
+    /// use tsumiki_pkcs::{PublicKey, PublicKeyExt, KeyAlgorithm};
     ///
-    /// let key: PublicKey = /* ... */;
+    /// let pem: Pem = "-----BEGIN PUBLIC KEY-----...".parse().unwrap();
+    /// let key: PublicKey = pem.decode().unwrap();
     /// match key.algorithm() {
     ///     KeyAlgorithm::Rsa => println!("RSA key"),
     ///     KeyAlgorithm::Ec => println!("Elliptic curve key"),
     ///     KeyAlgorithm::Ed25519 => println!("Ed25519 key"),
     ///     KeyAlgorithm::Ed448 => println!("Ed448 key"),
     ///     KeyAlgorithm::Unknown => println!("Unknown algorithm"),
+    ///     _ => println!("Other algorithm"),
     /// }
     /// ```
     fn algorithm(&self) -> KeyAlgorithm;
@@ -110,10 +120,13 @@ pub trait PublicKeyExt {
     ///
     /// # Examples
     ///
-    /// ```ignore
-    /// use pkcs::{PublicKey, PublicKeyExt};
+    /// ```no_run
+    /// use tsumiki::decoder::Decoder;
+    /// use tsumiki_pem::Pem;
+    /// use tsumiki_pkcs::{PublicKey, PublicKeyExt};
     ///
-    /// let key: PublicKey = /* ... */;
+    /// let pem: Pem = "-----BEGIN PUBLIC KEY-----...".parse().unwrap();
+    /// let key: PublicKey = pem.decode().unwrap();
     /// if let Some(bytes) = key.public_key_bytes() {
     ///     println!("Public key: {} bytes", bytes.len());
     /// }

@@ -1,3 +1,37 @@
+//! # tsumiki-asn1
+//!
+//! ASN.1 (Abstract Syntax Notation One) data structure representation.
+//!
+//! This crate implements ASN.1 types as defined in
+//! [ITU-T X.680](https://www.itu.int/rec/T-REC-X.680).
+//!
+//! ## Supported Types
+//!
+//! - Primitive types: `INTEGER`, `BOOLEAN`, `NULL`, `OCTET STRING`, `BIT STRING`
+//! - String types: `UTF8String`, `PrintableString`, `IA5String`, `BMPString`
+//! - Time types: `UTCTime`, `GeneralizedTime`
+//! - Structured types: `SEQUENCE`, `SET`
+//! - Object identifiers: `OBJECT IDENTIFIER`
+//! - Context-specific types
+//!
+//! ## Example
+//!
+//! ```
+//! use tsumiki::decoder::Decoder;
+//! use tsumiki_der::Der;
+//! use tsumiki_asn1::ASN1Object;
+//!
+//! // DER bytes for SEQUENCE { INTEGER 42 }
+//! let bytes = vec![0x30, 0x03, 0x02, 0x01, 0x2a];
+//!
+//! // Parse DER to ASN.1
+//! let der: Der = bytes.decode()?;
+//! let asn1: ASN1Object = der.decode()?;
+//!
+//! assert_eq!(asn1.elements().len(), 1);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
+//! ```
+
 use std::{fmt::Display, ops::Deref, str::FromStr};
 
 use chrono::NaiveDateTime;
@@ -11,16 +45,41 @@ use tsumiki_der::{Der, PrimitiveTag, TAG_CONSTRUCTED, Tag, Tlv};
 
 pub mod error;
 
+/// ASN.1 object representation.
+///
+/// Contains a collection of ASN.1 elements parsed from DER-encoded data.
+/// This is the top-level structure returned when decoding DER data into ASN.1 format.
+///
+/// ASN.1 (Abstract Syntax Notation One) is defined in
+/// [ITU-T X.680](https://www.itu.int/rec/T-REC-X.680).
+///
+/// # Example
+///
+/// ```
+/// use tsumiki::decoder::Decoder;
+/// use tsumiki_der::Der;
+/// use tsumiki_asn1::ASN1Object;
+///
+/// // DER bytes for SEQUENCE { INTEGER 42 }
+/// let bytes = vec![0x30, 0x03, 0x02, 0x01, 0x2a];
+/// let der: Der = bytes.decode()?;
+/// let asn1: ASN1Object = der.decode()?;
+///
+/// assert_eq!(asn1.elements().len(), 1);
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone)]
 pub struct ASN1Object {
     elements: Vec<Element>,
 }
 
 impl ASN1Object {
+    /// Returns a slice of the ASN.1 elements in this object.
     pub fn elements(&self) -> &[Element] {
         &self.elements
     }
 
+    /// Creates a new ASN1Object from a vector of elements.
     pub fn new(elements: Vec<Element>) -> Self {
         ASN1Object { elements }
     }
@@ -55,27 +114,63 @@ impl Encoder<ASN1Object, Der> for ASN1Object {
     }
 }
 
+/// ASN.1 element types.
+///
+/// Represents all supported ASN.1 types including primitive types (integers, strings, etc.),
+/// structured types (sequences, sets), and context-specific tagged values.
+///
+/// Type definitions follow [ITU-T X.680](https://www.itu.int/rec/T-REC-X.680).
+///
+/// # Examples
+///
+/// ```
+/// use tsumiki_asn1::{Element, Integer};
+/// use num_bigint::BigInt;
+///
+/// let elem = Element::Integer(Integer::from(vec![0x01, 0x02]));
+/// let elem2 = Element::Boolean(true);
+/// let sequence = Element::Sequence(vec![elem, elem2]);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Element {
+    /// Boolean value (ASN.1 BOOLEAN)
     Boolean(bool),
+    /// Arbitrary-sized integer (ASN.1 INTEGER)
     Integer(Integer),
+    /// Bit string with unused bits count (ASN.1 BIT STRING)
     BitString(BitString),
+    /// Octet string (ASN.1 OCTET STRING)
     OctetString(OctetString),
+    /// Null value (ASN.1 NULL)
     Null,
+    /// Object identifier (ASN.1 OBJECT IDENTIFIER)
     ObjectIdentifier(ObjectIdentifier),
+    /// UTF-8 encoded string (ASN.1 UTF8String)
     UTF8String(String),
+    /// Sequence of elements (ASN.1 SEQUENCE)
     Sequence(Vec<Element>),
+    /// Set of elements (ASN.1 SET)
     Set(Vec<Element>),
+    /// Printable string (ASN.1 PrintableString)
     PrintableString(String),
+    /// IA5 string (ASN.1 IA5String)
     IA5String(String),
+    /// UTC time (ASN.1 UTCTime)
     UTCTime(NaiveDateTime),
+    /// Generalized time (ASN.1 GeneralizedTime)
     GeneralizedTime(NaiveDateTime),
+    /// BMP string (ASN.1 BMPString)
     BMPString(BMPString),
+    /// Context-specific tagged value (explicit or implicit tagging)
     ContextSpecific {
+        /// Tag number (0-30)
         slot: u8,
+        /// Whether this is constructed (explicit) or primitive (implicit) tagging
         constructed: bool,
+        /// The wrapped element
         element: Box<Element>,
     },
+    /// Unimplemented ASN.1 type (preserved as raw TLV)
     Unimplemented(Tlv),
 }
 
@@ -446,9 +541,26 @@ impl Encoder<Element, Tlv> for Element {
     }
 }
 
-// ASN1 integer is possible to be a positive and negative value.
-// This can be arbitrary sized values.
-// In this implementation, we implement DER only. So this only accepts by 126 bytes length.
+/// ASN.1 INTEGER type.
+///
+/// Represents an arbitrary-sized signed integer using `BigInt` internally.
+/// Supports both positive and negative values of any size.
+///
+/// Defined in [ITU-T X.680](https://www.itu.int/rec/T-REC-X.680) Section 19.
+///
+/// # Examples
+///
+/// ```
+/// use tsumiki_asn1::Integer;
+///
+/// // From bytes (big-endian, two's complement)
+/// let int1 = Integer::from(vec![0x01, 0x02]);
+/// let int2 = Integer::from(vec![0xff]); // -1
+///
+/// // Convert to primitive types
+/// assert_eq!(int1.to_u32(), Some(258));
+/// assert_eq!(int2.to_i32(), Some(-1));
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Integer {
     inner: BigInt,
@@ -595,6 +707,8 @@ impl Display for Integer {
 /// A string type that contains UCS-2 (UTF-16 without surrogate pairs) characters.
 /// This is a subset of UTF-16 containing only characters in the Basic Multilingual Plane
 /// (U+0000 to U+FFFF), excluding surrogate pairs (U+D800 to U+DFFF).
+///
+/// Defined in [ITU-T X.680](https://www.itu.int/rec/T-REC-X.680) Section 41.
 ///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BMPString {
@@ -797,6 +911,29 @@ impl TryFrom<&[u16]> for BMPString {
     }
 }
 
+/// ASN.1 OBJECT IDENTIFIER (OID).
+///
+/// Represents a hierarchical identifier used throughout X.509 and PKIX standards
+/// to uniquely identify algorithms, extensions, attributes, and other entities.
+///
+/// # Format
+///
+/// OIDs are written as dot-separated numbers (e.g., "1.2.840.113549.1.1.11" for SHA-256 with RSA).
+///
+/// # Examples
+///
+/// ```
+/// use tsumiki_asn1::ObjectIdentifier;
+/// use std::str::FromStr;
+///
+/// // Parse from string
+/// let oid = ObjectIdentifier::from_str("1.2.840.113549.1.1.1")?;
+/// assert_eq!(oid.to_string(), "1.2.840.113549.1.1.1");
+///
+/// // Compare with string
+/// assert_eq!(oid, "1.2.840.113549.1.1.1");
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectIdentifier {
     inner: Vec<u64>,
@@ -969,8 +1106,30 @@ impl PartialEq<ObjectIdentifier> for &str {
     }
 }
 
-/// Trait for types that can be converted to an ObjectIdentifier
+/// Trait for types that can be converted to an ObjectIdentifier.
+///
+/// This trait provides a uniform interface for converting various types
+/// (strings, string slices, existing OIDs) into `ObjectIdentifier` instances.
+///
+/// # Examples
+///
+/// ```
+/// use tsumiki_asn1::{ObjectIdentifier, AsOid};
+///
+/// // Use with string slice
+/// let oid = "1.2.840.113549.1.1.1".as_oid()?;
+///
+/// // Use with String
+/// let s = String::from("1.2.840.113549.1.1.5");
+/// let oid2 = s.as_oid()?;
+/// # Ok::<(), Box<dyn std::error::Error>>(())
+/// ```
 pub trait AsOid {
+    /// Converts this type into an ObjectIdentifier.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the conversion fails (e.g., invalid OID format).
     fn as_oid(&self) -> Result<ObjectIdentifier, Error>;
 }
 
@@ -998,6 +1157,24 @@ impl AsOid for String {
     }
 }
 
+/// ASN.1 BIT STRING.
+///
+/// Represents a bit string where the last byte may have unused trailing bits.
+/// The `unused` field indicates how many bits in the last byte are not part of the bit string.
+///
+/// # Examples
+///
+/// ```
+/// use tsumiki_asn1::BitString;
+///
+/// // Create a bit string with no unused bits
+/// let bs1 = BitString::new(0, vec![0b11110000]);
+/// assert_eq!(bs1.bit_len(), 8);
+///
+/// // Create a bit string with 4 unused bits in the last byte
+/// let bs2 = BitString::new(4, vec![0b11110000]);
+/// assert_eq!(bs2.bit_len(), 4);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BitString {
     unused: u8,
@@ -1142,6 +1319,25 @@ impl Display for BitString {
     }
 }
 
+/// ASN.1 OCTET STRING.
+///
+/// Represents an arbitrary sequence of bytes. This is one of the most common ASN.1 types,
+/// often used to wrap other encodings or store binary data.
+///
+/// # Examples
+///
+/// ```
+/// use tsumiki_asn1::OctetString;
+///
+/// // Create from bytes
+/// let os = OctetString::from(vec![0x01, 0x02, 0x03]);
+///
+/// // Access as bytes
+/// assert_eq!(os.as_bytes(), &[0x01, 0x02, 0x03]);
+///
+/// // Get hex representation
+/// assert_eq!(os.hex(), "010203");
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OctetString {
     inner: Vec<u8>,

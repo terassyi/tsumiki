@@ -1,5 +1,8 @@
 use thiserror::Error;
 
+/// Unified error type for the pkcs crate.
+///
+/// This error type aggregates errors from all PKCS standards and related crates.
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("ASN.1 error: {0}")]
@@ -37,4 +40,5 @@ pub enum Error {
     EmptyAsn1Object,
 }
 
+/// Result type alias using the pkcs crate's Error type.
 pub type Result<T> = std::result::Result<T, Error>;
