@@ -1,6 +1,6 @@
 [package]
 name = "tsumiki-pkcs"
-version = "0.1.0-dev.2"
+version = "0.1.0-dev.3"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,11 +15,11 @@ default = []
 rustls = ["dep:rustls-pki-types"]
 
 [dependencies]
-tsumiki-asn1 = { version = "0.1.0-dev.2", path = "../asn1" }
-tsumiki-der = { version = "0.1.0-dev.2", path = "../der" }
-tsumiki-pem = { version = "0.1.0-dev.2", path = "../pem" }
-tsumiki-pkix-types = { version = "0.1.0-dev.2", path = "../pkix-types" }
-tsumiki = { version = "0.1.0-dev.2", path = "../tsumiki" }
+tsumiki-asn1 = { version = "0.1.0-dev.3", path = "../asn1" }
+tsumiki-der = { version = "0.1.0-dev.3", path = "../der" }
+tsumiki-pem = { version = "0.1.0-dev.3", path = "../pem" }
+tsumiki-pkix-types = { version = "0.1.0-dev.3", path = "../pkix-types" }
+tsumiki = { version = "0.1.0-dev.3", path = "../tsumiki" }
 thiserror.workspace = true
 num-bigint = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
@@ -29,6 +29,6 @@ rustls-pki-types = { workspace = true, optional = true }
 [dev-dependencies]
 rstest.workspace = true
 serde_json.workspace = true
-tsumiki-pem = { version = "0.1.0-dev.2", path = "../pem" }
-tsumiki-der = { version = "0.1.0-dev.2", path = "../der" }
-tsumiki-asn1 = { version = "0.1.0-dev.2", path = "../asn1" }
+tsumiki-pem = { version = "0.1.0-dev.3", path = "../pem" }
+tsumiki-der = { version = "0.1.0-dev.3", path = "../der" }
+tsumiki-asn1 = { version = "0.1.0-dev.3", path = "../asn1" }
