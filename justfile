@@ -88,5 +88,9 @@ bump-version version:
 version:
     @cargo metadata --format-version 1 --no-deps | jq -r '.packages[0].version'
 
+# Check workspace dependency versions are consistent
+check-versions:
+    rust-script tools/check-versions.rs
+
 # Run CI checks locally
 ci: format-check lint test e2e

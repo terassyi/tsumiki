@@ -57,12 +57,25 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fail-on-change: 'true'
 
+  check-versions:
+    name: Check workspace versions
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    needs:
+      - test
+      - e2e-test
+      - rustls-integration-test
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ./.github/actions/check-versions
+
   dry-run:
     name: Dry-run
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     needs:
       - cargo-update-check
+      - check-versions
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
