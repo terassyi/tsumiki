@@ -72,9 +72,12 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Install release-plz
+        run: |
+          curl -LsSf https://github.com/release-plz/release-plz/releases/latest/download/release-plz-x86_64-unknown-linux-gnu.tar.gz | tar xzf - -C /usr/local/bin
+
       - name: Run release-plz update (dry-run)
         run: |
-          cargo install release-plz
           release-plz update --config .github/release-plz.toml
           echo "Dry run completed. No changes were published."
 
