@@ -1097,11 +1097,11 @@ dependencies = [
 
 [[package]]
 name = "tsumiki"
-version = "0.1.0-dev.3"
+version = "0.1.0"
 
 [[package]]
 name = "tsumiki-asn1"
-version = "0.1.0-dev.3"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "num-bigint",
@@ -1117,7 +1117,7 @@ dependencies = [
 
 [[package]]
 name = "tsumiki-cli"
-version = "0.1.0-dev.3"
+version = "0.1.0"
 dependencies = [
  "assert_cmd",
  "base64",
@@ -1141,7 +1141,7 @@ dependencies = [
 
 [[package]]
 name = "tsumiki-der"
-version = "0.1.0-dev.3"
+version = "0.1.0"
 dependencies = [
  "nom",
  "rstest",
@@ -1152,7 +1152,7 @@ dependencies = [
 
 [[package]]
 name = "tsumiki-examples"
-version = "0.1.0-dev.3"
+version = "0.1.0"
 dependencies = [
  "rustls",
  "tokio",
@@ -1165,7 +1165,7 @@ dependencies = [
 
 [[package]]
 name = "tsumiki-pem"
-version = "0.1.0-dev.3"
+version = "0.1.0"
 dependencies = [
  "base64",
  "regex",
@@ -1176,7 +1176,7 @@ dependencies = [
 
 [[package]]
 name = "tsumiki-pkcs"
-version = "0.1.0-dev.3"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "num-bigint",
@@ -1194,7 +1194,7 @@ dependencies = [
 
 [[package]]
 name = "tsumiki-pkix-types"
-version = "0.1.0-dev.3"
+version = "0.1.0"
 dependencies = [
  "rstest",
  "serde",
@@ -1206,7 +1206,7 @@ dependencies = [
 
 [[package]]
 name = "tsumiki-x509"
-version = "0.1.0-dev.3"
+version = "0.1.0"
 dependencies = [
  "chrono",
  "ipnet",

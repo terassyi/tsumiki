@@ -1,6 +1,6 @@
 [package]
 name = "tsumiki-pkix-types"
-version = "0.1.0-dev.3"
+version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ categories.workspace = true
 description = "PKIX types (AlgorithmIdentifier, Name, etc.) for X.509 certificates"
 
 [dependencies]
-tsumiki-asn1 = { version = "0.1.0-dev.3", path = "../asn1" }
+tsumiki-asn1 = { version = "0.1.0", path = "../asn1" }
 serde = { workspace = true }
 thiserror = { workspace = true }
-tsumiki = { version = "0.1.0-dev.3", path = "../tsumiki" }
+tsumiki = { version = "0.1.0", path = "../tsumiki" }
 
 [dev-dependencies]
 rstest = { workspace = true }
