@@ -6,8 +6,8 @@ To enable rustls integration, add the `rustls` feature to `x509` and `pkcs` crat
 
 ```toml
 [dependencies]
-x509 = { version = "0.0.1", features = ["rustls"] }
-pkcs = { version = "0.0.1", features = ["rustls"] }
+tsumiki-x509 = { version = "0.1", features = ["rustls"] }
+tsumiki-pkcs = { version = "0.1", features = ["rustls"] }
 ```
 
 ## mTLS Echo Server/Client
@@ -50,9 +50,9 @@ echo "hello" | openssl s_client -connect localhost:8443 \
 
 ```rust
 use tsumiki::decoder::Decoder;
-use x509::Certificate;
+use tsumiki_x509::Certificate;
 
-let pem = fs::read_to_string("server.crt")?.parse::<pem::Pem>()?;
+let pem = fs::read_to_string("server.crt")?.parse::<tsumiki_pem::Pem>()?;
 let cert: Certificate = pem.decode()?;
 
 // Access certificate fields
@@ -66,9 +66,9 @@ println!("Not After: {}", cert.tbs_certificate().validity().not_after());
 The `PrivateKey` enum automatically detects the key format (PKCS#1 RSA, SEC1 EC, or PKCS#8):
 
 ```rust
-use pkcs::PrivateKey;
+use tsumiki_pkcs::PrivateKey;
 
-let pem = fs::read_to_string("server.key")?.parse::<pem::Pem>()?;
+let pem = fs::read_to_string("server.key")?.parse::<tsumiki_pem::Pem>()?;
 let key: PrivateKey = pem.decode()?;
 
 println!("Algorithm: {}", key.algorithm());
