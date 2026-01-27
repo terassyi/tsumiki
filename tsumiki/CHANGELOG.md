@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.0-dev.2] - 2026-01-27
+
+### Miscellaneous Tasks
+
+- Bump version to 0.1.0-dev.2 ([#38](https://github.com/terassyi/tsumiki/pull/38))
+
+
 ## [0.1.0-dev.1] - 2026-01-27
 
 ### Documentation
