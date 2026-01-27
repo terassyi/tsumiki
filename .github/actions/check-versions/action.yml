@@ -1,0 +1,19 @@
+name: 'Check Versions'
+description: 'Check that workspace member versions match their dependency versions'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install rust-script
+      shell: bash
+      run: cargo install rust-script
+
+    - name: Setup just
+      uses: extractions/setup-just@v2
+
+    - name: Check versions
+      shell: bash
+      run: just check-versions
