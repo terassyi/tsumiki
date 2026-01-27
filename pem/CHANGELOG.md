@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.1.0] - 2026-01-27
+
+### Miscellaneous Tasks
+
+- Release v0.1.0 ([#44](https://github.com/terassyi/tsumiki/pull/44))
+
+
 ## [0.1.0-dev.3] - 2026-01-27
 
 ### Documentation
