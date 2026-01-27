@@ -20,9 +20,6 @@ release_always = false
 git_release_enable = true
 git_release_draft = false
 
-# Do not publish prereleases to crates.io
-allow_prerelease = false
-
 # crates that should not be published
 [[package]]
 name = "tsumiki-cli"
