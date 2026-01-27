@@ -1,6 +1,6 @@
 [package]
 name = "tsumiki-x509"
-version = "0.1.0-dev.3"
+version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,16 +16,16 @@ rustls = ["dep:rustls-pki-types"]
 
 [dependencies]
 rustls-pki-types = { workspace = true, optional = true }
-tsumiki-asn1 = { version = "0.1.0-dev.3", path = "../asn1" }
+tsumiki-asn1 = { version = "0.1.0", path = "../asn1" }
 chrono = { workspace = true }
-tsumiki-der = { version = "0.1.0-dev.3", path = "../der" }
+tsumiki-der = { version = "0.1.0", path = "../der" }
 ipnet = { version = "2.10", features = ["serde"] }
-tsumiki-pem = { version = "0.1.0-dev.3", path = "../pem" }
-tsumiki-pkix-types = { version = "0.1.0-dev.3", path = "../pkix-types" }
+tsumiki-pem = { version = "0.1.0", path = "../pem" }
+tsumiki-pkix-types = { version = "0.1.0", path = "../pkix-types" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-tsumiki = { version = "0.1.0-dev.3", path = "../tsumiki" }
+tsumiki = { version = "0.1.0", path = "../tsumiki" }
 
 [dev-dependencies]
 rstest.workspace = true

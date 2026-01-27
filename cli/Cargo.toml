@@ -1,6 +1,6 @@
 [package]
 name = "tsumiki-cli"
-version = "0.1.0-dev.3"
+version = "0.1.0"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,13 +15,13 @@ name = "tsumiki"
 path = "src/main.rs"
 
 [dependencies]
-tsumiki-x509 = { version = "0.1.0-dev.3", path = "../x509", features = ["rustls"] }
-tsumiki-pem = { version = "0.1.0-dev.3", path = "../pem" }
-tsumiki-der = { version = "0.1.0-dev.3", path = "../der" }
-tsumiki-asn1 = { version = "0.1.0-dev.3", path = "../asn1" }
-tsumiki-pkcs = { version = "0.1.0-dev.3", path = "../pkcs" }
-tsumiki-pkix-types = { version = "0.1.0-dev.3", path = "../pkix-types" }
-tsumiki = { version = "0.1.0-dev.3", path = "../tsumiki" }
+tsumiki-x509 = { version = "0.1.0", path = "../x509", features = ["rustls"] }
+tsumiki-pem = { version = "0.1.0", path = "../pem" }
+tsumiki-der = { version = "0.1.0", path = "../der" }
+tsumiki-asn1 = { version = "0.1.0", path = "../asn1" }
+tsumiki-pkcs = { version = "0.1.0", path = "../pkcs" }
+tsumiki-pkix-types = { version = "0.1.0", path = "../pkix-types" }
+tsumiki = { version = "0.1.0", path = "../tsumiki" }
 clap = { version = "4.5", features = ["derive"] }
 thiserror.workspace = true
 serde_json.workspace = true
