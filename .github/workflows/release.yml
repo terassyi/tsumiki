@@ -1,11 +1,12 @@
 name: Release
 
 on:
-  push:
-    tags:
-      # Triggered when release-plz creates tsumiki-cli tag
-      - 'tsumiki-cli-v[0-9]+.[0-9]+.[0-9]+'
-      - 'tsumiki-cli-v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0)'
+        required: true
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,12 +18,26 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       prerelease: ${{ steps.version.outputs.prerelease }}
     steps:
-      - name: Extract version from tag
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Validate tag exists
+        run: |
+          VERSION="${{ inputs.version }}"
+          TAG="tsumiki-cli-v${VERSION}"
+          if ! git tag -l | grep -q "^${TAG}$"; then
+            echo "Error: Tag '${TAG}' does not exist"
+            echo "Available tsumiki-cli tags:"
+            git tag -l 'tsumiki-cli-v*'
+            exit 1
+          fi
+          echo "Tag '${TAG}' exists"
+
+      - name: Extract version
         id: version
         run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          # Extract version from tag format: tsumiki-cli-vX.Y.Z
-          VERSION="${TAG#tsumiki-cli-v}"
+          VERSION="${{ inputs.version }}"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Version: $VERSION"
 
@@ -108,6 +123,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: "tsumiki-cli-v${{ needs.extract-version.outputs.version }}"
           name: "tsumiki-cli v${{ needs.extract-version.outputs.version }}"
           prerelease: ${{ needs.extract-version.outputs.prerelease == 'true' }}
           files: release-assets/*
