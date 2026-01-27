@@ -31,7 +31,7 @@ git_release_enable = false
 git_tag_enable = true
 
 [[package]]
-name = "examples"
+name = "tsumiki-examples"
 publish = false
 git_release_enable = false
 changelog_update = false
