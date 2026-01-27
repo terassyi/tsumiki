@@ -1,6 +1,6 @@
 [package]
 name = "tsumiki-examples"
-version = "0.1.0-dev.1"
+version = "0.1.0-dev.2"
 edition = "2024"
 publish = false
 
@@ -13,10 +13,10 @@ name = "tls-echo-client"
 path = "tls_echo_client.rs"
 
 [dependencies]
-tsumiki-x509 = { path = "../x509", features = ["rustls"] }
-tsumiki-pkcs = { path = "../pkcs", features = ["rustls"] }
-tsumiki-pem = { path = "../pem" }
-tsumiki = { path = "../tsumiki" }
+tsumiki-x509 = { version = "0.1.0-dev.2", path = "../x509", features = ["rustls"] }
+tsumiki-pkcs = { version = "0.1.0-dev.2", path = "../pkcs", features = ["rustls"] }
+tsumiki-pem = { version = "0.1.0-dev.2", path = "../pem" }
+tsumiki = { version = "0.1.0-dev.2", path = "../tsumiki" }
 
 rustls = { workspace = true }
 tokio = { version = "1", features = ["full"] }

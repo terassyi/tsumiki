@@ -1,6 +1,6 @@
 [package]
 name = "tsumiki-der"
-version = "0.1.0-dev.1"
+version = "0.1.0-dev.2"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,10 +11,10 @@ categories.workspace = true
 description = "DER (Distinguished Encoding Rules) parser for ASN.1 structures"
 
 [dependencies]
-tsumiki-pem = { path = "../pem" }
+tsumiki-pem = { version = "0.1.0-dev.2", path = "../pem" }
 nom = "8.0"
 thiserror = { workspace = true }
-tsumiki = { path = "../tsumiki" }
+tsumiki = { version = "0.1.0-dev.2", path = "../tsumiki" }
 
 [dev-dependencies]
 rstest = { workspace = true }

@@ -1,6 +1,6 @@
 [package]
 name = "tsumiki-asn1"
-version = "0.1.0-dev.1"
+version = "0.1.0-dev.2"
 authors.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,18 +12,18 @@ description = "ASN.1 object representation and parser for X.509 certificates"
 
 [dependencies]
 chrono = { workspace = true }
-tsumiki-der = { path = "../der" }
+tsumiki-der = { version = "0.1.0-dev.2", path = "../der" }
 num-bigint = { workspace = true }
 num-traits = "0.2"
 serde = { workspace = true, optional = true }
 thiserror = { workspace = true }
-tsumiki = { path = "../tsumiki" }
+tsumiki = { version = "0.1.0-dev.2", path = "../tsumiki" }
 
 [features]
 default = ["serde"]
 serde = ["dep:serde", "chrono/serde"]
 
 [dev-dependencies]
-tsumiki-pem = { path = "../pem" }
+tsumiki-pem = { version = "0.1.0-dev.2", path = "../pem" }
 rstest = { workspace = true }
 serde_json = { workspace = true }
