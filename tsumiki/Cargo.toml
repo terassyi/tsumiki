@@ -9,5 +9,6 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "Core traits for X.509 certificate parsing and handling"
+readme = "README.md"
 
 [dependencies]

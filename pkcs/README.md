@@ -1,54 +1,55 @@
-# PKCS - Public-Key Cryptography Standards
+# tsumiki-pkcs
 
-Pure Rust implementation of PKCS standards for tsumiki project.
+[![crates.io](https://img.shields.io/crates/v/tsumiki-pkcs.svg)](https://crates.io/crates/tsumiki-pkcs)
+[![docs.rs](https://docs.rs/tsumiki-pkcs/badge.svg)](https://docs.rs/tsumiki-pkcs)
+
+PKCS (Public-Key Cryptography Standards) support for the tsumiki PKI toolkit.
 
 ## Supported Standards
 
-### PKCS#8 (RFC 5958)
-
-- PrivateKeyInfo structure
-- Asymmetric key packages
-- Algorithm-independent private key format
-
-### PKCS#1 (RFC 8017)
-
-- RSAPrivateKey structure
-- RSAPublicKey structure
-- RSA cryptography specifications
-
-### SEC1 (RFC 5915)
-
-- ECPrivateKey structure
-- Elliptic Curve private key format
-- Named curve support (P-256, P-384, P-521)
+- **PKCS#1** ([RFC 8017](https://datatracker.ietf.org/doc/html/rfc8017)) - RSA public and private keys
+- **PKCS#8** ([RFC 5958](https://datatracker.ietf.org/doc/html/rfc5958)) - Private-key information syntax
+- **PKCS#9** ([RFC 2985](https://datatracker.ietf.org/doc/html/rfc2985)) - Selected attributes
+- **SEC1** ([RFC 5915](https://datatracker.ietf.org/doc/html/rfc5915)) - Elliptic Curve private keys
 
 ## Features
 
-- RFC-compliant ASN.1 encoding/decoding
-- Integration with tsumiki's ASN.1/DER infrastructure
-- Type-safe key format handling
-- Comprehensive test coverage
+- Parse RSA, EC, and other private/public keys
+- Support for encrypted PKCS#8 keys
+- rustls-pki-types integration (optional)
+- JSON/YAML serialization (serde)
 
 ## Usage
 
-```rust
-use tsumiki_pkcs::pkcs8::OneAsymmetricKey;
-use tsumiki_pkcs::pkcs1::RSAPrivateKey;
-use tsumiki_pkcs::sec1::ECPrivateKey;
-use tsumiki::decoder::Decoder;
-use tsumiki::encoder::Encoder;
-use tsumiki_asn1::Element;
+```toml
+[dependencies]
+tsumiki-pkcs = "0.1"
 
-// Decode PKCS#8 OneAsymmetricKey
-let key: OneAsymmetricKey = element.decode()?;
-
-// Encode RSA private key
-let rsa_key: RSAPrivateKey = element.decode()?;
-let encoded: Element = rsa_key.encode()?;
+# With rustls integration
+tsumiki-pkcs = { version = "0.1", features = ["rustls"] }
 ```
 
-## References
+```rust
+use rustls_pki_types::PrivateKeyDer;
+use tsumiki_pkcs::{PrivateKey, PrivateKeyExt};
 
-- [RFC 5958](https://datatracker.ietf.org/doc/html/rfc5958) - Asymmetric Key Packages
-- [RFC 8017](https://datatracker.ietf.org/doc/html/rfc8017) - PKCS #1: RSA Cryptography Specifications
-- [RFC 5915](https://datatracker.ietf.org/doc/html/rfc5915) - Elliptic Curve Private Key Structure
+// Parse a private key from PEM
+let pem = std::fs::read_to_string("key.pem")?;
+let key = PrivateKey::from_pem(&pem)?;
+
+// Inspect key properties
+println!("Algorithm: {}", key.algorithm());
+println!("Key size: {} bits", key.key_size());
+
+// Convert to rustls (with "rustls" feature)
+let rustls_key: PrivateKeyDer = key.try_into()?;
+```
+
+## Related Crates
+
+- [tsumiki-x509](https://crates.io/crates/tsumiki-x509) - X.509 certificate parsing
+- [tsumiki-cli](https://crates.io/crates/tsumiki-cli) - Command-line tool
+
+## License
+
+MIT License

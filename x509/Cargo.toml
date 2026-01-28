@@ -9,6 +9,7 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "X.509 certificate parsing and handling with full v3 extensions support"
+readme = "README.md"
 
 [features]
 default = []

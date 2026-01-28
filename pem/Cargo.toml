@@ -9,6 +9,7 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "PEM format parser and encoder for X.509 certificates"
+readme = "README.md"
 
 [dependencies]
 base64.workspace = true

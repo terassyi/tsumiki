@@ -9,6 +9,7 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "PKCS standards (PKCS#1, PKCS#8, PKCS#9, SEC1) for cryptographic key handling"
+readme = "README.md"
 
 [features]
 default = []
