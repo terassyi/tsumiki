@@ -1,8 +1,13 @@
 # Tsumiki
 
+[![CI](https://github.com/terassyi/tsumiki/actions/workflows/ci.yaml/badge.svg)](https://github.com/terassyi/tsumiki/actions/workflows/ci.yaml)
+[![crates.io](https://img.shields.io/crates/v/tsumiki-cli.svg)](https://crates.io/crates/tsumiki-cli)
+[![docs.rs](https://docs.rs/tsumiki-x509/badge.svg)](https://docs.rs/tsumiki-x509)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A pure Rust PKI toolkit and library for X.509 certificates, ASN.1, and PKCS standards.
 
-> **Status**: Under Development - APIs may change.
+> **Note**: This is an early release (v0.1.x). APIs may change in future versions.
 
 ## Overview
 
@@ -77,16 +82,16 @@ tsumiki (core traits: Encoder/Decoder)
                        --> pkcs ------/        cli
 ```
 
-| Crate | Description | crates.io |
-|-------|-------------|-----------|
-| `tsumiki` | Core traits (`Encoder`, `Decoder`) | [![crates.io](https://img.shields.io/crates/v/tsumiki.svg)](https://crates.io/crates/tsumiki) |
-| `tsumiki-pem` | PEM format handling (RFC 7468) | [![crates.io](https://img.shields.io/crates/v/tsumiki-pem.svg)](https://crates.io/crates/tsumiki-pem) |
-| `tsumiki-der` | DER (Distinguished Encoding Rules) parsing | [![crates.io](https://img.shields.io/crates/v/tsumiki-der.svg)](https://crates.io/crates/tsumiki-der) |
-| `tsumiki-asn1` | ASN.1 object representation | [![crates.io](https://img.shields.io/crates/v/tsumiki-asn1.svg)](https://crates.io/crates/tsumiki-asn1) |
-| `tsumiki-pkix-types` | PKIX types shared across X.509 and PKCS | [![crates.io](https://img.shields.io/crates/v/tsumiki-pkix-types.svg)](https://crates.io/crates/tsumiki-pkix-types) |
-| `tsumiki-x509` | X.509 certificate parsing | [![crates.io](https://img.shields.io/crates/v/tsumiki-x509.svg)](https://crates.io/crates/tsumiki-x509) |
-| `tsumiki-pkcs` | PKCS#1, PKCS#8, PKCS#9, SEC1 support | [![crates.io](https://img.shields.io/crates/v/tsumiki-pkcs.svg)](https://crates.io/crates/tsumiki-pkcs) |
-| `tsumiki-cli` | Command-line tool | [![crates.io](https://img.shields.io/crates/v/tsumiki-cli.svg)](https://crates.io/crates/tsumiki-cli) |
+| Crate | Description | crates.io | docs.rs |
+|-------|-------------|-----------|---------|
+| `tsumiki` | Core traits (`Encoder`, `Decoder`) | [![crates.io](https://img.shields.io/crates/v/tsumiki.svg)](https://crates.io/crates/tsumiki) | [![docs.rs](https://docs.rs/tsumiki/badge.svg)](https://docs.rs/tsumiki) |
+| `tsumiki-pem` | PEM format handling (RFC 7468) | [![crates.io](https://img.shields.io/crates/v/tsumiki-pem.svg)](https://crates.io/crates/tsumiki-pem) | [![docs.rs](https://docs.rs/tsumiki-pem/badge.svg)](https://docs.rs/tsumiki-pem) |
+| `tsumiki-der` | DER (Distinguished Encoding Rules) parsing | [![crates.io](https://img.shields.io/crates/v/tsumiki-der.svg)](https://crates.io/crates/tsumiki-der) | [![docs.rs](https://docs.rs/tsumiki-der/badge.svg)](https://docs.rs/tsumiki-der) |
+| `tsumiki-asn1` | ASN.1 object representation | [![crates.io](https://img.shields.io/crates/v/tsumiki-asn1.svg)](https://crates.io/crates/tsumiki-asn1) | [![docs.rs](https://docs.rs/tsumiki-asn1/badge.svg)](https://docs.rs/tsumiki-asn1) |
+| `tsumiki-pkix-types` | PKIX types shared across X.509 and PKCS | [![crates.io](https://img.shields.io/crates/v/tsumiki-pkix-types.svg)](https://crates.io/crates/tsumiki-pkix-types) | [![docs.rs](https://docs.rs/tsumiki-pkix-types/badge.svg)](https://docs.rs/tsumiki-pkix-types) |
+| `tsumiki-x509` | X.509 certificate parsing | [![crates.io](https://img.shields.io/crates/v/tsumiki-x509.svg)](https://crates.io/crates/tsumiki-x509) | [![docs.rs](https://docs.rs/tsumiki-x509/badge.svg)](https://docs.rs/tsumiki-x509) |
+| `tsumiki-pkcs` | PKCS#1, PKCS#8, PKCS#9, SEC1 support | [![crates.io](https://img.shields.io/crates/v/tsumiki-pkcs.svg)](https://crates.io/crates/tsumiki-pkcs) | [![docs.rs](https://docs.rs/tsumiki-pkcs/badge.svg)](https://docs.rs/tsumiki-pkcs) |
+| `tsumiki-cli` | Command-line tool | [![crates.io](https://img.shields.io/crates/v/tsumiki-cli.svg)](https://crates.io/crates/tsumiki-cli) | - |
 
 ## Installation
 

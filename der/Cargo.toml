@@ -9,6 +9,7 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "DER (Distinguished Encoding Rules) parser for ASN.1 structures"
+readme = "README.md"
 
 [dependencies]
 tsumiki-pem = { version = "0.1.0", path = "../pem" }

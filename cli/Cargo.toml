@@ -9,6 +9,7 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "Command-line tool for X.509 certificate inspection and PKCS handling"
+readme = "README.md"
 
 [[bin]]
 name = "tsumiki"

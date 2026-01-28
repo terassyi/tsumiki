@@ -9,6 +9,7 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "ASN.1 object representation and parser for X.509 certificates"
+readme = "README.md"
 
 [dependencies]
 chrono = { workspace = true }

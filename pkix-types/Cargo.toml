@@ -9,6 +9,7 @@ repository.workspace = true
 keywords.workspace = true
 categories.workspace = true
 description = "PKIX types (AlgorithmIdentifier, Name, etc.) for X.509 certificates"
+readme = "README.md"
 
 [dependencies]
 tsumiki-asn1 = { version = "0.1.0", path = "../asn1" }
