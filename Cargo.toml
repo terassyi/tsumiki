@@ -5,7 +5,7 @@ members = [ "asn1", "cli", "der", "examples", "pem", "pkcs", "pkix-types", "tsum
 [workspace.package]
 authors = ["terassyi"]
 edition = "2024"
-rust-version = "1.87.0"
+rust-version = "1.94.1"
 license = "MIT"
 repository = "https://github.com/terassyi/tsumiki"
 keywords = ["x509", "certificate", "asn1", "der", "pem"]
