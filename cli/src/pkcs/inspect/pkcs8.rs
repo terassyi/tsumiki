@@ -275,13 +275,12 @@ fn output_dsa_parameters_to_string(
 ) -> Result<()> {
     // Access SubjectPublicKeyInfo::algorithm() via AsRef to avoid conflict with PublicKeyExt::algorithm()
     let spki: &tsumiki_pkix_types::SubjectPublicKeyInfo = key.as_ref();
-    if let Some(AlgorithmParameters::Other(raw)) = spki.algorithm().parameters.as_ref() {
-        if let Ok(dsa_params) = DsaParameters::try_from(raw) {
+    if let Some(AlgorithmParameters::Other(raw)) = spki.algorithm().parameters.as_ref()
+        && let Ok(dsa_params) = DsaParameters::try_from(raw) {
             writeln!(output, "  Prime (p): {} bits", dsa_params.p.bits())?;
             writeln!(output, "  Subprime (q): {} bits", dsa_params.q.bits())?;
             writeln!(output, "  Generator (g): {} bits", dsa_params.g.bits())?;
         }
-    }
     Ok(())
 }
 

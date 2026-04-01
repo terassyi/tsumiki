@@ -58,8 +58,8 @@ fn format_element(element: &Element, depth: usize, parse_implicit: bool, output:
             let byte_count = hex.split(':').count();
 
             // Try to parse as ASN.1 if flag is set
-            if parse_implicit {
-                if let Ok(parsed) = parse_implicit_octets(octets, depth) {
+            if parse_implicit
+                && let Ok(parsed) = parse_implicit_octets(octets, depth) {
                     if byte_count > 32 {
                         output
                             .push_str(&format!("{}OCTET STRING ({} bytes)\n", prefix, byte_count));
@@ -69,7 +69,6 @@ fn format_element(element: &Element, depth: usize, parse_implicit: bool, output:
                     output.push_str(&parsed);
                     return;
                 }
-            }
 
             // Show as hex string
             if byte_count > 32 {
@@ -138,8 +137,8 @@ fn format_element(element: &Element, depth: usize, parse_implicit: bool, output:
                 };
 
                 // Try to parse the OctetString content as ASN.1 if flag is set
-                if parse_implicit {
-                    if let Ok(parsed) = parse_implicit_octets(octets, depth) {
+                if parse_implicit
+                    && let Ok(parsed) = parse_implicit_octets(octets, depth) {
                         if byte_count > 32 {
                             output.push_str(&format!(
                                 "{}  OCTET STRING ({} bytes)\n",
@@ -151,7 +150,6 @@ fn format_element(element: &Element, depth: usize, parse_implicit: bool, output:
                         output.push_str(&parsed);
                         return;
                     }
-                }
 
                 // Show as OctetString (either flag is false or parsing failed)
                 if byte_count > 32 {

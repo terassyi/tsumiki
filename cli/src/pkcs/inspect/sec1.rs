@@ -60,12 +60,11 @@ pub(crate) fn output_ec_private_key(
                 writeln!(output, "---------------------")?;
 
                 // Show curve OID if not already showing it
-                if !config.show_oid {
-                    if let Some(curve) = private_key.parameters {
+                if !config.show_oid
+                    && let Some(curve) = private_key.parameters {
                         let oid = curve.oid()?;
                         writeln!(output, "Curve OID: {}", oid)?;
                     }
-                }
 
                 // Show private key data preview (first 64 bytes)
                 let key_data = private_key.private_key.as_bytes();

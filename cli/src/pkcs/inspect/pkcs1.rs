@@ -12,13 +12,11 @@ pub(crate) fn output_rsa_private_key(
 ) -> Result<()> {
     // If --hex flag is set, output only HEX dump
     if config.hex {
-        if let Ok(asn1_obj) = private_key.encode() {
-            if let Ok(der) = asn1_obj.encode() {
-                if let Ok(der_bytes) = der.encode() {
+        if let Ok(asn1_obj) = private_key.encode()
+            && let Ok(der) = asn1_obj.encode()
+                && let Ok(der_bytes) = der.encode() {
                     print!("{}", format_hex_dump(&der_bytes));
                 }
-            }
-        }
         return Ok(());
     }
 
@@ -138,13 +136,11 @@ pub(crate) fn output_rsa_public_key(
 ) -> Result<()> {
     // If --hex flag is set, output only HEX dump
     if config.hex {
-        if let Ok(asn1_obj) = public_key.encode() {
-            if let Ok(der) = asn1_obj.encode() {
-                if let Ok(der_bytes) = der.encode() {
+        if let Ok(asn1_obj) = public_key.encode()
+            && let Ok(der) = asn1_obj.encode()
+                && let Ok(der_bytes) = der.encode() {
                     print!("{}", format_hex_dump(&der_bytes));
                 }
-            }
-        }
         return Ok(());
     }
 
@@ -209,14 +205,12 @@ pub(crate) fn output_rsa_private_key_fingerprint(
     private_key: &tsumiki_pkcs::pkcs1::RSAPrivateKey,
     config: &Config,
 ) -> Result<()> {
-    if let Ok(asn1_obj) = private_key.encode() {
-        if let Ok(der) = asn1_obj.encode() {
-            if let Ok(der_bytes) = der.encode() {
+    if let Ok(asn1_obj) = private_key.encode()
+        && let Ok(der) = asn1_obj.encode()
+            && let Ok(der_bytes) = der.encode() {
                 let fingerprint = calculate_fingerprint(&der_bytes, config.fingerprint_alg);
                 println!("{}", fingerprint);
             }
-        }
-    }
     Ok(())
 }
 
@@ -224,13 +218,11 @@ pub(crate) fn output_rsa_public_key_fingerprint(
     public_key: &tsumiki_pkcs::pkcs1::RSAPublicKey,
     config: &Config,
 ) -> Result<()> {
-    if let Ok(asn1_obj) = public_key.encode() {
-        if let Ok(der) = asn1_obj.encode() {
-            if let Ok(der_bytes) = der.encode() {
+    if let Ok(asn1_obj) = public_key.encode()
+        && let Ok(der) = asn1_obj.encode()
+            && let Ok(der_bytes) = der.encode() {
                 let fingerprint = calculate_fingerprint(&der_bytes, config.fingerprint_alg);
                 println!("{}", fingerprint);
             }
-        }
-    }
     Ok(())
 }
