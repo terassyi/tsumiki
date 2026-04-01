@@ -14,9 +14,10 @@ pub(crate) fn output_rsa_private_key(
     if config.hex {
         if let Ok(asn1_obj) = private_key.encode()
             && let Ok(der) = asn1_obj.encode()
-                && let Ok(der_bytes) = der.encode() {
-                    print!("{}", format_hex_dump(&der_bytes));
-                }
+            && let Ok(der_bytes) = der.encode()
+        {
+            print!("{}", format_hex_dump(&der_bytes));
+        }
         return Ok(());
     }
 
@@ -138,9 +139,10 @@ pub(crate) fn output_rsa_public_key(
     if config.hex {
         if let Ok(asn1_obj) = public_key.encode()
             && let Ok(der) = asn1_obj.encode()
-                && let Ok(der_bytes) = der.encode() {
-                    print!("{}", format_hex_dump(&der_bytes));
-                }
+            && let Ok(der_bytes) = der.encode()
+        {
+            print!("{}", format_hex_dump(&der_bytes));
+        }
         return Ok(());
     }
 
@@ -207,10 +209,11 @@ pub(crate) fn output_rsa_private_key_fingerprint(
 ) -> Result<()> {
     if let Ok(asn1_obj) = private_key.encode()
         && let Ok(der) = asn1_obj.encode()
-            && let Ok(der_bytes) = der.encode() {
-                let fingerprint = calculate_fingerprint(&der_bytes, config.fingerprint_alg);
-                println!("{}", fingerprint);
-            }
+        && let Ok(der_bytes) = der.encode()
+    {
+        let fingerprint = calculate_fingerprint(&der_bytes, config.fingerprint_alg);
+        println!("{}", fingerprint);
+    }
     Ok(())
 }
 
@@ -220,9 +223,10 @@ pub(crate) fn output_rsa_public_key_fingerprint(
 ) -> Result<()> {
     if let Ok(asn1_obj) = public_key.encode()
         && let Ok(der) = asn1_obj.encode()
-            && let Ok(der_bytes) = der.encode() {
-                let fingerprint = calculate_fingerprint(&der_bytes, config.fingerprint_alg);
-                println!("{}", fingerprint);
-            }
+        && let Ok(der_bytes) = der.encode()
+    {
+        let fingerprint = calculate_fingerprint(&der_bytes, config.fingerprint_alg);
+        println!("{}", fingerprint);
+    }
     Ok(())
 }
