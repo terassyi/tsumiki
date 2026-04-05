@@ -33,6 +33,7 @@ jobs:
             pkcs
             x509
             cli
+            deps
           requireScope: false
           subjectPattern: ^.+$
           subjectPatternError: |
