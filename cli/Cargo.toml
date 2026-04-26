@@ -23,7 +23,7 @@ tsumiki-asn1 = { version = "0.1.0", path = "../asn1" }
 tsumiki-pkcs = { version = "0.1.0", path = "../pkcs" }
 tsumiki-pkix-types = { version = "0.1.0", path = "../pkix-types" }
 tsumiki = { version = "0.1.0", path = "../tsumiki" }
-clap = { version = "4.5", features = ["derive"] }
+clap = { version = "4.6", features = ["derive"] }
 thiserror.workspace = true
 serde_json.workspace = true
 serde_yml = "0.0"
@@ -34,6 +34,6 @@ chrono.workspace = true
 rustls.workspace = true
 
 [dev-dependencies]
-assert_cmd = "2.0"
+assert_cmd = "2.2"
 predicates = "3.1"
 serde_json.workspace = true
