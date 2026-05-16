@@ -29,6 +29,8 @@ mod name_constraints;
 mod policy_constraints;
 mod policy_mappings;
 mod subject_alt_name;
+mod subject_directory_attributes;
+mod subject_info_access;
 mod subject_key_identifier;
 
 // Re-export public types
@@ -52,6 +54,8 @@ pub use name_constraints::{GeneralSubtree, NameConstraints};
 pub use policy_constraints::{PolicyConstraints, SkipCerts};
 pub use policy_mappings::{PolicyMapping, PolicyMappings};
 pub use subject_alt_name::SubjectAltName;
+pub use subject_directory_attributes::{SubjectDirectoryAttribute, SubjectDirectoryAttributes};
+pub use subject_info_access::SubjectInfoAccess;
 pub use subject_key_identifier::SubjectKeyIdentifier;
 use tsumiki_asn1::AsOid;
 
@@ -123,10 +127,8 @@ impl tsumiki_pkix_types::OidName for RawExtension {
             FreshestCRL::OID => Some("freshestCRL"),
             InhibitAnyPolicy::OID => Some("inhibitAnyPolicy"),
             AuthorityInfoAccess::OID => Some("authorityInfoAccess"),
-            // Additional common extensions not yet implemented
-            "2.5.29.9" => Some("subjectDirectoryAttributes"),
-            "2.5.29.16" => Some("privateKeyUsagePeriod"),
-            "1.3.6.1.5.5.7.1.11" => Some("subjectInfoAccess"),
+            SubjectInfoAccess::OID => Some("subjectInfoAccess"),
+            SubjectDirectoryAttributes::OID => Some("subjectDirectoryAttributes"),
             _ => None,
         }
     }
@@ -387,6 +389,12 @@ pub(crate) struct ParsedExtensions {
     pub(crate) inhibit_any_policy: Option<InhibitAnyPolicy>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) freshest_crl: Option<FreshestCRL>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) subject_info_access: Option<SubjectInfoAccess>,
+    // SubjectDirectoryAttributes currently has no Serialize impl because
+    // AttributeValue is held as raw asn1 Element; skip it in JSON output.
+    #[serde(skip)]
+    pub(crate) subject_directory_attributes: Option<SubjectDirectoryAttributes>,
 }
 
 impl ParsedExtensions {
@@ -407,6 +415,8 @@ impl ParsedExtensions {
             policy_constraints: None,
             inhibit_any_policy: None,
             freshest_crl: None,
+            subject_info_access: None,
+            subject_directory_attributes: None,
         };
 
         for ext in extensions.extensions() {
@@ -455,6 +465,13 @@ impl ParsedExtensions {
                 }
                 FreshestCRL::OID => {
                     raw.freshest_crl = Some(ext.parse::<FreshestCRL>()?);
+                }
+                SubjectInfoAccess::OID => {
+                    raw.subject_info_access = Some(ext.parse::<SubjectInfoAccess>()?);
+                }
+                SubjectDirectoryAttributes::OID => {
+                    raw.subject_directory_attributes =
+                        Some(ext.parse::<SubjectDirectoryAttributes>()?);
                 }
                 _ => {
                     // Unknown extension, skip
