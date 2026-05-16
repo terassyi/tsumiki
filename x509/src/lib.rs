@@ -388,6 +388,11 @@ impl fmt::Display for Certificate {
                 write!(f, "{}", sia)?;
             }
 
+            // Subject Directory Attributes
+            if let Ok(Some(sda)) = self.extension::<extensions::SubjectDirectoryAttributes>() {
+                write!(f, "{}", sda)?;
+            }
+
             // Display any other extensions not explicitly handled above
             let handled_oids = vec![
                 "2.5.29.14",          // SubjectKeyIdentifier
@@ -406,6 +411,7 @@ impl fmt::Display for Certificate {
                 "2.5.29.54",          // InhibitAnyPolicy
                 "1.3.6.1.5.5.7.1.1",  // AuthorityInfoAccess
                 "1.3.6.1.5.5.7.1.11", // SubjectInfoAccess
+                "2.5.29.9",           // SubjectDirectoryAttributes
             ];
 
             if let Some(ref exts) = self.tbs_certificate.extensions {
