@@ -383,23 +383,29 @@ impl fmt::Display for Certificate {
                 write!(f, "{}", aia)?;
             }
 
+            // Subject Info Access
+            if let Ok(Some(sia)) = self.extension::<extensions::SubjectInfoAccess>() {
+                write!(f, "{}", sia)?;
+            }
+
             // Display any other extensions not explicitly handled above
             let handled_oids = vec![
-                "2.5.29.14",         // SubjectKeyIdentifier
-                "2.5.29.35",         // AuthorityKeyIdentifier
-                "2.5.29.19",         // BasicConstraints
-                "2.5.29.15",         // KeyUsage
-                "2.5.29.37",         // ExtendedKeyUsage
-                "2.5.29.17",         // SubjectAltName
-                "2.5.29.18",         // IssuerAltName
-                "2.5.29.30",         // NameConstraints
-                "2.5.29.31",         // CRLDistributionPoints
-                "2.5.29.32",         // CertificatePolicies
-                "2.5.29.33",         // PolicyMappings
-                "2.5.29.36",         // PolicyConstraints
-                "2.5.29.46",         // FreshestCRL
-                "2.5.29.54",         // InhibitAnyPolicy
-                "1.3.6.1.5.5.7.1.1", // AuthorityInfoAccess
+                "2.5.29.14",          // SubjectKeyIdentifier
+                "2.5.29.35",          // AuthorityKeyIdentifier
+                "2.5.29.19",          // BasicConstraints
+                "2.5.29.15",          // KeyUsage
+                "2.5.29.37",          // ExtendedKeyUsage
+                "2.5.29.17",          // SubjectAltName
+                "2.5.29.18",          // IssuerAltName
+                "2.5.29.30",          // NameConstraints
+                "2.5.29.31",          // CRLDistributionPoints
+                "2.5.29.32",          // CertificatePolicies
+                "2.5.29.33",          // PolicyMappings
+                "2.5.29.36",          // PolicyConstraints
+                "2.5.29.46",          // FreshestCRL
+                "2.5.29.54",          // InhibitAnyPolicy
+                "1.3.6.1.5.5.7.1.1",  // AuthorityInfoAccess
+                "1.3.6.1.5.5.7.1.11", // SubjectInfoAccess
             ];
 
             if let Some(ref exts) = self.tbs_certificate.extensions {

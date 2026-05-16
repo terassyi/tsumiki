@@ -29,6 +29,7 @@ mod name_constraints;
 mod policy_constraints;
 mod policy_mappings;
 mod subject_alt_name;
+mod subject_info_access;
 mod subject_key_identifier;
 
 // Re-export public types
@@ -52,6 +53,7 @@ pub use name_constraints::{GeneralSubtree, NameConstraints};
 pub use policy_constraints::{PolicyConstraints, SkipCerts};
 pub use policy_mappings::{PolicyMapping, PolicyMappings};
 pub use subject_alt_name::SubjectAltName;
+pub use subject_info_access::SubjectInfoAccess;
 pub use subject_key_identifier::SubjectKeyIdentifier;
 use tsumiki_asn1::AsOid;
 
@@ -125,7 +127,7 @@ impl tsumiki_pkix_types::OidName for RawExtension {
             AuthorityInfoAccess::OID => Some("authorityInfoAccess"),
             // Additional common extensions not yet implemented
             "2.5.29.9" => Some("subjectDirectoryAttributes"),
-            "1.3.6.1.5.5.7.1.11" => Some("subjectInfoAccess"),
+            SubjectInfoAccess::OID => Some("subjectInfoAccess"),
             _ => None,
         }
     }
@@ -386,6 +388,8 @@ pub(crate) struct ParsedExtensions {
     pub(crate) inhibit_any_policy: Option<InhibitAnyPolicy>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) freshest_crl: Option<FreshestCRL>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) subject_info_access: Option<SubjectInfoAccess>,
 }
 
 impl ParsedExtensions {
@@ -406,6 +410,7 @@ impl ParsedExtensions {
             policy_constraints: None,
             inhibit_any_policy: None,
             freshest_crl: None,
+            subject_info_access: None,
         };
 
         for ext in extensions.extensions() {
@@ -454,6 +459,9 @@ impl ParsedExtensions {
                 }
                 FreshestCRL::OID => {
                     raw.freshest_crl = Some(ext.parse::<FreshestCRL>()?);
+                }
+                SubjectInfoAccess::OID => {
+                    raw.subject_info_access = Some(ext.parse::<SubjectInfoAccess>()?);
                 }
                 _ => {
                     // Unknown extension, skip

@@ -20,6 +20,7 @@ pub enum Kind {
     InhibitAnyPolicy,
     PolicyConstraints,
     PolicyMappings,
+    SubjectInfoAccess,
 }
 
 impl std::fmt::Display for Kind {
@@ -40,6 +41,7 @@ impl std::fmt::Display for Kind {
             Self::InhibitAnyPolicy => write!(f, "InhibitAnyPolicy"),
             Self::PolicyConstraints => write!(f, "PolicyConstraints"),
             Self::PolicyMappings => write!(f, "PolicyMappings"),
+            Self::SubjectInfoAccess => write!(f, "SubjectInfoAccess"),
         }
     }
 }
@@ -225,6 +227,16 @@ pub enum Error {
 
     #[error("AuthorityInfoAccess: accessMethod must be OBJECT IDENTIFIER")]
     AccessDescriptionExpectedOid,
+
+    // SubjectInfoAccess specific errors
+    #[error("SubjectInfoAccess: at least one AccessDescription required")]
+    SubjectInfoAccessEmpty,
+
+    #[error("SubjectInfoAccess: AccessDescription must be SEQUENCE with 2 elements")]
+    SubjectInfoAccessInvalidStructure,
+
+    #[error("SubjectInfoAccess: accessMethod must be OBJECT IDENTIFIER")]
+    SubjectInfoAccessExpectedOid,
 
     /// Invalid ASN.1 structure
     #[error("invalid ASN.1: {0}")]
