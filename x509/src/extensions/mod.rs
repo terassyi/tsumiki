@@ -125,7 +125,6 @@ impl tsumiki_pkix_types::OidName for RawExtension {
             AuthorityInfoAccess::OID => Some("authorityInfoAccess"),
             // Additional common extensions not yet implemented
             "2.5.29.9" => Some("subjectDirectoryAttributes"),
-            "2.5.29.16" => Some("privateKeyUsagePeriod"),
             "1.3.6.1.5.5.7.1.11" => Some("subjectInfoAccess"),
             _ => None,
         }
