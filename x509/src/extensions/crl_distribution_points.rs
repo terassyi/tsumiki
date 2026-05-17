@@ -520,9 +520,9 @@ impl fmt::Display for DistributionPoint {
 
 impl fmt::Display for CRLDistributionPoints {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ext_name = self.oid_name().unwrap_or("CRLDistributionPoints");
-        writeln!(f, "            X509v3 {}:", ext_name)?;
+        writeln!(f, "            X509v3 CRL Distribution Points:")?;
         for point in &self.distribution_points {
+            writeln!(f)?;
             write!(f, "{}", point)?;
         }
         Ok(())
@@ -1186,6 +1186,63 @@ mod tests {
         assert!(!output.contains("Relative Name:"));
         assert!(output.contains("CRL Issuer:"));
         assert!(output.contains("CN=Indirect CRL Authority"));
+    }
+
+    #[test]
+    fn test_crl_distribution_points_display_header() {
+        let ext = CRLDistributionPoints {
+            distribution_points: vec![DistributionPoint {
+                distribution_point: Some(DistributionPointName::FullName(vec![
+                    GeneralName::Uri("http://crl.example.com/ca.crl".to_string()),
+                ])),
+                reasons: None,
+                crl_issuer: None,
+            }],
+        };
+        let output = ext.to_string();
+        assert!(output.starts_with("            X509v3 CRL Distribution Points:\n"));
+        assert!(output.contains("URI:http://crl.example.com/ca.crl"));
+        // Camel-case form must not appear anywhere
+        assert!(!output.contains("CRLDistributionPoints"));
+    }
+
+    #[test]
+    fn test_crl_distribution_points_display_blank_line_between_dps() {
+        let ext = CRLDistributionPoints {
+            distribution_points: vec![
+                DistributionPoint {
+                    distribution_point: Some(DistributionPointName::FullName(vec![
+                        GeneralName::Uri("http://crl1.example.com/a.crl".to_string()),
+                    ])),
+                    reasons: None,
+                    crl_issuer: None,
+                },
+                DistributionPoint {
+                    distribution_point: Some(DistributionPointName::FullName(vec![
+                        GeneralName::Uri("http://crl2.example.com/b.crl".to_string()),
+                    ])),
+                    reasons: None,
+                    crl_issuer: None,
+                },
+            ],
+        };
+        let output = ext.to_string();
+        // Between header and the first DP, and between the two DPs, there is a blank line
+        let pos_header = output.find("X509v3 CRL Distribution Points:").unwrap();
+        let pos_first = output.find("URI:http://crl1").unwrap();
+        let pos_second = output.find("URI:http://crl2").unwrap();
+        let between_header_and_first = &output[pos_header..pos_first];
+        let between_first_and_second = &output[pos_first..pos_second];
+        assert!(
+            between_header_and_first.contains("\n\n"),
+            "expected blank line after header, got:\n{}",
+            between_header_and_first
+        );
+        assert!(
+            between_first_and_second.contains("\n\n"),
+            "expected blank line between DPs, got:\n{}",
+            between_first_and_second
+        );
     }
 
     #[test]
