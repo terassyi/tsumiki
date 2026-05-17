@@ -1,0 +1,15 @@
+[package]
+name = "tsumiki-crl"
+version = "0.1.0"
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+keywords.workspace = true
+categories.workspace = true
+description = "Certificate Revocation List (CRL) handling for X.509 certificates"
+readme = "README.md"
+
+[dependencies]
+tsumiki-x509 = { version = "0.1.0", path = "../x509" }

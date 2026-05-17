@@ -1135,6 +1135,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tsumiki-crl"
+version = "0.1.0"
+dependencies = [
+ "tsumiki-x509",
+]
+
+[[package]]
 name = "tsumiki-der"
 version = "0.1.0"
 dependencies = [
