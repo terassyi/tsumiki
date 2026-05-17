@@ -468,25 +468,32 @@ impl OidName for CRLDistributionPoints {
     }
 }
 
+impl fmt::Display for DistributionPoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(ref dist_point) = self.distribution_point {
+            match dist_point {
+                DistributionPointName::FullName(full_name) => {
+                    writeln!(f, "                Full Name:")?;
+                    for name in full_name {
+                        writeln!(f, "                  {}", name)?;
+                    }
+                }
+                DistributionPointName::NameRelativeToCRLIssuer(rdn) => {
+                    writeln!(f, "                Relative Name:")?;
+                    writeln!(f, "                  {:?}", rdn)?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 impl fmt::Display for CRLDistributionPoints {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let ext_name = self.oid_name().unwrap_or("CRLDistributionPoints");
         writeln!(f, "            X509v3 {}:", ext_name)?;
         for point in &self.distribution_points {
-            if let Some(ref dist_point) = point.distribution_point {
-                match dist_point {
-                    DistributionPointName::FullName(full_name) => {
-                        writeln!(f, "                Full Name:")?;
-                        for name in full_name {
-                            writeln!(f, "                  {}", name)?;
-                        }
-                    }
-                    DistributionPointName::NameRelativeToCRLIssuer(rdn) => {
-                        writeln!(f, "                Relative Name:")?;
-                        writeln!(f, "                  {:?}", rdn)?;
-                    }
-                }
-            }
+            write!(f, "{}", point)?;
         }
         Ok(())
     }
