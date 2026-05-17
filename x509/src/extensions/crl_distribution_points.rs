@@ -468,7 +468,7 @@ impl fmt::Display for DistributionPointName {
                 Ok(())
             }
             DistributionPointName::NameRelativeToCRLIssuer(rdn) => {
-                writeln!(f, "Relative Name: {:?}", rdn)
+                writeln!(f, "Relative Name: {}", rdn)
             }
         }
     }
@@ -500,8 +500,18 @@ impl fmt::Display for DistributionPoint {
                 }
                 DistributionPointName::NameRelativeToCRLIssuer(rdn) => {
                     writeln!(f, "                Relative Name:")?;
-                    writeln!(f, "                  {:?}", rdn)?;
+                    writeln!(f, "                  {}", rdn)?;
                 }
+            }
+        }
+        if let Some(ref reasons) = self.reasons {
+            writeln!(f, "                Reasons:")?;
+            writeln!(f, "                  {}", reasons)?;
+        }
+        if let Some(ref issuers) = self.crl_issuer {
+            writeln!(f, "                CRL Issuer:")?;
+            for issuer in issuers {
+                writeln!(f, "                  {}", issuer)?;
             }
         }
         Ok(())
@@ -525,7 +535,7 @@ mod tests {
     use rstest::rstest;
     use std::str::FromStr;
     use tsumiki_asn1::{Element, ObjectIdentifier, OctetString};
-    use tsumiki_pkix_types::AttributeTypeAndValue;
+    use tsumiki_pkix_types::{AttributeTypeAndValue, Name};
 
     #[rstest(
         input,
@@ -1089,6 +1099,119 @@ mod tests {
         let name = DistributionPointName::NameRelativeToCRLIssuer(rdn.clone());
         let output = format!("{}", name);
         assert!(output.contains("Relative Name:"));
-        assert!(output.contains(&format!("{:?}", rdn)));
+        assert!(output.contains(&rdn.to_string()));
+    }
+
+    fn issuer_name(cn: &str) -> Name {
+        Name::new(vec![RelativeDistinguishedName::new_single(
+            AttributeTypeAndValue::new(
+                ObjectIdentifier::from_str(AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
+                cn,
+            ),
+        )])
+    }
+
+    #[test]
+    fn test_distribution_point_display_uri_only() {
+        let dp = DistributionPoint {
+            distribution_point: Some(DistributionPointName::FullName(vec![GeneralName::Uri(
+                "http://crl.example.com/ca.crl".to_string(),
+            )])),
+            reasons: None,
+            crl_issuer: None,
+        };
+        let output = dp.to_string();
+        assert_eq!(
+            output,
+            "                Full Name:\n                  URI:http://crl.example.com/ca.crl\n"
+        );
+    }
+
+    #[test]
+    fn test_distribution_point_display_with_reasons() {
+        let dp = DistributionPoint {
+            distribution_point: Some(DistributionPointName::FullName(vec![GeneralName::Uri(
+                "http://crl.example.com/kc.crl".to_string(),
+            )])),
+            reasons: Some(ReasonFlags {
+                key_compromise: true,
+                ca_compromise: true,
+                affiliation_changed: false,
+                superseded: false,
+                cessation_of_operation: false,
+                certificate_hold: false,
+                privilege_withdrawn: false,
+                aa_compromise: false,
+            }),
+            crl_issuer: None,
+        };
+        let output = dp.to_string();
+        assert!(output.contains("Full Name:"));
+        assert!(output.contains("URI:http://crl.example.com/kc.crl"));
+        assert!(output.contains("Reasons:"));
+        assert!(output.contains("Key Compromise, CA Compromise"));
+        assert!(!output.contains("CRL Issuer:"));
+    }
+
+    #[test]
+    fn test_distribution_point_display_with_crl_issuer() {
+        let dp = DistributionPoint {
+            distribution_point: Some(DistributionPointName::FullName(vec![GeneralName::Uri(
+                "http://crl.example.com/ca.crl".to_string(),
+            )])),
+            reasons: None,
+            crl_issuer: Some(vec![GeneralName::DirectoryName(issuer_name(
+                "Indirect CRL Authority",
+            ))]),
+        };
+        let output = dp.to_string();
+        assert!(output.contains("Full Name:"));
+        assert!(output.contains("CRL Issuer:"));
+        assert!(output.contains("CN=Indirect CRL Authority"));
+        assert!(!output.contains("Reasons:"));
+    }
+
+    #[test]
+    fn test_distribution_point_display_indirect_crl_no_distribution_point() {
+        // Indirect CRL: distribution_point is None, cRLIssuer is required by RFC 5280
+        let dp = DistributionPoint {
+            distribution_point: None,
+            reasons: None,
+            crl_issuer: Some(vec![GeneralName::DirectoryName(issuer_name(
+                "Indirect CRL Authority",
+            ))]),
+        };
+        let output = dp.to_string();
+        assert!(!output.contains("Full Name:"));
+        assert!(!output.contains("Relative Name:"));
+        assert!(output.contains("CRL Issuer:"));
+        assert!(output.contains("CN=Indirect CRL Authority"));
+    }
+
+    #[test]
+    fn test_distribution_point_display_all_fields() {
+        let dp = DistributionPoint {
+            distribution_point: Some(DistributionPointName::FullName(vec![GeneralName::Uri(
+                "http://crl.example.com/ca.crl".to_string(),
+            )])),
+            reasons: Some(ReasonFlags {
+                key_compromise: true,
+                ca_compromise: false,
+                affiliation_changed: false,
+                superseded: false,
+                cessation_of_operation: false,
+                certificate_hold: false,
+                privilege_withdrawn: false,
+                aa_compromise: false,
+            }),
+            crl_issuer: Some(vec![GeneralName::DirectoryName(issuer_name("Example CA"))]),
+        };
+        let output = dp.to_string();
+        // Order: Full Name -> Reasons -> CRL Issuer
+        let pos_full = output.find("Full Name:").expect("Full Name missing");
+        let pos_reasons = output.find("Reasons:").expect("Reasons missing");
+        let pos_issuer = output.find("CRL Issuer:").expect("CRL Issuer missing");
+        assert!(pos_full < pos_reasons);
+        assert!(pos_reasons < pos_issuer);
     }
 }
