@@ -1193,9 +1193,9 @@ mod tests {
     fn test_crl_distribution_points_display_header() {
         let ext = CRLDistributionPoints {
             distribution_points: vec![DistributionPoint {
-                distribution_point: Some(DistributionPointName::FullName(vec![
-                    GeneralName::Uri("http://crl.example.com/ca.crl".to_string()),
-                ])),
+                distribution_point: Some(DistributionPointName::FullName(vec![GeneralName::Uri(
+                    "http://crl.example.com/ca.crl".to_string(),
+                )])),
                 reasons: None,
                 crl_issuer: None,
             }],
