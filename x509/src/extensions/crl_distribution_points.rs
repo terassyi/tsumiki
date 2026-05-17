@@ -80,6 +80,26 @@ pub struct ReasonFlags {
     pub aa_compromise: bool,
 }
 
+impl fmt::Display for ReasonFlags {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let names: Vec<&str> = [
+            (self.key_compromise, "Key Compromise"),
+            (self.ca_compromise, "CA Compromise"),
+            (self.affiliation_changed, "Affiliation Changed"),
+            (self.superseded, "Superseded"),
+            (self.cessation_of_operation, "Cessation Of Operation"),
+            (self.certificate_hold, "Certificate Hold"),
+            (self.privilege_withdrawn, "Privilege Withdrawn"),
+            (self.aa_compromise, "AA Compromise"),
+        ]
+        .iter()
+        .filter(|&&(b, _)| b)
+        .map(|&(_, n)| n)
+        .collect();
+        write!(f, "{}", names.join(", "))
+    }
+}
+
 impl From<tsumiki_asn1::BitString> for ReasonFlags {
     fn from(bit_string: tsumiki_asn1::BitString) -> Self {
         let bytes = bit_string.as_bytes();
@@ -847,6 +867,76 @@ mod tests {
     fn test_reason_flags_from_bit_string(input: tsumiki_asn1::BitString, expected: ReasonFlags) {
         let result: ReasonFlags = input.into();
         assert_eq!(expected, result);
+    }
+
+    #[rstest]
+    #[case(
+        ReasonFlags {
+            key_compromise: false,
+            ca_compromise: false,
+            affiliation_changed: false,
+            superseded: false,
+            cessation_of_operation: false,
+            certificate_hold: false,
+            privilege_withdrawn: false,
+            aa_compromise: false,
+        },
+        ""
+    )]
+    #[case(
+        ReasonFlags {
+            key_compromise: true,
+            ca_compromise: false,
+            affiliation_changed: false,
+            superseded: false,
+            cessation_of_operation: false,
+            certificate_hold: false,
+            privilege_withdrawn: false,
+            aa_compromise: false,
+        },
+        "Key Compromise"
+    )]
+    #[case(
+        ReasonFlags {
+            key_compromise: true,
+            ca_compromise: true,
+            affiliation_changed: false,
+            superseded: false,
+            cessation_of_operation: false,
+            certificate_hold: false,
+            privilege_withdrawn: false,
+            aa_compromise: false,
+        },
+        "Key Compromise, CA Compromise"
+    )]
+    #[case(
+        ReasonFlags {
+            key_compromise: false,
+            ca_compromise: false,
+            affiliation_changed: false,
+            superseded: false,
+            cessation_of_operation: true,
+            certificate_hold: false,
+            privilege_withdrawn: false,
+            aa_compromise: false,
+        },
+        "Cessation Of Operation"
+    )]
+    #[case(
+        ReasonFlags {
+            key_compromise: true,
+            ca_compromise: true,
+            affiliation_changed: true,
+            superseded: true,
+            cessation_of_operation: true,
+            certificate_hold: true,
+            privilege_withdrawn: true,
+            aa_compromise: true,
+        },
+        "Key Compromise, CA Compromise, Affiliation Changed, Superseded, Cessation Of Operation, Certificate Hold, Privilege Withdrawn, AA Compromise"
+    )]
+    fn test_reason_flags_display(#[case] flags: ReasonFlags, #[case] expected: &str) {
+        assert_eq!(flags.to_string(), expected);
     }
 
     #[rstest]
