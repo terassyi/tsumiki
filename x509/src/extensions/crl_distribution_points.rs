@@ -1167,7 +1167,8 @@ mod tests {
         let output = dp.to_string();
         assert!(output.contains("Full Name:"));
         assert!(output.contains("CRL Issuer:"));
-        assert!(output.contains("CN=Indirect CRL Authority"));
+        // openssl-style: "DirName: " with a space before the RDN
+        assert!(output.contains("DirName: CN=Indirect CRL Authority"));
         assert!(!output.contains("Reasons:"));
     }
 

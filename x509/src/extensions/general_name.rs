@@ -427,7 +427,7 @@ impl fmt::Display for GeneralName {
             GeneralName::IpAddress(ip) => write!(f, "IP Address:{}", ip),
             GeneralName::Rfc822Name(email) => write!(f, "email:{}", email),
             GeneralName::Uri(uri) => write!(f, "URI:{}", uri),
-            GeneralName::DirectoryName(name) => write!(f, "DirName:{}", name),
+            GeneralName::DirectoryName(name) => write!(f, "DirName: {}", name),
             GeneralName::RegisteredId(oid) => write!(f, "Registered ID:{:?}", oid),
             GeneralName::OtherName(other) => write!(f, "othername:{:?}", other.type_id),
             GeneralName::X400Address(_) => write!(f, "X400Address"),
