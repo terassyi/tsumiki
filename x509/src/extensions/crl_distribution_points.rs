@@ -80,6 +80,26 @@ pub struct ReasonFlags {
     pub aa_compromise: bool,
 }
 
+impl fmt::Display for ReasonFlags {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let names: Vec<&str> = [
+            (self.key_compromise, "Key Compromise"),
+            (self.ca_compromise, "CA Compromise"),
+            (self.affiliation_changed, "Affiliation Changed"),
+            (self.superseded, "Superseded"),
+            (self.cessation_of_operation, "Cessation Of Operation"),
+            (self.certificate_hold, "Certificate Hold"),
+            (self.privilege_withdrawn, "Privilege Withdrawn"),
+            (self.aa_compromise, "AA Compromise"),
+        ]
+        .iter()
+        .filter(|&&(b, _)| b)
+        .map(|&(_, n)| n)
+        .collect();
+        write!(f, "{}", names.join(", "))
+    }
+}
+
 impl From<tsumiki_asn1::BitString> for ReasonFlags {
     fn from(bit_string: tsumiki_asn1::BitString) -> Self {
         let bytes = bit_string.as_bytes();
@@ -448,7 +468,7 @@ impl fmt::Display for DistributionPointName {
                 Ok(())
             }
             DistributionPointName::NameRelativeToCRLIssuer(rdn) => {
-                writeln!(f, "Relative Name: {:?}", rdn)
+                writeln!(f, "Relative Name: {}", rdn)
             }
         }
     }
@@ -468,25 +488,42 @@ impl OidName for CRLDistributionPoints {
     }
 }
 
-impl fmt::Display for CRLDistributionPoints {
+impl fmt::Display for DistributionPoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ext_name = self.oid_name().unwrap_or("CRLDistributionPoints");
-        writeln!(f, "            X509v3 {}:", ext_name)?;
-        for point in &self.distribution_points {
-            if let Some(ref dist_point) = point.distribution_point {
-                match dist_point {
-                    DistributionPointName::FullName(full_name) => {
-                        writeln!(f, "                Full Name:")?;
-                        for name in full_name {
-                            writeln!(f, "                  {}", name)?;
-                        }
-                    }
-                    DistributionPointName::NameRelativeToCRLIssuer(rdn) => {
-                        writeln!(f, "                Relative Name:")?;
-                        writeln!(f, "                  {:?}", rdn)?;
+        if let Some(ref dist_point) = self.distribution_point {
+            match dist_point {
+                DistributionPointName::FullName(full_name) => {
+                    writeln!(f, "                Full Name:")?;
+                    for name in full_name {
+                        writeln!(f, "                  {}", name)?;
                     }
                 }
+                DistributionPointName::NameRelativeToCRLIssuer(rdn) => {
+                    writeln!(f, "                Relative Name:")?;
+                    writeln!(f, "                  {}", rdn)?;
+                }
             }
+        }
+        if let Some(ref reasons) = self.reasons {
+            writeln!(f, "                Reasons:")?;
+            writeln!(f, "                  {}", reasons)?;
+        }
+        if let Some(ref issuers) = self.crl_issuer {
+            writeln!(f, "                CRL Issuer:")?;
+            for issuer in issuers {
+                writeln!(f, "                  {}", issuer)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl fmt::Display for CRLDistributionPoints {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "            X509v3 CRL Distribution Points:")?;
+        for point in &self.distribution_points {
+            writeln!(f)?;
+            write!(f, "{}", point)?;
         }
         Ok(())
     }
@@ -498,7 +535,7 @@ mod tests {
     use rstest::rstest;
     use std::str::FromStr;
     use tsumiki_asn1::{Element, ObjectIdentifier, OctetString};
-    use tsumiki_pkix_types::AttributeTypeAndValue;
+    use tsumiki_pkix_types::{AttributeTypeAndValue, Name};
 
     #[rstest(
         input,
@@ -843,6 +880,76 @@ mod tests {
     }
 
     #[rstest]
+    #[case(
+        ReasonFlags {
+            key_compromise: false,
+            ca_compromise: false,
+            affiliation_changed: false,
+            superseded: false,
+            cessation_of_operation: false,
+            certificate_hold: false,
+            privilege_withdrawn: false,
+            aa_compromise: false,
+        },
+        ""
+    )]
+    #[case(
+        ReasonFlags {
+            key_compromise: true,
+            ca_compromise: false,
+            affiliation_changed: false,
+            superseded: false,
+            cessation_of_operation: false,
+            certificate_hold: false,
+            privilege_withdrawn: false,
+            aa_compromise: false,
+        },
+        "Key Compromise"
+    )]
+    #[case(
+        ReasonFlags {
+            key_compromise: true,
+            ca_compromise: true,
+            affiliation_changed: false,
+            superseded: false,
+            cessation_of_operation: false,
+            certificate_hold: false,
+            privilege_withdrawn: false,
+            aa_compromise: false,
+        },
+        "Key Compromise, CA Compromise"
+    )]
+    #[case(
+        ReasonFlags {
+            key_compromise: false,
+            ca_compromise: false,
+            affiliation_changed: false,
+            superseded: false,
+            cessation_of_operation: true,
+            certificate_hold: false,
+            privilege_withdrawn: false,
+            aa_compromise: false,
+        },
+        "Cessation Of Operation"
+    )]
+    #[case(
+        ReasonFlags {
+            key_compromise: true,
+            ca_compromise: true,
+            affiliation_changed: true,
+            superseded: true,
+            cessation_of_operation: true,
+            certificate_hold: true,
+            privilege_withdrawn: true,
+            aa_compromise: true,
+        },
+        "Key Compromise, CA Compromise, Affiliation Changed, Superseded, Cessation Of Operation, Certificate Hold, Privilege Withdrawn, AA Compromise"
+    )]
+    fn test_reason_flags_display(#[case] flags: ReasonFlags, #[case] expected: &str) {
+        assert_eq!(flags.to_string(), expected);
+    }
+
+    #[rstest]
     #[case(CRLDistributionPoints {
         distribution_points: vec![
             DistributionPoint {
@@ -992,6 +1099,177 @@ mod tests {
         let name = DistributionPointName::NameRelativeToCRLIssuer(rdn.clone());
         let output = format!("{}", name);
         assert!(output.contains("Relative Name:"));
-        assert!(output.contains(&format!("{:?}", rdn)));
+        assert!(output.contains(&rdn.to_string()));
+    }
+
+    fn issuer_name(cn: &str) -> Name {
+        Name::new(vec![RelativeDistinguishedName::new_single(
+            AttributeTypeAndValue::new(
+                ObjectIdentifier::from_str(AttributeTypeAndValue::OID_COMMON_NAME).unwrap(),
+                cn,
+            ),
+        )])
+    }
+
+    #[test]
+    fn test_distribution_point_display_uri_only() {
+        let dp = DistributionPoint {
+            distribution_point: Some(DistributionPointName::FullName(vec![GeneralName::Uri(
+                "http://crl.example.com/ca.crl".to_string(),
+            )])),
+            reasons: None,
+            crl_issuer: None,
+        };
+        let output = dp.to_string();
+        assert_eq!(
+            output,
+            "                Full Name:\n                  URI:http://crl.example.com/ca.crl\n"
+        );
+    }
+
+    #[test]
+    fn test_distribution_point_display_with_reasons() {
+        let dp = DistributionPoint {
+            distribution_point: Some(DistributionPointName::FullName(vec![GeneralName::Uri(
+                "http://crl.example.com/kc.crl".to_string(),
+            )])),
+            reasons: Some(ReasonFlags {
+                key_compromise: true,
+                ca_compromise: true,
+                affiliation_changed: false,
+                superseded: false,
+                cessation_of_operation: false,
+                certificate_hold: false,
+                privilege_withdrawn: false,
+                aa_compromise: false,
+            }),
+            crl_issuer: None,
+        };
+        let output = dp.to_string();
+        assert!(output.contains("Full Name:"));
+        assert!(output.contains("URI:http://crl.example.com/kc.crl"));
+        assert!(output.contains("Reasons:"));
+        assert!(output.contains("Key Compromise, CA Compromise"));
+        assert!(!output.contains("CRL Issuer:"));
+    }
+
+    #[test]
+    fn test_distribution_point_display_with_crl_issuer() {
+        let dp = DistributionPoint {
+            distribution_point: Some(DistributionPointName::FullName(vec![GeneralName::Uri(
+                "http://crl.example.com/ca.crl".to_string(),
+            )])),
+            reasons: None,
+            crl_issuer: Some(vec![GeneralName::DirectoryName(issuer_name(
+                "Indirect CRL Authority",
+            ))]),
+        };
+        let output = dp.to_string();
+        assert!(output.contains("Full Name:"));
+        assert!(output.contains("CRL Issuer:"));
+        // openssl-style: "DirName: " with a space before the RDN
+        assert!(output.contains("DirName: CN=Indirect CRL Authority"));
+        assert!(!output.contains("Reasons:"));
+    }
+
+    #[test]
+    fn test_distribution_point_display_indirect_crl_no_distribution_point() {
+        // Indirect CRL: distribution_point is None, cRLIssuer is required by RFC 5280
+        let dp = DistributionPoint {
+            distribution_point: None,
+            reasons: None,
+            crl_issuer: Some(vec![GeneralName::DirectoryName(issuer_name(
+                "Indirect CRL Authority",
+            ))]),
+        };
+        let output = dp.to_string();
+        assert!(!output.contains("Full Name:"));
+        assert!(!output.contains("Relative Name:"));
+        assert!(output.contains("CRL Issuer:"));
+        assert!(output.contains("CN=Indirect CRL Authority"));
+    }
+
+    #[test]
+    fn test_crl_distribution_points_display_header() {
+        let ext = CRLDistributionPoints {
+            distribution_points: vec![DistributionPoint {
+                distribution_point: Some(DistributionPointName::FullName(vec![GeneralName::Uri(
+                    "http://crl.example.com/ca.crl".to_string(),
+                )])),
+                reasons: None,
+                crl_issuer: None,
+            }],
+        };
+        let output = ext.to_string();
+        assert!(output.starts_with("            X509v3 CRL Distribution Points:\n"));
+        assert!(output.contains("URI:http://crl.example.com/ca.crl"));
+        // Camel-case form must not appear anywhere
+        assert!(!output.contains("CRLDistributionPoints"));
+    }
+
+    #[test]
+    fn test_crl_distribution_points_display_blank_line_between_dps() {
+        let ext = CRLDistributionPoints {
+            distribution_points: vec![
+                DistributionPoint {
+                    distribution_point: Some(DistributionPointName::FullName(vec![
+                        GeneralName::Uri("http://crl1.example.com/a.crl".to_string()),
+                    ])),
+                    reasons: None,
+                    crl_issuer: None,
+                },
+                DistributionPoint {
+                    distribution_point: Some(DistributionPointName::FullName(vec![
+                        GeneralName::Uri("http://crl2.example.com/b.crl".to_string()),
+                    ])),
+                    reasons: None,
+                    crl_issuer: None,
+                },
+            ],
+        };
+        let output = ext.to_string();
+        // Between header and the first DP, and between the two DPs, there is a blank line
+        let pos_header = output.find("X509v3 CRL Distribution Points:").unwrap();
+        let pos_first = output.find("URI:http://crl1").unwrap();
+        let pos_second = output.find("URI:http://crl2").unwrap();
+        let between_header_and_first = &output[pos_header..pos_first];
+        let between_first_and_second = &output[pos_first..pos_second];
+        assert!(
+            between_header_and_first.contains("\n\n"),
+            "expected blank line after header, got:\n{}",
+            between_header_and_first
+        );
+        assert!(
+            between_first_and_second.contains("\n\n"),
+            "expected blank line between DPs, got:\n{}",
+            between_first_and_second
+        );
+    }
+
+    #[test]
+    fn test_distribution_point_display_all_fields() {
+        let dp = DistributionPoint {
+            distribution_point: Some(DistributionPointName::FullName(vec![GeneralName::Uri(
+                "http://crl.example.com/ca.crl".to_string(),
+            )])),
+            reasons: Some(ReasonFlags {
+                key_compromise: true,
+                ca_compromise: false,
+                affiliation_changed: false,
+                superseded: false,
+                cessation_of_operation: false,
+                certificate_hold: false,
+                privilege_withdrawn: false,
+                aa_compromise: false,
+            }),
+            crl_issuer: Some(vec![GeneralName::DirectoryName(issuer_name("Example CA"))]),
+        };
+        let output = dp.to_string();
+        // Order: Full Name -> Reasons -> CRL Issuer
+        let pos_full = output.find("Full Name:").expect("Full Name missing");
+        let pos_reasons = output.find("Reasons:").expect("Reasons missing");
+        let pos_issuer = output.find("CRL Issuer:").expect("CRL Issuer missing");
+        assert!(pos_full < pos_reasons);
+        assert!(pos_reasons < pos_issuer);
     }
 }

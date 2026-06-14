@@ -209,6 +209,25 @@ impl RelativeDistinguishedName {
     }
 }
 
+impl fmt::Display for RelativeDistinguishedName {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let formatted = self
+            .attributes
+            .iter()
+            .map(|attr| {
+                let key = if let Some(name) = attr.oid_name() {
+                    name.to_string()
+                } else {
+                    attr.attribute_type.to_string()
+                };
+                format!("{}={}", key, attr.attribute_value)
+            })
+            .collect::<Vec<_>>()
+            .join("+");
+        write!(f, "{}", formatted)
+    }
+}
+
 impl DecodableFrom<Element> for RelativeDistinguishedName {}
 
 impl Decoder<Element, RelativeDistinguishedName> for Element {
@@ -477,6 +496,45 @@ mod tests {
         };
 
         assert_eq!(name.to_string(), "C=US, O=Example Org, CN=example.com");
+    }
+
+    #[test]
+    fn test_rdn_display_single() {
+        let rdn = RelativeDistinguishedName {
+            attributes: vec![AttributeTypeAndValue {
+                attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                attribute_value: "example.com".into(),
+            }],
+        };
+        assert_eq!(rdn.to_string(), "CN=example.com");
+    }
+
+    #[test]
+    fn test_rdn_display_multi() {
+        let rdn = RelativeDistinguishedName {
+            attributes: vec![
+                AttributeTypeAndValue {
+                    attribute_type: ObjectIdentifier::from_str("2.5.4.3").unwrap(),
+                    attribute_value: "John Doe".into(),
+                },
+                AttributeTypeAndValue {
+                    attribute_type: ObjectIdentifier::from_str("2.5.4.4").unwrap(),
+                    attribute_value: "Doe".into(),
+                },
+            ],
+        };
+        assert_eq!(rdn.to_string(), "CN=John Doe+SN=Doe");
+    }
+
+    #[test]
+    fn test_rdn_display_unknown_oid_falls_back_to_oid_string() {
+        let rdn = RelativeDistinguishedName {
+            attributes: vec![AttributeTypeAndValue {
+                attribute_type: ObjectIdentifier::from_str("1.2.3.4").unwrap(),
+                attribute_value: "value".into(),
+            }],
+        };
+        assert_eq!(rdn.to_string(), "1.2.3.4=value");
     }
 
     #[rstest]

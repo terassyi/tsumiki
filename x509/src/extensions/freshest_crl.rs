@@ -93,9 +93,11 @@ impl OidName for FreshestCRL {
 
 impl fmt::Display for FreshestCRL {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ext_name = self.oid_name().unwrap_or("freshestCRL");
-        writeln!(f, "            X509v3 {}:", ext_name)?;
-        write!(f, "                {}", self.distribution_points)?;
+        writeln!(f, "            X509v3 Freshest CRL:")?;
+        for point in &self.distribution_points.distribution_points {
+            writeln!(f)?;
+            write!(f, "{}", point)?;
+        }
         Ok(())
     }
 }
@@ -159,5 +161,27 @@ mod tests {
 
         let roundtrip = result.unwrap();
         assert_eq!(original, roundtrip);
+    }
+
+    #[test]
+    fn test_freshest_crl_display_no_duplicate_header() {
+        let ext = FreshestCRL {
+            distribution_points: CRLDistributionPoints {
+                distribution_points: vec![DistributionPoint {
+                    distribution_point: Some(DistributionPointName::FullName(vec![
+                        GeneralName::Uri("http://delta.example.com/delta.crl".to_string()),
+                    ])),
+                    reasons: None,
+                    crl_issuer: None,
+                }],
+            },
+        };
+        let output = ext.to_string();
+        assert!(output.starts_with("            X509v3 Freshest CRL:\n"));
+        assert!(output.contains("URI:http://delta.example.com/delta.crl"));
+        // Neither the old camel-case form nor a nested CRL DP header should appear
+        assert!(!output.contains("CRLDistributionPoints"));
+        assert!(!output.contains("CRL Distribution Points"));
+        assert!(!output.contains("freshestCRL"));
     }
 }
