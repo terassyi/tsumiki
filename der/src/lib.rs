@@ -277,6 +277,8 @@ pub enum PrimitiveTag {
     Null = 0x05,
     /// OBJECT IDENTIFIER type (tag 0x06).
     ObjectIdentifier = 0x06,
+    /// ENUMERATED type (tag 0x0a)
+    Enumerated = 0x0a,
     /// UTF8String type (tag 0x0c).
     UTF8String = 0x0c,
     /// SEQUENCE and SEQUENCE OF type (tag 0x10).
@@ -306,6 +308,7 @@ impl From<u8> for PrimitiveTag {
             0x04 => Self::OctetString,
             0x05 => Self::Null,
             0x06 => Self::ObjectIdentifier,
+            0x0a => Self::Enumerated,
             0x0c => Self::UTF8String,
             0x10 => Self::Sequence,
             0x11 => Self::Set,
@@ -328,6 +331,7 @@ impl From<&PrimitiveTag> for u8 {
             PrimitiveTag::OctetString => 0x04,
             PrimitiveTag::Null => 0x05,
             PrimitiveTag::ObjectIdentifier => 0x06,
+            PrimitiveTag::Enumerated => 0x0a,
             PrimitiveTag::UTF8String => 0x0c,
             PrimitiveTag::Sequence => 0x10,
             PrimitiveTag::Set => 0x11,
@@ -584,7 +588,9 @@ mod tests {
         case(vec![0x02], Tag::Primitive(PrimitiveTag::Integer, 0x02)),
         case(vec![0x02, 0x01], Tag::Primitive(PrimitiveTag::Integer, 0x02)),
         case(vec![0x30, 0x01], Tag::Primitive(PrimitiveTag::Sequence, 0x30)),
-        case(vec![0x0a, 0x02, 0x10], Tag::Primitive(PrimitiveTag::Unimplemented(0x0a), 0x0a)),
+        case(vec![0x0a, 0x02, 0x10], Tag::Primitive(PrimitiveTag::Enumerated, 0x0a)),
+        // Unimplemented case kept against an unassigned UNIVERSAL tag (0x1d)
+        case(vec![0x1d, 0x02, 0x10], Tag::Primitive(PrimitiveTag::Unimplemented(0x1d), 0x1d)),
         // 0xA0 = 10100000 = context-specific [0] constructed
         case(vec![0xa0], Tag::ContextSpecific { slot: 0x00, constructed: true }),
         case(vec![0xa3], Tag::ContextSpecific { slot: 0x03, constructed: true }),
@@ -612,6 +618,18 @@ mod tests {
         let actual = parse_length(&input).unwrap();
 
         assert_eq!(expected, actual.1);
+    }
+
+    #[test]
+    fn test_primitive_tag_enumerated_roundtrip() {
+        // 0x0a is the UNIVERSAL tag for ENUMERATED (X.690 §8.4)
+        assert_eq!(PrimitiveTag::from(0x0a), PrimitiveTag::Enumerated);
+        assert_eq!(u8::from(&PrimitiveTag::Enumerated), 0x0a);
+        // 0x0a must no longer be returned as Unimplemented
+        assert!(!matches!(
+            PrimitiveTag::from(0x0a),
+            PrimitiveTag::Unimplemented(_)
+        ));
     }
 
     #[rstest(input, expected,
@@ -691,6 +709,22 @@ mod tests {
             Tlv {
                 tag: Tag::Primitive(PrimitiveTag::BitString, 0x03),
                 value: Value::Data(vec![0x06, 0x6e, 0x5d, 0xc0])
+            }
+        ),
+        // ENUMERATED: keyCompromise (CRLReason value 1) per RFC 5280 §5.3.1
+        case(
+            vec![0x0a, 0x01, 0x01],
+            Tlv {
+                tag: Tag::Primitive(PrimitiveTag::Enumerated, 0x0a),
+                value: Value::Data(vec![0x01])
+            }
+        ),
+        // ENUMERATED: multi-byte value (256)
+        case(
+            vec![0x0a, 0x02, 0x01, 0x00],
+            Tlv {
+                tag: Tag::Primitive(PrimitiveTag::Enumerated, 0x0a),
+                value: Value::Data(vec![0x01, 0x00])
             }
         )
     )]

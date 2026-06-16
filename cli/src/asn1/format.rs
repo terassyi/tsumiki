@@ -81,6 +81,14 @@ fn format_element(element: &Element, depth: usize, parse_implicit: bool, output:
         Element::ObjectIdentifier(oid) => {
             output.push_str(&format!("{}OBJECT IDENTIFIER {}\n", prefix, oid));
         }
+        Element::Enumerated(int) => {
+            let int_str = int.to_string();
+            if int_str.len() > 20 {
+                output.push_str(&format!("{}ENUMERATED (large value)\n", prefix));
+            } else {
+                output.push_str(&format!("{}ENUMERATED {}\n", prefix, int_str));
+            }
+        }
         Element::UTF8String(s) => {
             output.push_str(&format!("{}UTF8String '{}'\n", prefix, s));
         }
