@@ -2385,6 +2385,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                     OctetString::from(vec![0x30, 0x00]),
                 ),
             ],
+            tag: Some(3),
         }),
         case(Extensions {
             extensions: vec![
@@ -2394,6 +2395,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                     OctetString::from(vec![0x03, 0x02, 0x05, 0xa0]),
                 ),
             ],
+            tag: Some(3),
         }),
         case(Extensions {
             extensions: vec![
@@ -2408,6 +2410,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                     OctetString::from(vec![0x04, 0x14, 0x01, 0x02, 0x03]),
                 ),
             ],
+            tag: Some(3),
         })
     )]
     fn test_extensions_encode(exts: Extensions) {
@@ -2471,6 +2474,66 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         assert_eq!(decoded, exts);
     }
 
+    fn make_extensions_for_tag(tag: Option<u8>) -> Extensions {
+        Extensions {
+            extensions: vec![RawExtension::new(
+                ObjectIdentifier::from_str(crate::extensions::BasicConstraints::OID).unwrap(),
+                false,
+                OctetString::from(vec![0x30, 0x00]),
+            )],
+            tag,
+        }
+    }
+
+    #[rstest(
+        slot,
+        // CRL TBSCertList.crlExtensions [0] EXPLICIT (RFC 5280 §5.1.2.7)
+        case(0),
+        // Cert TBSCertificate.extensions [3] EXPLICIT (covered by test_extensions_encode too)
+        case(3),
+        // Slot-agnostic encoder: any context-specific slot
+        case(1),
+        case(2),
+    )]
+    fn test_extensions_encode_context_tagged(slot: u8) {
+        let exts = make_extensions_for_tag(Some(slot));
+        let encoded = exts.encode().unwrap();
+        // Wrapped in [slot] EXPLICIT, inner SEQUENCE
+        match &encoded {
+            Element::ContextSpecific {
+                slot: actual_slot,
+                constructed,
+                element,
+            } => {
+                assert_eq!(*actual_slot, slot);
+                assert!(*constructed, "EXPLICIT tag must be constructed");
+                assert!(matches!(element.as_ref(), Element::Sequence(_)));
+            }
+            _ => panic!("Expected ContextSpecific, got {:?}", encoded),
+        }
+        // Round-trip preserves the tag
+        let decoded: Extensions = encoded.decode().unwrap();
+        assert_eq!(decoded.tag, Some(slot));
+        assert_eq!(decoded, exts);
+    }
+
+    #[test]
+    fn test_extensions_encode_untagged() {
+        // CRL RevokedCertificate.crlEntryExtensions Extensions (RFC 5280 §5.3, untagged)
+        let exts = make_extensions_for_tag(None);
+        let encoded = exts.encode().unwrap();
+        // Bare SEQUENCE, no context-specific wrapping
+        assert!(
+            matches!(encoded, Element::Sequence(_)),
+            "Expected Sequence (untagged), got {:?}",
+            encoded
+        );
+        // Round-trip preserves tag = None
+        let decoded: Extensions = encoded.decode().unwrap();
+        assert_eq!(decoded.tag, None);
+        assert_eq!(decoded, exts);
+    }
+
     fn create_tbs_v3_with_extensions() -> TBSCertificate {
         TBSCertificate {
             version: Version::V3,
@@ -2529,6 +2592,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
                     true,
                     OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xff]),
                 )],
+                tag: Some(3),
             }),
         }
     }

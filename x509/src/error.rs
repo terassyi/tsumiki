@@ -107,11 +107,9 @@ pub enum Error {
     OidMismatch { expected: String, actual: String },
     #[error("Extension: invalid OID string '{oid}': {message}")]
     InvalidOidString { oid: String, message: String },
-    #[error("Extensions: expected context-specific tag [3], got [{actual}]")]
-    UnexpectedContextTag { expected: u8, actual: u8 },
-    #[error("Extensions: expected SEQUENCE inside context-specific tag [3]")]
+    #[error("Extensions: expected SEQUENCE inside context-specific tag")]
     ExpectedSequenceInExtensions,
-    #[error("Extensions: invalid structure - expected context-specific tag [3] or SEQUENCE")]
+    #[error("Extensions: invalid structure - expected context-specific tag or SEQUENCE")]
     InvalidExtensionsStructure,
 
     // Version errors
