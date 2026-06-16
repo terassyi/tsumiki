@@ -13,3 +13,7 @@ readme = "README.md"
 
 [dependencies]
 tsumiki-x509 = { version = "0.1.0", path = "../x509" }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+rstest.workspace = true
