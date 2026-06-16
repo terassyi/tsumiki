@@ -147,6 +147,8 @@ pub enum Element {
     Null,
     /// Object identifier (ASN.1 OBJECT IDENTIFIER)
     ObjectIdentifier(ObjectIdentifier),
+    /// Enumerated (ASN.1 ENUMERATED)
+    Enumerated(Integer),
     /// UTF-8 encoded string (ASN.1 UTF8String)
     UTF8String(String),
     /// Sequence of elements (ASN.1 SEQUENCE)
@@ -225,6 +227,14 @@ impl TryFrom<&Tlv> for Element {
                         Ok(Element::ObjectIdentifier(oid))
                     } else {
                         Err(Error::ObjectIdentifierNoData)
+                    }
+                }
+                PrimitiveTag::Enumerated => {
+                    if let Some(data) = tlv.data() {
+                        let i = Integer::from(data);
+                        Ok(Element::Enumerated(i))
+                    } else {
+                        Err(Error::EnumeratedNoData)
                     }
                 }
                 PrimitiveTag::UTF8String => {
@@ -369,6 +379,7 @@ impl Display for Element {
             Element::OctetString(os) => write!(f, "OctetString({})", os),
             Element::Null => write!(f, "Null"),
             Element::ObjectIdentifier(oid) => write!(f, "ObjectIdentifier({})", oid),
+            Element::Enumerated(i) => write!(f, "Enumerated({})", i),
             Element::UTF8String(s) => write!(f, "UTF8String({})", s),
             Element::Sequence(seq) => write!(f, "Sequence({:?})", seq),
             Element::Set(set) => write!(f, "Set({:?})", set),
@@ -433,6 +444,14 @@ impl TryFrom<&Element> for Tlv {
                     u8::from(&PrimitiveTag::ObjectIdentifier),
                 );
                 let data = Vec::try_from(oid.clone())?;
+                Ok(Tlv::new_primitive(tag, data))
+            }
+            Element::Enumerated(i) => {
+                let tag = Tag::Primitive(
+                    PrimitiveTag::Enumerated,
+                    u8::from(&PrimitiveTag::Enumerated),
+                );
+                let data = i.as_ref().to_signed_bytes_be();
                 Ok(Tlv::new_primitive(tag, data))
             }
             Element::UTF8String(s) => {
@@ -2123,12 +2142,71 @@ e8ZYGIc4gvs5McdrVUyYGUs=
             Element::ObjectIdentifier(ObjectIdentifier { inner: vec![2, 5, 29, 19] }), // basicConstraints = 2.5.29.19
             Tag::Primitive(PrimitiveTag::ObjectIdentifier, 0x06),
             vec![0x55, 0x1D, 0x13] // 2*40+5=85=0x55, 29=0x1D, 19=0x13
+        ),
+        // ENUMERATED — CRLReason values (RFC 5280 §5.3.1), shares wire format with INTEGER (X.690 §8.4)
+        case(
+            Element::Enumerated(Integer { inner: BigInt::from(0) }), // unspecified
+            Tag::Primitive(PrimitiveTag::Enumerated, 0x0a),
+            vec![0x00]
+        ),
+        case(
+            Element::Enumerated(Integer { inner: BigInt::from(1) }), // keyCompromise
+            Tag::Primitive(PrimitiveTag::Enumerated, 0x0a),
+            vec![0x01]
+        ),
+        case(
+            Element::Enumerated(Integer { inner: BigInt::from(10) }), // aACompromise
+            Tag::Primitive(PrimitiveTag::Enumerated, 0x0a),
+            vec![0x0a]
+        ),
+        case(
+            Element::Enumerated(Integer { inner: BigInt::from(256) }), // multi-byte
+            Tag::Primitive(PrimitiveTag::Enumerated, 0x0a),
+            vec![0x01, 0x00]
+        ),
+        case(
+            Element::Enumerated(Integer { inner: BigInt::from(-1) }), // two's complement
+            Tag::Primitive(PrimitiveTag::Enumerated, 0x0a),
+            vec![0xff]
         )
     )]
     fn test_element_to_tlv_primitive(element: Element, expected_tag: Tag, expected_data: Vec<u8>) {
         let tlv = Tlv::try_from(&element).unwrap();
         assert_eq!(tlv.tag(), &expected_tag);
         assert_eq!(tlv.data(), Some(expected_data.as_slice()));
+    }
+
+    #[rstest(
+        input,
+        case(Element::Enumerated(Integer { inner: BigInt::from(0) })),
+        case(Element::Enumerated(Integer { inner: BigInt::from(1) })),
+        case(Element::Enumerated(Integer { inner: BigInt::from(10) })),
+        case(Element::Enumerated(Integer { inner: BigInt::from(127) })),
+        case(Element::Enumerated(Integer { inner: BigInt::from(128) })),
+        case(Element::Enumerated(Integer { inner: BigInt::from(256) })),
+        case(Element::Enumerated(Integer { inner: BigInt::from(-1) })),
+        case(Element::Enumerated(Integer { inner: BigInt::from(-128) })),
+    )]
+    fn test_element_enumerated_roundtrip(input: Element) {
+        let tlv = Tlv::try_from(&input).unwrap();
+        let decoded = Element::try_from(&tlv).unwrap();
+        assert_eq!(input, decoded);
+    }
+
+    #[test]
+    fn test_element_enumerated_display() {
+        let elem = Element::Enumerated(Integer {
+            inner: BigInt::from(1),
+        });
+        assert_eq!(format!("{}", elem), "Enumerated(1)");
+        let zero = Element::Enumerated(Integer {
+            inner: BigInt::from(0),
+        });
+        assert_eq!(format!("{}", zero), "Enumerated(0)");
+        let neg = Element::Enumerated(Integer {
+            inner: BigInt::from(-42),
+        });
+        assert_eq!(format!("{}", neg), "Enumerated(-42)");
     }
 
     #[rstest(

@@ -33,6 +33,10 @@ pub enum Error {
     #[error("OBJECT IDENTIFIER: invalid component '{0}'")]
     ObjectIdentifierInvalidComponent(String),
 
+    // Enumerated errors
+    #[error("ENUMERATED: no data")]
+    EnumeratedNoData,
+
     // BitString errors
     #[error("BIT STRING: no data")]
     BitStringNoData,
