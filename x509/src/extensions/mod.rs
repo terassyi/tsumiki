@@ -217,6 +217,7 @@ Extension  ::=  SEQUENCE  {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Extensions {
     pub(crate) extensions: Vec<RawExtension>,
+    pub(crate) tag: Option<u8>,
 }
 
 impl Extensions {
@@ -250,12 +251,6 @@ impl Decoder<Element, Extensions> for Element {
     fn decode(&self) -> Result<Extensions, Self::Error> {
         match self {
             Element::ContextSpecific { slot, element, .. } => {
-                if *slot != 3 {
-                    return Err(Error::UnexpectedContextTag {
-                        expected: 3,
-                        actual: *slot,
-                    });
-                }
                 // EXPLICIT tagging: element contains the full SEQUENCE
                 match element.as_ref() {
                     Element::Sequence(seq_elements) => {
@@ -266,13 +261,16 @@ impl Decoder<Element, Extensions> for Element {
                             .iter()
                             .map(|elem| elem.decode().map_err(Error::from))
                             .collect::<Result<Vec<RawExtension>, Error>>()?;
-                        Ok(Extensions { extensions })
+                        Ok(Extensions {
+                            extensions,
+                            tag: Some(*slot),
+                        })
                     }
                     _ => Err(Error::ExpectedSequenceInExtensions),
                 }
             }
             Element::Sequence(seq_elements) => {
-                // Allow direct Sequence for testing
+                // Bare SEQUENCE (e.g., CRL RevokedCertificate.crlEntryExtensions, RFC 5280 §5.3)
                 if seq_elements.is_empty() {
                     return Err(Error::ExtensionsEmpty);
                 }
@@ -280,7 +278,10 @@ impl Decoder<Element, Extensions> for Element {
                     .iter()
                     .map(|elem| elem.decode().map_err(Error::from))
                     .collect::<Result<Vec<RawExtension>, Error>>()?;
-                Ok(Extensions { extensions })
+                Ok(Extensions {
+                    extensions,
+                    tag: None,
+                })
             }
             _ => Err(Error::InvalidExtensionsStructure),
         }
@@ -303,12 +304,14 @@ impl Encoder<Extensions, Element> for Extensions {
             .map(|ext| ext.encode().map_err(Error::from))
             .collect();
 
-        // Wrap in [3] EXPLICIT tag for TBSCertificate
-        Ok(Element::ContextSpecific {
-            constructed: true,
-            slot: 3,
-            element: Box::new(Element::Sequence(extension_elements?)),
-        })
+        match self.tag {
+            Some(slot) => Ok(Element::ContextSpecific {
+                constructed: true,
+                slot,
+                element: Box::new(Element::Sequence(extension_elements?)),
+            }),
+            None => extension_elements.map(Element::Sequence),
+        }
     }
 }
 
@@ -529,6 +532,47 @@ mod tests {
                 ]),
             ])
         ),
+        // Test case: Extensions with context-specific [0] tag
+        // (CRL TBSCertList.crlExtensions, RFC 5280 §5.1.2.7)
+        case(
+            Element::ContextSpecific {
+                constructed: true,
+                slot: 0,
+                element: Box::new(Element::Sequence(vec![
+                    Element::Sequence(vec![
+                        Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.29.20").unwrap()), // cRLNumber
+                        Element::OctetString(OctetString::from(vec![0x02, 0x01, 0x01])),
+                    ]),
+                ])),
+            }
+        ),
+        // Test case: Extensions with context-specific [1] tag
+        // (slot-agnostic decoder accepts any slot; caller asserts the expected slot)
+        case(
+            Element::ContextSpecific {
+                constructed: true,
+                slot: 1,
+                element: Box::new(Element::Sequence(vec![
+                    Element::Sequence(vec![
+                        Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.29.19").unwrap()),
+                        Element::OctetString(OctetString::from(vec![0x30, 0x00])),
+                    ]),
+                ])),
+            }
+        ),
+        // Test case: Extensions with context-specific [2] tag
+        case(
+            Element::ContextSpecific {
+                constructed: true,
+                slot: 2,
+                element: Box::new(Element::Sequence(vec![
+                    Element::Sequence(vec![
+                        Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.29.19").unwrap()),
+                        Element::OctetString(OctetString::from(vec![0x30, 0x00])),
+                    ]),
+                ])),
+            }
+        ),
     )]
     fn test_extensions_decode_success(input: Element) {
         let result: Result<Extensions, _> = input.decode();
@@ -545,33 +589,20 @@ mod tests {
             Element::Sequence(vec![]),
             "at least one extension required"
         ),
-        // Test case: Wrong context-specific tag
-        case(
-            Element::ContextSpecific {
-                constructed: true,
-            slot: 2,
-                element: Box::new(Element::Sequence(vec![
-                    Element::Sequence(vec![
-                        Element::ObjectIdentifier(ObjectIdentifier::from_str("2.5.29.19").unwrap()),
-                        Element::OctetString(OctetString::from(vec![0x30, 0x00])),
-                    ]),
-                ])),
-            },
-            "expected context-specific tag [3], got [2]"
-        ),
-        // Test case: Context-specific tag without Sequence
+        // Test case: Context-specific tag without Sequence inside
+        // (slot does not matter; the inner element must be SEQUENCE)
         case(
             Element::ContextSpecific {
                 constructed: true,
             slot: 3,
                 element: Box::new(Element::Integer(tsumiki_asn1::Integer::from(vec![0x01]))),
             },
-            "expected SEQUENCE inside context-specific tag [3]"
+            "expected SEQUENCE"
         ),
         // Test case: Not a Sequence or ContextSpecific
         case(
             Element::Integer(tsumiki_asn1::Integer::from(vec![0x01])),
-            "invalid structure - expected context-specific tag [3] or SEQUENCE"
+            "invalid structure"
         ),
     )]
     fn test_extensions_decode_failure(input: Element, expected_error_msg: &str) {
