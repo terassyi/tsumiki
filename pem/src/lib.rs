@@ -74,6 +74,7 @@ const EC_PRIVATE_KEY_LABEL: &str = "EC PRIVATE KEY";
 const PUBLIC_KEY_LABEL: &str = "PUBLIC KEY";
 const RSA_PUBLIC_KEY_LABEL: &str = "RSA PUBLIC KEY";
 const CERTIFICATE_LABEL: &str = "CERTIFICATE";
+const X509_CRL_LABEL: &str = "X509 CRL";
 
 /// PEM label identifying the type of data enclosed.
 ///
@@ -99,6 +100,8 @@ pub enum Label {
     RSAPublicKey,
     /// X.509 Certificate
     Certificate,
+    /// X.509 CRL
+    X509Crl,
     /// Unknown or unrecognized label (for internal use)
     Unknown,
 }
@@ -113,6 +116,7 @@ impl Display for Label {
             Label::PublicKey => write!(f, "{}", PUBLIC_KEY_LABEL),
             Label::RSAPublicKey => write!(f, "{}", RSA_PUBLIC_KEY_LABEL),
             Label::Certificate => write!(f, "{}", CERTIFICATE_LABEL),
+            Label::X509Crl => write!(f, "{}", X509_CRL_LABEL),
             Label::Unknown => write!(f, "UNKNOWN"),
         }
     }
@@ -130,6 +134,7 @@ impl FromStr for Label {
             PUBLIC_KEY_LABEL => Ok(Label::PublicKey),
             RSA_PUBLIC_KEY_LABEL => Ok(Label::RSAPublicKey),
             CERTIFICATE_LABEL => Ok(Label::Certificate),
+            X509_CRL_LABEL => Ok(Label::X509Crl),
             _ => Err(Error::InvalidLabel),
         }
     }
@@ -137,7 +142,7 @@ impl FromStr for Label {
 
 impl Label {
     fn get_label(line: &str) -> Result<Label, Error> {
-        let re = Regex::new(r"-----(?:BEGIN|END) ([A-Z ]+)-----\s*")
+        let re = Regex::new(r"-----(?:BEGIN|END) ([A-Z0-9 ]+)-----\s*")
             .map_err(|_| Error::InvalidEncapsulationBoundary)?;
         if let Some(captured) = re.captures(line) {
             if captured.len() != 2 {
@@ -489,11 +494,23 @@ mod tests {
         case("-----BEGIN PRIVATE KEY-----", Label::PrivateKey),
         case("-----END PUBLIC KEY-----", Label::PublicKey),
         case("-----END PUBLIC KEY-----     ", Label::PublicKey),
-        case("-----END PUBLIC KEY-----  ", Label::PublicKey)
+        case("-----END PUBLIC KEY-----  ", Label::PublicKey),
+        case("-----BEGIN X509 CRL-----", Label::X509Crl),
+        case("-----END X509 CRL-----", Label::X509Crl)
     )]
     fn test_get_label(input: &str, expected: Label) {
         let got = Label::get_label(input).unwrap();
         assert_eq!(expected, got);
+    }
+
+    #[test]
+    fn test_label_x509_crl_string_roundtrip() {
+        // RFC 7468 §5: PEM label for X.509 CRL is "X509 CRL"
+        let label = Label::X509Crl;
+        let s = label.to_string();
+        assert_eq!(s, "X509 CRL");
+        let parsed = Label::from_str(&s).unwrap();
+        assert_eq!(parsed, label);
     }
 
     const TEST_PEM1: &str = r"-----BEGIN PRIVATE KEY-----
@@ -554,6 +571,11 @@ H6Z2F5qzxFr3dVOYlTUQPYJGBZBpXgXL5fBnPWnPPuLFBNLNNqCpM5cY+c5dS9YE
 pg==
 -----END CERTIFICATE-----";
 
+    const TEST_PEM_CRL: &str = r"-----BEGIN X509 CRL-----
+AAA=
+-----END X509 CRL-----
+";
+
     #[rstest(
         input,
         expected_label,
@@ -566,7 +588,8 @@ pg==
             TEST_PEM_CERT1,
             Label::Certificate,
             "MIICLDCCAdKgAwIBAgIBADAKBggqhkjOPQQDAjB9MQswCQYDVQQGEwJCRTEPMA0GA1UEChMGR251VExTMSUwIwYDVQQLExxHbnVUTFMgY2VydGlmaWNhdGUgYXV0aG9yaXR5MQ8wDQYDVQQIEwZMZXV2ZW4xJTAjBgNVBAMTHEdudVRMUyBjZXJ0aWZpY2F0ZSBhdXRob3JpdHkwHhcNMTEwNTIzMjAzODIxWhcNMTIxMjIyMDc0MTUxWjB9MQswCQYDVQQGEwJCRTEPMA0GA1UEChMGR251VExTMSUwIwYDVQQLExxHbnVUTFMgY2VydGlmaWNhdGUgYXV0aG9yaXR5MQ8wDQYDVQQIEwZMZXV2ZW4xJTAjBgNVBAMTHEdudVRMUyBjZXJ0aWZpY2F0ZSBhdXRob3JpdHkwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARS2I0jiuNn14Y2sSALCX3IybqiIJUvxUpj+oNfzngvj/Niyv2394BWnW4XuQ4RTEiywK87WRcWMGgJB5kX/t2no0MwQTAPBgNVHRMBAf8EBTADAQH/MA8GA1UdDwEB/wQFAwMHBgAwHQYDVR0OBBYEFPC0gf6YEr+1KLlkQAPLzB9mTigDMAoGCCqGSM49BAMCA0gAMEUCIDGuwD1KPyG+hRf88MeyMQcqOFZD0TbVleF+UsAGQ4enAiEAl4wOuDwKQa+upc8GftXE2C//4mKANBC6It01gUaTIpo="
-        )
+        ),
+        case(TEST_PEM_CRL, Label::X509Crl, "AAA=")
     )]
     fn test_pem_from_str(input: &str, expected_label: Label, expected_data: &str) {
         let pem = Pem::from_str(input).unwrap();
@@ -612,7 +635,8 @@ AAA==
         pem_str,
         label,
         case(TEST_PEM_CERT1, Label::Certificate),
-        case(TEST_PEM_CERT2, Label::Certificate)
+        case(TEST_PEM_CERT2, Label::Certificate),
+        case(TEST_PEM_CRL, Label::X509Crl)
     )]
     fn test_pem_roundtrip(pem_str: &str, label: Label) {
         let original_pem: Pem = pem_str.parse().unwrap();
