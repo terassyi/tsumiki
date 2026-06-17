@@ -4,8 +4,8 @@
 
 use rustls_pki_types::CertificateDer;
 
-use crate::Certificate;
-use crate::CertificateChain;
+use crate::cert::Certificate;
+use crate::cert::CertificateChain;
 use crate::error::Error;
 use tsumiki::decoder::Decoder;
 use tsumiki::encoder::Encoder;
@@ -93,7 +93,7 @@ mod tests {
     use std::str::FromStr;
 
     use super::*;
-    use crate::Version;
+    use crate::cert::Version;
     use rstest::rstest;
     use tsumiki_pem::Pem;
 

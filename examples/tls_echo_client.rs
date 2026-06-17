@@ -28,7 +28,7 @@ use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 use tsumiki::decoder::Decoder;
 use tsumiki_pkcs::PrivateKey;
-use tsumiki_x509::Certificate;
+use tsumiki_x509::cert::Certificate;
 
 const SERVER_ADDR: &str = "127.0.0.1:8443";
 const CA_CERT_PATH: &str = "examples/certs/ca.crt";

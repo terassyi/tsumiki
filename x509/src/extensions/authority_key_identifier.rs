@@ -258,8 +258,8 @@ impl fmt::Display for AuthorityKeyIdentifier {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::CertificateSerialNumber;
     use crate::extensions::RawExtension;
+    use tsumiki_pkix_types::CertificateSerialNumber;
 
     use rstest::rstest;
     use std::str::FromStr;

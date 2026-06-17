@@ -340,7 +340,7 @@ mod tests {
         let result: Result<SubjectDirectoryAttributes, Error> = input.decode();
         assert!(matches!(
             result,
-            Err(Error::ExtensionError(
+            Err(Error::CertExtensionError(
                 error::Error::SubjectDirectoryAttributesEmpty
             ))
         ));
@@ -358,7 +358,7 @@ mod tests {
         let result: Result<SubjectDirectoryAttributes, Error> = input.decode();
         assert!(matches!(
             result,
-            Err(Error::ExtensionError(
+            Err(Error::CertExtensionError(
                 error::Error::SubjectDirectoryAttributeExpectedSet
             ))
         ));
@@ -376,7 +376,7 @@ mod tests {
         let result: Result<SubjectDirectoryAttributes, Error> = input.decode();
         assert!(matches!(
             result,
-            Err(Error::ExtensionError(
+            Err(Error::CertExtensionError(
                 error::Error::SubjectDirectoryAttributeExpectedOid
             ))
         ));
@@ -394,7 +394,7 @@ mod tests {
         let result: Result<SubjectDirectoryAttributes, Error> = input.decode();
         assert!(matches!(
             result,
-            Err(Error::ExtensionError(
+            Err(Error::CertExtensionError(
                 error::Error::SubjectDirectoryAttributeEmptyValues
             ))
         ));

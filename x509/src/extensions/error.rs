@@ -1,54 +1,33 @@
-//! Extension-specific error types
+//! Error types for the shared extension machinery and types.
+//!
+//! These cover the extensions and types that live in the shared `extensions`
+//! module (reused by both certificates and CRLs): `GeneralName`,
+//! `AuthorityKeyIdentifier`, `IssuerAltName`, `FreshestCRL`, and the shared
+//! `DistributionPoint`/`DistributionPointName`/`ReasonFlags` types.
 
 use thiserror::Error;
 
-/// Context for where an extension error occurred
+/// Context for where a shared extension error occurred
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
-    BasicConstraints,
-    KeyUsage,
-    SubjectKeyIdentifier,
     AuthorityKeyIdentifier,
-    SubjectAltName,
     IssuerAltName,
     GeneralName,
-    ExtendedKeyUsage,
-    AuthorityInfoAccess,
-    NameConstraints,
     CRLDistributionPoints,
-    CertificatePolicies,
-    InhibitAnyPolicy,
-    PolicyConstraints,
-    PolicyMappings,
-    SubjectInfoAccess,
-    SubjectDirectoryAttributes,
 }
 
 impl std::fmt::Display for Kind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::BasicConstraints => write!(f, "BasicConstraints"),
-            Self::KeyUsage => write!(f, "KeyUsage"),
-            Self::SubjectKeyIdentifier => write!(f, "SubjectKeyIdentifier"),
             Self::AuthorityKeyIdentifier => write!(f, "AuthorityKeyIdentifier"),
-            Self::SubjectAltName => write!(f, "SubjectAltName"),
             Self::IssuerAltName => write!(f, "IssuerAltName"),
             Self::GeneralName => write!(f, "GeneralName"),
-            Self::ExtendedKeyUsage => write!(f, "ExtendedKeyUsage"),
-            Self::AuthorityInfoAccess => write!(f, "AuthorityInfoAccess"),
-            Self::NameConstraints => write!(f, "NameConstraints"),
             Self::CRLDistributionPoints => write!(f, "CRLDistributionPoints"),
-            Self::CertificatePolicies => write!(f, "CertificatePolicies"),
-            Self::InhibitAnyPolicy => write!(f, "InhibitAnyPolicy"),
-            Self::PolicyConstraints => write!(f, "PolicyConstraints"),
-            Self::PolicyMappings => write!(f, "PolicyMappings"),
-            Self::SubjectInfoAccess => write!(f, "SubjectInfoAccess"),
-            Self::SubjectDirectoryAttributes => write!(f, "SubjectDirectoryAttributes"),
         }
     }
 }
 
-/// Extension parsing errors
+/// Shared extension parsing errors
 #[derive(Debug, Error)]
 pub enum Error {
     // Common structural errors
@@ -64,28 +43,11 @@ pub enum Error {
     #[error("{0}: expected OCTET STRING")]
     ExpectedOctetString(Kind),
 
-    #[error("{0}: expected INTEGER")]
-    ExpectedInteger(Kind),
-
     #[error("{0}: expected OBJECT IDENTIFIER")]
     ExpectedOid(Kind),
 
-    #[error("{kind}: expected context-specific tag [{expected}]")]
-    ExpectedContextTag { kind: Kind, expected: u8 },
-
-    #[error("{kind}: expected {expected} elements, got {actual}")]
-    InvalidElementCount {
-        kind: Kind,
-        expected: &'static str,
-        actual: usize,
-    },
-
     #[error("{0}: unexpected element type")]
     UnexpectedElementType(Kind),
-
-    // BasicConstraints specific errors
-    #[error("BasicConstraints: pathLenConstraint out of range for u32")]
-    PathLenConstraintOutOfRange,
 
     // GeneralName specific errors
     #[error("GeneralName: unknown context-specific tag [{0}]")]
@@ -138,128 +100,17 @@ pub enum Error {
     #[error("AuthorityKeyIdentifier: serialNumber must be OCTET STRING or INTEGER")]
     AkiSerialNumberInvalidType,
 
-    // ExtendedKeyUsage specific errors
-    #[error("ExtendedKeyUsage: at least one KeyPurposeId required")]
-    ExtendedKeyUsageEmpty,
-
-    #[error("ExtendedKeyUsage: all elements must be OBJECT IDENTIFIER")]
-    ExtendedKeyUsageExpectedOid,
-
-    // InhibitAnyPolicy / PolicyConstraints specific errors
-    #[error("{0}: empty content")]
-    EmptyContent(Kind),
-
-    #[error("{0}: value out of range for u32")]
-    ValueOutOfRangeU32(Kind),
-
-    // NameConstraints specific errors
-    #[error(
-        "NameConstraints: at least one of permittedSubtrees or excludedSubtrees must be present"
-    )]
-    NameConstraintsEmptyContent,
-
-    #[error("NameConstraints: invalid element in sequence")]
-    NameConstraintsInvalidElement,
-
-    // CRLDistributionPoints specific errors
+    // CRLDistributionPoints / DistributionPoint shared type errors
     #[error("CRLDistributionPoints: at least one DistributionPoint required")]
     CrlDistributionPointsEmpty,
 
     #[error("CRLDistributionPoints: unknown context tag [{0}]")]
     CrlDistributionPointsUnknownTag(u8),
 
-    // CertificatePolicies specific errors
-    #[error("CertificatePolicies: at least one PolicyInformation required")]
-    CertificatePoliciesEmpty,
-
-    #[error("CertificatePolicies: PolicyInformation must be SEQUENCE")]
-    PolicyInformationExpectedSequence,
-
-    #[error(
-        "CertificatePolicies: PolicyInformation requires at least 1 element (policyIdentifier)"
-    )]
-    PolicyInformationMissingIdentifier,
-
-    #[error("CertificatePolicies: policyIdentifier must be OBJECT IDENTIFIER")]
-    PolicyInformationExpectedOid,
-
-    #[error("CertificatePolicies: policyQualifiers must be SEQUENCE")]
-    PolicyQualifiersExpectedSequence,
-
-    #[error("CertificatePolicies: PolicyQualifierInfo must be SEQUENCE")]
-    PolicyQualifierInfoExpectedSequence,
-
-    #[error("CertificatePolicies: PolicyQualifierInfo requires 2 elements")]
-    PolicyQualifierInfoInvalidElementCount,
-
-    #[error("CertificatePolicies: policyQualifierId must be OBJECT IDENTIFIER")]
-    PolicyQualifierIdExpectedOid,
-
-    #[error("CertificatePolicies: UserNotice must be SEQUENCE")]
-    UserNoticeExpectedSequence,
-
-    #[error("CertificatePolicies: NoticeReference must be SEQUENCE with 2 elements")]
-    NoticeReferenceInvalidStructure,
-
-    #[error("CertificatePolicies: noticeNumbers must be SEQUENCE")]
-    NoticeNumbersExpectedSequence,
-
-    #[error("CertificatePolicies: noticeNumbers must contain INTEGER values")]
-    NoticeNumbersExpectedIntegers,
-
-    // PolicyMappings specific errors
-    #[error("PolicyMappings: at least one mapping required")]
-    PolicyMappingsEmpty,
-
-    #[error("PolicyMappings: PolicyMapping must be SEQUENCE with 2 elements")]
-    PolicyMappingInvalidStructure,
-
-    #[error("PolicyMappings: issuerDomainPolicy must be OBJECT IDENTIFIER")]
-    PolicyMappingIssuerExpectedOid,
-
-    #[error("PolicyMappings: subjectDomainPolicy must be OBJECT IDENTIFIER")]
-    PolicyMappingSubjectExpectedOid,
-
-    // AuthorityInfoAccess specific errors
-    #[error("AuthorityInfoAccess: at least one AccessDescription required")]
-    AuthorityInfoAccessEmpty,
-
-    #[error("AuthorityInfoAccess: AccessDescription must be SEQUENCE with 2 elements")]
-    AccessDescriptionInvalidStructure,
-
-    #[error("AuthorityInfoAccess: accessMethod must be OBJECT IDENTIFIER")]
-    AccessDescriptionExpectedOid,
-
-    // SubjectInfoAccess specific errors
-    #[error("SubjectInfoAccess: at least one AccessDescription required")]
-    SubjectInfoAccessEmpty,
-
-    #[error("SubjectInfoAccess: AccessDescription must be SEQUENCE with 2 elements")]
-    SubjectInfoAccessInvalidStructure,
-
-    #[error("SubjectInfoAccess: accessMethod must be OBJECT IDENTIFIER")]
-    SubjectInfoAccessExpectedOid,
-
-    // SubjectDirectoryAttributes specific errors
-    #[error("SubjectDirectoryAttributes: at least one Attribute required")]
-    SubjectDirectoryAttributesEmpty,
-
-    #[error("SubjectDirectoryAttributes: Attribute must be SEQUENCE with 2 elements")]
-    SubjectDirectoryAttributeInvalidStructure,
-
-    #[error("SubjectDirectoryAttributes: type must be OBJECT IDENTIFIER")]
-    SubjectDirectoryAttributeExpectedOid,
-
-    #[error("SubjectDirectoryAttributes: values must be SET")]
-    SubjectDirectoryAttributeExpectedSet,
-
-    #[error("SubjectDirectoryAttributes: at least one AttributeValue required")]
-    SubjectDirectoryAttributeEmptyValues,
-
     /// Invalid ASN.1 structure
     #[error("invalid ASN.1: {0}")]
     InvalidAsn1(#[source] tsumiki_asn1::error::Error),
 }
 
-/// Result type for extension operations
+/// Result type for shared extension operations
 pub type Result<T> = std::result::Result<T, Error>;
