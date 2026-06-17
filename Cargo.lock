@@ -1184,6 +1184,7 @@ dependencies = [
 name = "tsumiki-pkix-types"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "rstest",
  "serde",
  "serde_json",

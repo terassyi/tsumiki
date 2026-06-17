@@ -57,14 +57,14 @@
 use std::fmt;
 use std::str::FromStr;
 
-use chrono::{Datelike, NaiveDateTime};
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize, ser::SerializeStruct};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 use tsumiki_asn1::{ASN1Object, BitString, Element, Integer, ObjectIdentifier};
 use tsumiki_pem::{FromPem, Pem};
 use tsumiki_pkix_types::{
-    AlgorithmIdentifier, CertificateSerialNumber, Name, OidName, SubjectPublicKeyInfo,
+    AlgorithmIdentifier, CertificateSerialNumber, Name, OidName, SubjectPublicKeyInfo, Time,
 };
 
 use crate::error::{CertificateField, Error};
@@ -1092,27 +1092,25 @@ impl Decoder<Element, Validity> for Element {
     type Error = Error;
 
     fn decode(&self) -> Result<Validity, Self::Error> {
-        if let Element::Sequence(elements) = self {
-            if elements.len() != 2 {
-                return Err(Error::ValidityInvalidElementCount);
-            }
-            let not_before = match &elements[0] {
-                Element::UTCTime(dt) => *dt,
-                Element::GeneralizedTime(dt) => *dt,
-                _ => return Err(Error::ValidityInvalidNotBefore),
-            };
-            let not_after = match &elements[1] {
-                Element::UTCTime(dt) => *dt,
-                Element::GeneralizedTime(dt) => *dt,
-                _ => return Err(Error::ValidityInvalidNotAfter),
-            };
-            Ok(Validity {
-                not_before,
-                not_after,
-            })
-        } else {
-            Err(Error::ValidityExpectedSequence)
-        }
+        let Element::Sequence(elements) = self else {
+            return Err(Error::ValidityExpectedSequence);
+        };
+        let (not_before_elem, not_after_elem) = match elements.as_slice() {
+            [not_before, not_after] => (not_before, not_after),
+            _ => return Err(Error::ValidityInvalidElementCount),
+        };
+
+        let not_before: Time = not_before_elem
+            .decode()
+            .map_err(|_| Error::ValidityInvalidNotBefore)?;
+        let not_after: Time = not_after_elem
+            .decode()
+            .map_err(|_| Error::ValidityInvalidNotAfter)?;
+
+        Ok(Validity {
+            not_before: not_before.into(),
+            not_after: not_after.into(),
+        })
     }
 }
 
@@ -1122,20 +1120,9 @@ impl Encoder<Validity, Element> for Validity {
     type Error = Error;
 
     fn encode(&self) -> Result<Element, Self::Error> {
-        // RFC 5280: Use UTCTime for years 1950-2049, GeneralizedTime otherwise
-        let not_before_elm = if self.not_before.year() >= 1950 && self.not_before.year() < 2050 {
-            Element::UTCTime(self.not_before)
-        } else {
-            Element::GeneralizedTime(self.not_before)
-        };
-
-        let not_after_elm = if self.not_after.year() >= 1950 && self.not_after.year() < 2050 {
-            Element::UTCTime(self.not_after)
-        } else {
-            Element::GeneralizedTime(self.not_after)
-        };
-
-        Ok(Element::Sequence(vec![not_before_elm, not_after_elm]))
+        let not_before = Time::from(self.not_before).encode()?;
+        let not_after = Time::from(self.not_after).encode()?;
+        Ok(Element::Sequence(vec![not_before, not_after]))
     }
 }
 
@@ -1189,7 +1176,7 @@ impl TryFrom<&TBSCertificate> for SerializableTBSCertificate {
 mod tests {
     use super::*;
     use crate::extensions::{Extension, Extensions, RawExtension};
-    use chrono::NaiveDate;
+    use chrono::{Datelike, NaiveDate};
     use rstest::rstest;
     use std::str::FromStr;
     use tsumiki_asn1::{BitString, OctetString};
