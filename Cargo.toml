@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "asn1", "cli", "crl", "der", "examples", "pem", "pkcs", "pkix-types", "tsumiki" , "x509"]
+members = [ "asn1", "cli", "der", "examples", "pem", "pkcs", "pkix-types", "tsumiki" , "x509"]
 
 [workspace.package]
 authors = ["terassyi"]

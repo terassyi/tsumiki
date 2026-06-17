@@ -50,8 +50,8 @@ impl std::fmt::Display for CrlField {
 ///
 /// This type covers structural errors (invalid ASN.1, missing fields) and
 /// validation errors (invalid formats, out-of-range values). Conversions
-/// from underlying library errors (DER, ASN.1, PEM, PKIX, X.509) are added
-/// alongside the parsing code that produces them.
+/// from underlying library errors (PKIX types, X.509) are added alongside the
+/// parsing code that produces them.
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("{0}: expected SEQUENCE")]
@@ -78,4 +78,10 @@ pub enum Error {
     // Time errors
     #[error("{0}: must be UTCTime or GeneralizedTime")]
     InvalidTime(CrlField),
+
+    // External error conversions
+    #[error("PKIX types error: {0}")]
+    PKIXTypesError(#[from] tsumiki_pkix_types::Error),
+    #[error("X.509 error: {0}")]
+    X509Error(#[from] crate::error::Error),
 }
