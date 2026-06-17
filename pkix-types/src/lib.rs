@@ -50,6 +50,7 @@ pub mod name;
 pub mod oid_name;
 pub mod serial_number;
 pub mod subject_public_key_info;
+pub mod time;
 
 pub use algorithm::{
     AlgorithmIdentifier, AlgorithmParameters,
@@ -63,6 +64,7 @@ pub use name::{AttributeTypeAndValue, Name, RelativeDistinguishedName};
 pub use oid_name::OidName;
 pub use serial_number::CertificateSerialNumber;
 pub use subject_public_key_info::SubjectPublicKeyInfo;
+pub use time::Time;
 
 thread_local! {
     /// Global flag to control whether to use OID values or human-readable names in serialization

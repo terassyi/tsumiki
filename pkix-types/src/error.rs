@@ -54,6 +54,10 @@ pub enum Error {
     #[error("SubjectPublicKeyInfo: expected 2 elements, got {0}")]
     SubjectPublicKeyInfoInvalidElementCount(usize),
 
+    // Time errors
+    #[error("Time: expected UTCTime or GeneralizedTime")]
+    InvalidTime,
+
     /// Algorithm error
     #[error(transparent)]
     AlgorithmError(#[from] crate::algorithm::Error),

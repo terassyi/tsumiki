@@ -13,6 +13,7 @@ readme = "README.md"
 
 [dependencies]
 tsumiki-asn1 = { version = "0.1.0", path = "../asn1" }
+chrono = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tsumiki = { version = "0.1.0", path = "../tsumiki" }
