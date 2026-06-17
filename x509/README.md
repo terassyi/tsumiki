@@ -39,6 +39,7 @@ tsumiki-x509 = { version = "0.1", features = ["rustls"] }
 
 ```rust
 use tsumiki_x509::cert::Certificate;
+use tsumiki_x509::cert::extensions::SubjectAltName;
 
 // Parse from PEM
 let pem = std::fs::read_to_string("cert.pem")?;

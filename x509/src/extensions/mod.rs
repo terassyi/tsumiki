@@ -14,21 +14,23 @@ use crate::error::Error;
 
 // Shared submodules: the extension machinery plus types/extensions reused by
 // both certificates and CRLs.
-mod authority_key_identifier;
-mod crl_distribution_points;
+pub(crate) mod authority_key_identifier;
+mod distribution_point;
 pub mod error;
-mod freshest_crl;
+pub(crate) mod freshest_crl;
 pub(crate) mod general_name;
-mod issuer_alt_name;
+pub(crate) mod issuer_alt_name;
 
-// Re-export public types
-pub use authority_key_identifier::AuthorityKeyIdentifier;
-pub use crl_distribution_points::{
-    CRLDistributionPoints, DistributionPoint, DistributionPointName, ReasonFlags,
+// Re-export shared types publicly.
+pub use distribution_point::{
+    DistributionPoint, DistributionPointName, DistributionPoints, ReasonFlags,
 };
-pub use freshest_crl::FreshestCRL;
 pub use general_name::{EdiPartyName, GeneralName, IpAddressOrRange, OtherName};
-pub use issuer_alt_name::IssuerAltName;
+
+// `authority_key_identifier`, `freshest_crl`, and `issuer_alt_name` are
+// `pub(crate) mod` (above): they appear in both the certificate and CRL
+// profiles, so the extension types are re-exported per-profile (e.g.
+// `cert::extensions`) rather than at this shared path.
 use tsumiki_asn1::AsOid;
 
 /// Raw X.509 extension before type-specific parsing.
@@ -268,8 +270,8 @@ impl Encoder<Extensions, Element> for Extensions {
 /// # Example
 /// ```no_run
 /// use std::str::FromStr;
-/// use tsumiki_x509::Certificate;
-/// use tsumiki_x509::extensions::{Extension, BasicConstraints};
+/// use tsumiki_x509::cert::Certificate;
+/// use tsumiki_x509::cert::extensions::BasicConstraints;
 ///
 /// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
 /// // Parse extension from certificate

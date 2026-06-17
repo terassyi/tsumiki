@@ -65,9 +65,14 @@ use tsumiki_pkix_types::{
     AlgorithmIdentifier, CertificateSerialNumber, Name, OidName, SubjectPublicKeyInfo, Time,
 };
 
-use crate::cert::extensions::ParsedExtensions;
+use crate::cert::extensions::{
+    AuthorityInfoAccess, AuthorityKeyIdentifier, BasicConstraints, CRLDistributionPoints,
+    CertificatePolicies, ExtendedKeyUsage, FreshestCRL, InhibitAnyPolicy, IssuerAltName, KeyUsage,
+    NameConstraints, ParsedExtensions, PolicyConstraints, PolicyMappings, SubjectAltName,
+    SubjectDirectoryAttributes, SubjectInfoAccess, SubjectKeyIdentifier,
+};
 use crate::error::{CertificateField, Error};
-use crate::extensions::Extensions;
+use crate::extensions::{Extension, Extensions};
 
 mod chain;
 pub mod extensions;
@@ -151,7 +156,7 @@ impl Certificate {
     ///     println!("Is CA: {}", bc.ca);
     /// }
     /// ```
-    pub fn extension<T: crate::extensions::Extension>(&self) -> Result<Option<T>, Error> {
+    pub fn extension<T: Extension>(&self) -> Result<Option<T>, Error> {
         if let Some(ref exts) = self.tbs_certificate.extensions {
             exts.extension::<T>()
         } else {
@@ -307,91 +312,87 @@ impl fmt::Display for Certificate {
             writeln!(f, "        X509v3 extensions:")?;
 
             // Subject Key Identifier
-            if let Ok(Some(ski)) = self.extension::<crate::cert::extensions::SubjectKeyIdentifier>()
-            {
+            if let Ok(Some(ski)) = self.extension::<SubjectKeyIdentifier>() {
                 write!(f, "{}", ski)?;
             }
 
             // Authority Key Identifier
-            if let Ok(Some(aki)) = self.extension::<crate::extensions::AuthorityKeyIdentifier>() {
+            if let Ok(Some(aki)) = self.extension::<AuthorityKeyIdentifier>() {
                 write!(f, "{}", aki)?;
             }
 
             // Basic Constraints
-            if let Ok(Some(bc)) = self.extension::<crate::cert::extensions::BasicConstraints>() {
+            if let Ok(Some(bc)) = self.extension::<BasicConstraints>() {
                 write!(f, "{}", bc)?;
             }
 
             // Key Usage
-            if let Ok(Some(ku)) = self.extension::<crate::cert::extensions::KeyUsage>() {
+            if let Ok(Some(ku)) = self.extension::<KeyUsage>() {
                 write!(f, "{}", ku)?;
             }
 
             // Extended Key Usage
-            if let Ok(Some(eku)) = self.extension::<crate::cert::extensions::ExtendedKeyUsage>() {
+            if let Ok(Some(eku)) = self.extension::<ExtendedKeyUsage>() {
                 write!(f, "{}", eku)?;
             }
 
             // Subject Alternative Name
-            if let Ok(Some(san)) = self.extension::<crate::cert::extensions::SubjectAltName>() {
+            if let Ok(Some(san)) = self.extension::<SubjectAltName>() {
                 write!(f, "{}", san)?;
             }
 
             // Issuer Alternative Name
-            if let Ok(Some(ian)) = self.extension::<crate::extensions::IssuerAltName>() {
+            if let Ok(Some(ian)) = self.extension::<IssuerAltName>() {
                 write!(f, "{}", ian)?;
             }
 
             // Name Constraints
-            if let Ok(Some(nc)) = self.extension::<crate::cert::extensions::NameConstraints>() {
+            if let Ok(Some(nc)) = self.extension::<NameConstraints>() {
                 write!(f, "{}", nc)?;
             }
 
             // CRL Distribution Points
-            if let Ok(Some(cdp)) = self.extension::<crate::extensions::CRLDistributionPoints>() {
+            if let Ok(Some(cdp)) = self.extension::<CRLDistributionPoints>() {
                 write!(f, "{}", cdp)?;
             }
 
             // Certificate Policies
-            if let Ok(Some(cp)) = self.extension::<crate::cert::extensions::CertificatePolicies>() {
+            if let Ok(Some(cp)) = self.extension::<CertificatePolicies>() {
                 write!(f, "{}", cp)?;
             }
 
             // Policy Mappings
-            if let Ok(Some(pm)) = self.extension::<crate::cert::extensions::PolicyMappings>() {
+            if let Ok(Some(pm)) = self.extension::<PolicyMappings>() {
                 write!(f, "{}", pm)?;
             }
 
             // Policy Constraints
-            if let Ok(Some(pc)) = self.extension::<crate::cert::extensions::PolicyConstraints>() {
+            if let Ok(Some(pc)) = self.extension::<PolicyConstraints>() {
                 write!(f, "{}", pc)?;
             }
 
             // Freshest CRL
-            if let Ok(Some(fcrl)) = self.extension::<crate::extensions::FreshestCRL>() {
+            if let Ok(Some(fcrl)) = self.extension::<FreshestCRL>() {
                 write!(f, "{}", fcrl)?;
             }
 
             // Inhibit Any Policy
-            if let Ok(Some(iap)) = self.extension::<crate::cert::extensions::InhibitAnyPolicy>() {
+            if let Ok(Some(iap)) = self.extension::<InhibitAnyPolicy>() {
                 write!(f, "{}", iap)?;
             }
 
             // Authority Info Access
-            if let Ok(Some(aia)) = self.extension::<crate::cert::extensions::AuthorityInfoAccess>()
-            {
+            if let Ok(Some(aia)) = self.extension::<AuthorityInfoAccess>() {
                 write!(f, "{}", aia)?;
             }
 
             // Subject Info Access
-            if let Ok(Some(sia)) = self.extension::<crate::cert::extensions::SubjectInfoAccess>() {
+            if let Ok(Some(sia)) = self.extension::<SubjectInfoAccess>() {
                 write!(f, "{}", sia)?;
             }
 
             // Subject Directory Attributes
-            if let Ok(Some(sda)) =
-                self.extension::<crate::cert::extensions::SubjectDirectoryAttributes>()
-            {
+            if let Ok(Some(sda)) = self.extension::<SubjectDirectoryAttributes>() {
                 write!(f, "{}", sda)?;
             }
 
@@ -2369,7 +2370,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         case(Extensions {
             extensions: vec![
                 RawExtension::new(
-                    ObjectIdentifier::from_str(crate::cert::extensions::BasicConstraints::OID).unwrap(),
+                    ObjectIdentifier::from_str(BasicConstraints::OID).unwrap(),
                     false,
                     OctetString::from(vec![0x30, 0x00]),
                 ),
@@ -2379,7 +2380,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         case(Extensions {
             extensions: vec![
                 RawExtension::new(
-                    ObjectIdentifier::from_str(crate::cert::extensions::KeyUsage::OID).unwrap(),
+                    ObjectIdentifier::from_str(KeyUsage::OID).unwrap(),
                     true,
                     OctetString::from(vec![0x03, 0x02, 0x05, 0xa0]),
                 ),
@@ -2389,12 +2390,12 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         case(Extensions {
             extensions: vec![
                 RawExtension::new(
-                    ObjectIdentifier::from_str(crate::cert::extensions::BasicConstraints::OID).unwrap(),
+                    ObjectIdentifier::from_str(BasicConstraints::OID).unwrap(),
                     true,
                     OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xff]),
                 ),
                 RawExtension::new(
-                    ObjectIdentifier::from_str(crate::cert::extensions::SubjectKeyIdentifier::OID).unwrap(),
+                    ObjectIdentifier::from_str(SubjectKeyIdentifier::OID).unwrap(),
                     false,
                     OctetString::from(vec![0x04, 0x14, 0x01, 0x02, 0x03]),
                 ),
@@ -2466,7 +2467,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
     fn make_extensions_for_tag(tag: Option<u8>) -> Extensions {
         Extensions {
             extensions: vec![RawExtension::new(
-                ObjectIdentifier::from_str(crate::cert::extensions::BasicConstraints::OID).unwrap(),
+                ObjectIdentifier::from_str(BasicConstraints::OID).unwrap(),
                 false,
                 OctetString::from(vec![0x30, 0x00]),
             )],
@@ -2577,8 +2578,7 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
             subject_unique_id: None,
             extensions: Some(Extensions {
                 extensions: vec![RawExtension::new(
-                    ObjectIdentifier::from_str(crate::cert::extensions::BasicConstraints::OID)
-                        .unwrap(),
+                    ObjectIdentifier::from_str(BasicConstraints::OID).unwrap(),
                     true,
                     OctetString::from(vec![0x30, 0x03, 0x01, 0x01, 0xff]),
                 )],

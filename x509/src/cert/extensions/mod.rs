@@ -1,22 +1,27 @@
 //! Certificate-specific X.509 v3 extensions.
 //!
 //! These extensions apply to certificates only. The extension machinery (the
-//! [`Extension`](crate::extensions::Extension) trait, the `Extensions`
-//! container) and the types reused by both certificates and CRLs live in the
-//! shared [`crate::extensions`] module.
+//! [`crate::extensions::Extension`] trait, the `Extensions` container) and the
+//! types reused by both certificates and CRLs live in the shared
+//! [`crate::extensions`] module.
 
 use serde::Serialize;
 use tsumiki_pkix_types::OidName;
 
 use crate::error::Error;
-use crate::extensions::{
-    AuthorityKeyIdentifier, CRLDistributionPoints, Extension, Extensions, FreshestCRL,
-    IssuerAltName, RawExtension,
-};
+use crate::extensions::{Extension, Extensions, RawExtension};
+
+// Extensions shared with the CRL profile are implemented in `crate::extensions`
+// but re-exported here so the certificate profile exposes a complete extension
+// set under `cert::extensions`.
+pub use crate::extensions::authority_key_identifier::AuthorityKeyIdentifier;
+pub use crate::extensions::freshest_crl::FreshestCRL;
+pub use crate::extensions::issuer_alt_name::IssuerAltName;
 
 mod authority_info_access;
 mod basic_constraints;
 mod certificate_policies;
+mod crl_distribution_points;
 pub mod error;
 mod extended_key_usage;
 mod inhibit_any_policy;
@@ -35,6 +40,7 @@ pub use certificate_policies::{
     CertPolicyId, CertificatePolicies, NoticeReference, PolicyInformation, PolicyQualifierInfo,
     Qualifier, UserNotice,
 };
+pub use crl_distribution_points::CRLDistributionPoints;
 pub use extended_key_usage::ExtendedKeyUsage;
 pub use inhibit_any_policy::InhibitAnyPolicy;
 pub use key_usage::KeyUsage;

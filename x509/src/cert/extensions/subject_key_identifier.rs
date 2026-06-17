@@ -37,8 +37,8 @@ subjectPublicKey (excluding the tag, length, and number of unused bits).
 /// # Example
 /// ```no_run
 /// use std::str::FromStr;
-/// use tsumiki_x509::Certificate;
-/// use tsumiki_x509::extensions::SubjectKeyIdentifier;
+/// use tsumiki_x509::cert::Certificate;
+/// use tsumiki_x509::cert::extensions::SubjectKeyIdentifier;
 ///
 /// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
 /// if let Some(ski) = cert.extension::<SubjectKeyIdentifier>().unwrap() {

@@ -13,7 +13,7 @@ pub enum Kind {
     AuthorityKeyIdentifier,
     IssuerAltName,
     GeneralName,
-    CRLDistributionPoints,
+    DistributionPoints,
 }
 
 impl std::fmt::Display for Kind {
@@ -22,7 +22,7 @@ impl std::fmt::Display for Kind {
             Self::AuthorityKeyIdentifier => write!(f, "AuthorityKeyIdentifier"),
             Self::IssuerAltName => write!(f, "IssuerAltName"),
             Self::GeneralName => write!(f, "GeneralName"),
-            Self::CRLDistributionPoints => write!(f, "CRLDistributionPoints"),
+            Self::DistributionPoints => write!(f, "DistributionPoints"),
         }
     }
 }
@@ -100,12 +100,12 @@ pub enum Error {
     #[error("AuthorityKeyIdentifier: serialNumber must be OCTET STRING or INTEGER")]
     AkiSerialNumberInvalidType,
 
-    // CRLDistributionPoints / DistributionPoint shared type errors
-    #[error("CRLDistributionPoints: at least one DistributionPoint required")]
-    CrlDistributionPointsEmpty,
+    // DistributionPoints shared building-block errors
+    #[error("DistributionPoints: at least one DistributionPoint required")]
+    DistributionPointsEmpty,
 
-    #[error("CRLDistributionPoints: unknown context tag [{0}]")]
-    CrlDistributionPointsUnknownTag(u8),
+    #[error("DistributionPoints: unknown context tag [{0}]")]
+    DistributionPointsUnknownTag(u8),
 
     /// Invalid ASN.1 structure
     #[error("invalid ASN.1: {0}")]

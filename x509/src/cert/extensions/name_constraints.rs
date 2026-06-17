@@ -363,6 +363,7 @@ impl fmt::Display for NameConstraints {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::extensions::IpAddressOrRange;
     use rstest::rstest;
     use tsumiki_asn1::{Element, OctetString};
 
@@ -507,7 +508,7 @@ mod tests {
                     },
                     GeneralSubtree {
                         base: GeneralName::IpAddress(
-                            crate::extensions::IpAddressOrRange::Address(std::net::IpAddr::from([192, 0, 2, 0]))
+                            IpAddressOrRange::Address(std::net::IpAddr::from([192, 0, 2, 0]))
                         ),
                         minimum: 0,
                         maximum: None,
@@ -642,7 +643,7 @@ mod tests {
 
         // Verify it's a Network with correct CIDR notation
         match &permitted[0].base {
-            GeneralName::IpAddress(crate::extensions::IpAddressOrRange::Network(net)) => {
+            GeneralName::IpAddress(IpAddressOrRange::Network(net)) => {
                 assert_eq!(net.to_string(), "192.0.2.0/24");
             }
             _ => panic!("Expected IpAddress Network, got {:?}", permitted[0].base),

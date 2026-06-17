@@ -34,8 +34,8 @@ BasicConstraints ::= SEQUENCE {
 /// # Example
 /// ```no_run
 /// use std::str::FromStr;
-/// use tsumiki_x509::Certificate;
-/// use tsumiki_x509::extensions::BasicConstraints;
+/// use tsumiki_x509::cert::Certificate;
+/// use tsumiki_x509::cert::extensions::BasicConstraints;
 ///
 /// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
 /// if let Some(bc) = cert.extension::<BasicConstraints>().unwrap() {

@@ -42,8 +42,8 @@ CertificateSerialNumber ::= INTEGER
 /// # Example
 /// ```no_run
 /// use std::str::FromStr;
-/// use tsumiki_x509::Certificate;
-/// use tsumiki_x509::extensions::AuthorityKeyIdentifier;
+/// use tsumiki_x509::cert::Certificate;
+/// use tsumiki_x509::cert::extensions::AuthorityKeyIdentifier;
 ///
 /// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
 /// if let Some(aki) = cert.extension::<AuthorityKeyIdentifier>().unwrap() {
