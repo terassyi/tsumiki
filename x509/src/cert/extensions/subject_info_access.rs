@@ -5,10 +5,11 @@ use tsumiki::encoder::{EncodableTo, Encoder};
 use tsumiki_asn1::{ASN1Object, Element, OctetString};
 use tsumiki_pkix_types::OidName;
 
+use super::AccessDescription;
 use super::error;
 use crate::error::Error;
+use crate::extensions::Extension;
 use crate::extensions::general_name::GeneralName;
-use crate::extensions::{AccessDescription, Extension};
 
 /*
 RFC 5280 Section 4.2.2.2: Subject Information Access
@@ -267,7 +268,9 @@ mod tests {
         let result: Result<SubjectInfoAccess, Error> = input.decode();
         assert!(matches!(
             result,
-            Err(Error::ExtensionError(error::Error::SubjectInfoAccessEmpty))
+            Err(Error::CertExtensionError(
+                error::Error::SubjectInfoAccessEmpty
+            ))
         ));
     }
 
@@ -286,7 +289,7 @@ mod tests {
         let result: Result<SubjectInfoAccess, Error> = input.decode();
         assert!(matches!(
             result,
-            Err(Error::ExtensionError(
+            Err(Error::CertExtensionError(
                 error::Error::SubjectInfoAccessExpectedOid
             ))
         ));
@@ -298,7 +301,7 @@ mod tests {
         let result: Result<SubjectInfoAccess, Error> = input.decode();
         assert!(matches!(
             result,
-            Err(Error::ExtensionError(error::Error::ExpectedSequence(
+            Err(Error::CertExtensionError(error::Error::ExpectedSequence(
                 error::Kind::SubjectInfoAccess
             )))
         ));

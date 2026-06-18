@@ -43,8 +43,8 @@ KeyUsage ::= BIT STRING {
 /// # Example
 /// ```no_run
 /// use std::str::FromStr;
-/// use tsumiki_x509::Certificate;
-/// use tsumiki_x509::extensions::KeyUsage;
+/// use tsumiki_x509::cert::Certificate;
+/// use tsumiki_x509::cert::extensions::KeyUsage;
 ///
 /// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
 /// if let Some(ku) = cert.extension::<KeyUsage>().unwrap() {

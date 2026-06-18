@@ -5,10 +5,10 @@ use tsumiki::encoder::{EncodableTo, Encoder};
 use tsumiki_asn1::{ASN1Object, Element, OctetString};
 use tsumiki_pkix_types::OidName;
 
+use super::certificate_policies::{CertPolicyId, CertificatePolicies};
 use super::error;
 use crate::error::Error;
 use crate::extensions::Extension;
-use crate::extensions::certificate_policies::{CertPolicyId, CertificatePolicies};
 
 /*
 RFC 5280 Section 4.2.1.5

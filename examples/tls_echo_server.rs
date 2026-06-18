@@ -26,7 +26,7 @@ use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 use tsumiki::decoder::Decoder;
 use tsumiki_pkcs::PrivateKey;
-use tsumiki_x509::Certificate;
+use tsumiki_x509::cert::Certificate;
 
 const CA_CERT_PATH: &str = "examples/certs/ca.crt";
 const CERT_PATH: &str = "examples/certs/server.crt";

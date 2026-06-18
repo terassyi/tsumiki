@@ -50,7 +50,7 @@ echo "hello" | openssl s_client -connect localhost:8443 \
 
 ```rust
 use tsumiki::decoder::Decoder;
-use tsumiki_x509::Certificate;
+use tsumiki_x509::cert::Certificate;
 
 let pem = fs::read_to_string("server.crt")?.parse::<tsumiki_pem::Pem>()?;
 let cert: Certificate = pem.decode()?;

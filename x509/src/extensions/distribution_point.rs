@@ -3,17 +3,16 @@ use std::fmt;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 use tsumiki_asn1::{ASN1Object, BitString, Element, OctetString};
-use tsumiki_pkix_types::{OidName, RelativeDistinguishedName};
+use tsumiki_pkix_types::RelativeDistinguishedName;
 
 use super::error;
 use crate::error::Error;
-use crate::extensions::Extension;
 use crate::extensions::general_name::GeneralName;
 
 /*
 RFC 5280 Section 4.2.1.13
 
-CRLDistributionPoints ::= SEQUENCE SIZE (1..MAX) OF DistributionPoint
+DistributionPoints ::= SEQUENCE SIZE (1..MAX) OF DistributionPoint
 
 DistributionPoint ::= SEQUENCE {
     distributionPoint       [0]     DistributionPointName OPTIONAL,
@@ -36,12 +35,14 @@ ReasonFlags ::= BIT STRING {
     aACompromise            (8) }
 */
 
-/// CRL Distribution Points extension ([RFC 5280 Section 4.2.1.13](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.13)).
+/// A sequence of [`DistributionPoint`]s
+/// (`SEQUENCE SIZE (1..MAX) OF DistributionPoint`, [RFC 5280 §4.2.1.13](https://datatracker.ietf.org/doc/html/rfc5280#section-4.2.1.13)).
 ///
-/// Identifies how CRL information is obtained.
-/// OID: 2.5.29.31
+/// Shared building block reused by the `CRLDistributionPoints` (certificate)
+/// and `FreshestCRL` extensions, and by the CRL `issuingDistributionPoint`
+/// extension's component types.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CRLDistributionPoints {
+pub struct DistributionPoints {
     pub distribution_points: Vec<DistributionPoint>,
 }
 
@@ -167,7 +168,7 @@ impl Encoder<ReasonFlags, Element> for ReasonFlags {
         let num_bytes = (last_set + 1).div_ceil(8);
         let unused_bits = num_bytes * 8 - (last_set + 1);
 
-        let bytes: Vec<u8> = (0..num_bytes)
+        let bytes = (0..num_bytes)
             .map(|byte_idx| {
                 let mut byte = 0u8;
                 for bit_idx in 0..8 {
@@ -184,55 +185,55 @@ impl Encoder<ReasonFlags, Element> for ReasonFlags {
     }
 }
 
-impl DecodableFrom<OctetString> for CRLDistributionPoints {}
+impl DecodableFrom<OctetString> for DistributionPoints {}
 
-impl Decoder<OctetString, CRLDistributionPoints> for OctetString {
+impl Decoder<OctetString, DistributionPoints> for OctetString {
     type Error = Error;
 
-    fn decode(&self) -> Result<CRLDistributionPoints, Self::Error> {
+    fn decode(&self) -> Result<DistributionPoints, Self::Error> {
         let asn1_obj = ASN1Object::try_from(self).map_err(Error::InvalidASN1)?;
 
         match asn1_obj.elements() {
             [elem, ..] => elem.decode(),
-            [] => Err(error::Error::EmptySequence(error::Kind::CRLDistributionPoints).into()),
+            [] => Err(error::Error::EmptySequence(error::Kind::DistributionPoints).into()),
         }
     }
 }
 
-impl DecodableFrom<Element> for CRLDistributionPoints {}
+impl DecodableFrom<Element> for DistributionPoints {}
 
-impl Decoder<Element, CRLDistributionPoints> for Element {
+impl Decoder<Element, DistributionPoints> for Element {
     type Error = Error;
 
-    fn decode(&self) -> Result<CRLDistributionPoints, Self::Error> {
+    fn decode(&self) -> Result<DistributionPoints, Self::Error> {
         match self {
             Element::Sequence(elements) => {
                 if elements.is_empty() {
-                    return Err(error::Error::CrlDistributionPointsEmpty.into());
+                    return Err(error::Error::DistributionPointsEmpty.into());
                 }
 
                 let distribution_points = elements
                     .iter()
                     .map(|elem| elem.decode())
-                    .collect::<Result<Vec<DistributionPoint>, _>>()?;
+                    .collect::<Result<Vec<_>, _>>()?;
 
-                Ok(CRLDistributionPoints {
+                Ok(DistributionPoints {
                     distribution_points,
                 })
             }
-            _ => Err(error::Error::ExpectedSequence(error::Kind::CRLDistributionPoints).into()),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::DistributionPoints).into()),
         }
     }
 }
 
-impl EncodableTo<CRLDistributionPoints> for Element {}
+impl EncodableTo<DistributionPoints> for Element {}
 
-impl Encoder<CRLDistributionPoints, Element> for CRLDistributionPoints {
+impl Encoder<DistributionPoints, Element> for DistributionPoints {
     type Error = Error;
 
     fn encode(&self) -> Result<Element, Self::Error> {
         if self.distribution_points.is_empty() {
-            return Err(error::Error::CrlDistributionPointsEmpty.into());
+            return Err(error::Error::DistributionPointsEmpty.into());
         }
 
         let dp_elements = self
@@ -268,7 +269,7 @@ impl Decoder<Element, DistributionPoint> for Element {
                                         Ok((dp, Some(bit_string.clone().into()), issuer))
                                     } else {
                                         Err(error::Error::ExpectedBitString(
-                                            error::Kind::CRLDistributionPoints,
+                                            error::Kind::DistributionPoints,
                                         )
                                         .into())
                                     }
@@ -279,22 +280,19 @@ impl Decoder<Element, DistributionPoint> for Element {
                                         let general_names = names
                                             .iter()
                                             .map(|e| e.decode())
-                                            .collect::<Result<Vec<GeneralName>, Error>>(
-                                        )?;
+                                            .collect::<Result<Vec<_>, _>>()?;
                                         Ok((dp, reasons, Some(general_names)))
                                     } else {
                                         Err(error::Error::ExpectedSequence(
-                                            error::Kind::CRLDistributionPoints,
+                                            error::Kind::DistributionPoints,
                                         )
                                         .into())
                                     }
                                 }
-                                _ => {
-                                    Err(error::Error::CrlDistributionPointsUnknownTag(*slot).into())
-                                }
+                                _ => Err(error::Error::DistributionPointsUnknownTag(*slot).into()),
                             },
                             _ => Err(error::Error::UnexpectedElementType(
-                                error::Kind::CRLDistributionPoints,
+                                error::Kind::DistributionPoints,
                             )
                             .into()),
                         }
@@ -307,7 +305,7 @@ impl Decoder<Element, DistributionPoint> for Element {
                     crl_issuer,
                 })
             }
-            _ => Err(error::Error::ExpectedSequence(error::Kind::CRLDistributionPoints).into()),
+            _ => Err(error::Error::ExpectedSequence(error::Kind::DistributionPoints).into()),
         }
     }
 }
@@ -396,33 +394,28 @@ impl Decoder<Element, DistributionPointName> for Element {
                                 let general_names = names
                                     .iter()
                                     .map(|e| e.decode())
-                                    .collect::<Result<Vec<GeneralName>, _>>()?;
+                                    .collect::<Result<Vec<_>, _>>()?;
                                 Ok(DistributionPointName::FullName(general_names))
                             }
                             // Case 2: element is a single GeneralName (single element sequence)
                             other => {
                                 // Treat it as a single-element sequence
-                                let general_name: GeneralName = other.decode()?;
+                                let general_name = other.decode()?;
                                 Ok(DistributionPointName::FullName(vec![general_name]))
                             }
                         }
                     } else {
-                        Err(
-                            error::Error::ExpectedSequence(error::Kind::CRLDistributionPoints)
-                                .into(),
-                        )
+                        Err(error::Error::ExpectedSequence(error::Kind::DistributionPoints).into())
                     }
                 }
                 1 => {
                     // nameRelativeToCRLIssuer [1] RelativeDistinguishedName
-                    let rdn: RelativeDistinguishedName = element.decode()?;
+                    let rdn = element.decode()?;
                     Ok(DistributionPointName::NameRelativeToCRLIssuer(rdn))
                 }
-                _ => Err(error::Error::CrlDistributionPointsUnknownTag(*slot).into()),
+                _ => Err(error::Error::DistributionPointsUnknownTag(*slot).into()),
             },
-            _ => {
-                Err(error::Error::UnexpectedElementType(error::Kind::CRLDistributionPoints).into())
-            }
+            _ => Err(error::Error::UnexpectedElementType(error::Kind::DistributionPoints).into()),
         }
     }
 }
@@ -474,20 +467,6 @@ impl fmt::Display for DistributionPointName {
     }
 }
 
-impl Extension for CRLDistributionPoints {
-    const OID: &'static str = "2.5.29.31";
-
-    fn parse(value: &OctetString) -> Result<Self, Error> {
-        value.decode()
-    }
-}
-
-impl OidName for CRLDistributionPoints {
-    fn oid_name(&self) -> Option<&'static str> {
-        Some("CRLDistributionPoints")
-    }
-}
-
 impl fmt::Display for DistributionPoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(ref dist_point) = self.distribution_point {
@@ -518,9 +497,11 @@ impl fmt::Display for DistributionPoint {
     }
 }
 
-impl fmt::Display for CRLDistributionPoints {
+impl fmt::Display for DistributionPoints {
+    /// Renders the distribution points (each preceded by a blank line). The
+    /// owning extension (`CRLDistributionPoints` / `FreshestCRL`) prints the
+    /// header line before this.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "            X509v3 CRL Distribution Points:")?;
         for point in &self.distribution_points {
             writeln!(f)?;
             write!(f, "{}", point)?;
@@ -561,7 +542,7 @@ mod tests {
                     },
                 ]),
             ]),
-            CRLDistributionPoints {
+            DistributionPoints {
                 distribution_points: vec![
                     DistributionPoint {
                         distribution_point: Some(DistributionPointName::FullName(vec![
@@ -599,7 +580,7 @@ mod tests {
                     },
                 ]),
             ]),
-            CRLDistributionPoints {
+            DistributionPoints {
                 distribution_points: vec![
                     DistributionPoint {
                         distribution_point: Some(DistributionPointName::FullName(vec![
@@ -650,7 +631,7 @@ mod tests {
                     },
                 ]),
             ]),
-            CRLDistributionPoints {
+            DistributionPoints {
                 distribution_points: vec![
                     DistributionPoint {
                         distribution_point: Some(DistributionPointName::FullName(vec![
@@ -699,7 +680,7 @@ mod tests {
                     },
                 ]),
             ]),
-            CRLDistributionPoints {
+            DistributionPoints {
                 distribution_points: vec![
                     DistributionPoint {
                         distribution_point: Some(DistributionPointName::FullName(vec![
@@ -721,11 +702,8 @@ mod tests {
             }
         ),
     )]
-    fn test_crl_distribution_points_decode_success(
-        input: Element,
-        expected: CRLDistributionPoints,
-    ) {
-        let result: Result<CRLDistributionPoints, _> = input.decode();
+    fn test_crl_distribution_points_decode_success(input: Element, expected: DistributionPoints) {
+        let result: Result<DistributionPoints, _> = input.decode();
         assert!(result.is_ok(), "Failed to decode: {:?}", result);
         let actual = result.unwrap();
         assert_eq!(expected, actual);
@@ -746,7 +724,7 @@ mod tests {
         ),
     )]
     fn test_crl_distribution_points_decode_failure(input: Element, expected_error_msg: &str) {
-        let result: Result<CRLDistributionPoints, Error> = input.decode();
+        let result: Result<DistributionPoints, Error> = input.decode();
         assert!(result.is_err());
         let err = result.unwrap_err();
         let err_str = format!("{}", err);
@@ -875,7 +853,7 @@ mod tests {
         ),
     )]
     fn test_reason_flags_from_bit_string(input: tsumiki_asn1::BitString, expected: ReasonFlags) {
-        let result: ReasonFlags = input.into();
+        let result = input.into();
         assert_eq!(expected, result);
     }
 
@@ -950,7 +928,7 @@ mod tests {
     }
 
     #[rstest]
-    #[case(CRLDistributionPoints {
+    #[case(DistributionPoints {
         distribution_points: vec![
             DistributionPoint {
                 distribution_point: Some(DistributionPointName::FullName(vec![
@@ -961,7 +939,7 @@ mod tests {
             },
         ],
     })]
-    #[case(CRLDistributionPoints {
+    #[case(DistributionPoints {
         distribution_points: vec![
             DistributionPoint {
                 distribution_point: Some(DistributionPointName::FullName(vec![
@@ -973,7 +951,7 @@ mod tests {
             },
         ],
     })]
-    #[case(CRLDistributionPoints {
+    #[case(DistributionPoints {
         distribution_points: vec![
             DistributionPoint {
                 distribution_point: Some(DistributionPointName::FullName(vec![
@@ -993,7 +971,7 @@ mod tests {
             },
         ],
     })]
-    #[case(CRLDistributionPoints {
+    #[case(DistributionPoints {
         distribution_points: vec![
             DistributionPoint {
                 distribution_point: Some(DistributionPointName::NameRelativeToCRLIssuer(
@@ -1011,7 +989,7 @@ mod tests {
             },
         ],
     })]
-    #[case(CRLDistributionPoints {
+    #[case(DistributionPoints {
         distribution_points: vec![
             DistributionPoint {
                 distribution_point: Some(DistributionPointName::NameRelativeToCRLIssuer(
@@ -1042,12 +1020,12 @@ mod tests {
             },
         ],
     })]
-    fn test_crl_distribution_points_encode_decode(#[case] original: CRLDistributionPoints) {
+    fn test_crl_distribution_points_encode_decode(#[case] original: DistributionPoints) {
         let encoded = original.encode();
         assert!(encoded.is_ok(), "Failed to encode: {:?}", encoded);
 
         let element = encoded.unwrap();
-        let decoded: Result<CRLDistributionPoints, _> = element.decode();
+        let decoded: Result<DistributionPoints, _> = element.decode();
         assert!(decoded.is_ok(), "Failed to decode: {:?}", decoded);
 
         let roundtrip = decoded.unwrap();
@@ -1187,63 +1165,6 @@ mod tests {
         assert!(!output.contains("Relative Name:"));
         assert!(output.contains("CRL Issuer:"));
         assert!(output.contains("CN=Indirect CRL Authority"));
-    }
-
-    #[test]
-    fn test_crl_distribution_points_display_header() {
-        let ext = CRLDistributionPoints {
-            distribution_points: vec![DistributionPoint {
-                distribution_point: Some(DistributionPointName::FullName(vec![GeneralName::Uri(
-                    "http://crl.example.com/ca.crl".to_string(),
-                )])),
-                reasons: None,
-                crl_issuer: None,
-            }],
-        };
-        let output = ext.to_string();
-        assert!(output.starts_with("            X509v3 CRL Distribution Points:\n"));
-        assert!(output.contains("URI:http://crl.example.com/ca.crl"));
-        // Camel-case form must not appear anywhere
-        assert!(!output.contains("CRLDistributionPoints"));
-    }
-
-    #[test]
-    fn test_crl_distribution_points_display_blank_line_between_dps() {
-        let ext = CRLDistributionPoints {
-            distribution_points: vec![
-                DistributionPoint {
-                    distribution_point: Some(DistributionPointName::FullName(vec![
-                        GeneralName::Uri("http://crl1.example.com/a.crl".to_string()),
-                    ])),
-                    reasons: None,
-                    crl_issuer: None,
-                },
-                DistributionPoint {
-                    distribution_point: Some(DistributionPointName::FullName(vec![
-                        GeneralName::Uri("http://crl2.example.com/b.crl".to_string()),
-                    ])),
-                    reasons: None,
-                    crl_issuer: None,
-                },
-            ],
-        };
-        let output = ext.to_string();
-        // Between header and the first DP, and between the two DPs, there is a blank line
-        let pos_header = output.find("X509v3 CRL Distribution Points:").unwrap();
-        let pos_first = output.find("URI:http://crl1").unwrap();
-        let pos_second = output.find("URI:http://crl2").unwrap();
-        let between_header_and_first = &output[pos_header..pos_first];
-        let between_first_and_second = &output[pos_first..pos_second];
-        assert!(
-            between_header_and_first.contains("\n\n"),
-            "expected blank line after header, got:\n{}",
-            between_header_and_first
-        );
-        assert!(
-            between_first_and_second.contains("\n\n"),
-            "expected blank line between DPs, got:\n{}",
-            between_first_and_second
-        );
     }
 
     #[test]

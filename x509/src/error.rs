@@ -135,4 +135,6 @@ pub enum Error {
     UnexpectedPemLabel { expected: String, got: String },
     #[error("extension error: {0}")]
     ExtensionError(#[from] error::Error),
+    #[error("certificate extension error: {0}")]
+    CertExtensionError(#[from] crate::cert::extensions::error::Error),
 }

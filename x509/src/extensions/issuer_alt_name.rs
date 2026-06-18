@@ -127,6 +127,7 @@ impl fmt::Display for IssuerAltName {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::extensions::IpAddressOrRange;
     use rstest::rstest;
     use std::net::IpAddr;
     use tsumiki_asn1::{Element, OctetString};
@@ -171,7 +172,7 @@ mod tests {
             ]),
             IssuerAltName {
                 names: vec![GeneralName::IpAddress(
-                    crate::extensions::IpAddressOrRange::Address(IpAddr::from([192, 0, 2, 1]))
+                    IpAddressOrRange::Address(IpAddr::from([192, 0, 2, 1]))
                 )],
             }
         ),

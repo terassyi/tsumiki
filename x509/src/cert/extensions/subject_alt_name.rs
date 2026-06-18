@@ -31,8 +31,9 @@ GeneralNames ::= SEQUENCE SIZE (1..MAX) OF GeneralName
 /// # Example
 /// ```no_run
 /// use std::str::FromStr;
-/// use tsumiki_x509::Certificate;
-/// use tsumiki_x509::extensions::{SubjectAltName, GeneralName};
+/// use tsumiki_x509::cert::Certificate;
+/// use tsumiki_x509::cert::extensions::SubjectAltName;
+/// use tsumiki_x509::extensions::GeneralName;
 ///
 /// let cert = Certificate::from_str("-----BEGIN CERTIFICATE-----...").unwrap();
 /// if let Some(san) = cert.extension::<SubjectAltName>().unwrap() {
@@ -150,7 +151,7 @@ impl fmt::Display for SubjectAltName {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::extensions::RawExtension;
+    use crate::extensions::{IpAddressOrRange, RawExtension};
     use rstest::rstest;
     use std::net::IpAddr;
     use std::str::FromStr;
@@ -207,7 +208,7 @@ mod tests {
             ]),
             SubjectAltName {
                 names: vec![GeneralName::IpAddress(
-                    crate::extensions::IpAddressOrRange::Address(IpAddr::from([192, 0, 2, 1]))
+                    IpAddressOrRange::Address(IpAddr::from([192, 0, 2, 1]))
                 )],
             }
         ),
@@ -225,7 +226,7 @@ mod tests {
             ]),
             SubjectAltName {
                 names: vec![GeneralName::IpAddress(
-                    crate::extensions::IpAddressOrRange::Address(IpAddr::from([
+                    IpAddressOrRange::Address(IpAddr::from([
                         0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00,
                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
                     ]))
@@ -281,7 +282,7 @@ mod tests {
                 names: vec![
                     GeneralName::DnsName("example.com".to_string()),
                     GeneralName::IpAddress(
-                        crate::extensions::IpAddressOrRange::Address(IpAddr::from([192, 0, 2, 1]))
+                        IpAddressOrRange::Address(IpAddr::from([192, 0, 2, 1]))
                     ),
                     GeneralName::Uri("https://example.com".to_string()),
                 ],

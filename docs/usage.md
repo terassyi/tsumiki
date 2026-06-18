@@ -29,7 +29,7 @@ rustls-pki-types = "1"
 
 ```rust
 use std::str::FromStr;
-use tsumiki_x509::Certificate;
+use tsumiki_x509::cert::Certificate;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let pem_data = std::fs::read_to_string("certificate.pem")?;
@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 use tsumiki::decoder::Decoder;
-use tsumiki_x509::Certificate;
+use tsumiki_x509::cert::Certificate;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let der_bytes = std::fs::read("certificate.der")?;
@@ -76,9 +76,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 Extensions are accessed using the `extension::<T>()` method, which returns `Option<T>`:
 
 ```rust
-use tsumiki_x509::Certificate;
-use tsumiki_x509::extensions::{
-    BasicConstraints, KeyUsage, ExtendedKeyUsage, 
+use tsumiki_x509::cert::Certificate;
+use tsumiki_x509::cert::extensions::{
+    BasicConstraints, KeyUsage, ExtendedKeyUsage,
     SubjectAltName, AuthorityKeyIdentifier,
 };
 
@@ -149,7 +149,7 @@ fn inspect_extensions(cert: &Certificate) -> Result<(), Box<dyn std::error::Erro
 ### List All Extensions
 
 ```rust
-use tsumiki_x509::Certificate;
+use tsumiki_x509::cert::Certificate;
 
 fn list_extensions(cert: &Certificate) {
     if let Some(oids) = cert.extension_oids() {
@@ -166,8 +166,8 @@ fn list_extensions(cert: &Certificate) {
 ### Check if Certificate is a CA
 
 ```rust
-use tsumiki_x509::Certificate;
-use tsumiki_x509::extensions::BasicConstraints;
+use tsumiki_x509::cert::Certificate;
+use tsumiki_x509::cert::extensions::BasicConstraints;
 
 fn is_ca_certificate(cert: &Certificate) -> Result<bool, Box<dyn std::error::Error>> {
     if let Some(bc) = cert.extension::<BasicConstraints>()? {
@@ -182,7 +182,7 @@ fn is_ca_certificate(cert: &Certificate) -> Result<bool, Box<dyn std::error::Err
 
 ```rust
 use std::str::FromStr;
-use tsumiki_x509::CertificateChain;
+use tsumiki_x509::cert::CertificateChain;
 
 fn parse_chain(pem_data: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Parse multiple certificates from PEM
@@ -217,7 +217,7 @@ fn parse_chain(pem_data: &str) -> Result<(), Box<dyn std::error::Error>> {
 All types implement `serde::Serialize`:
 
 ```rust
-use tsumiki_x509::Certificate;
+use tsumiki_x509::cert::Certificate;
 use std::str::FromStr;
 
 fn serialize_certificate(pem_data: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -306,7 +306,7 @@ fn parse_public_key(pem_data: &str) -> Result<(), Box<dyn std::error::Error>> {
 ### Extract Public Key from Certificate
 
 ```rust
-use tsumiki_x509::Certificate;
+use tsumiki_x509::cert::Certificate;
 use tsumiki_pkcs::pkcs8::PublicKey;
 use tsumiki_pem::ToPem;
 
@@ -336,7 +336,7 @@ For complete working examples of rustls integration, see the [examples/](../exam
 
 ```rust
 use rustls_pki_types::CertificateDer;
-use tsumiki_x509::{Certificate, CertificateChain};
+use tsumiki_x509::cert::{Certificate, CertificateChain};
 
 fn inspect_rustls_cert(rustls_cert: CertificateDer) -> Result<(), Box<dyn std::error::Error>> {
     // Convert to tsumiki type for inspection
@@ -366,7 +366,7 @@ fn inspect_rustls_chain(rustls_certs: Vec<CertificateDer>) -> Result<(), Box<dyn
 
 ```rust
 use rustls_pki_types::CertificateDer;
-use tsumiki_x509::{Certificate, CertificateChain};
+use tsumiki_x509::cert::{Certificate, CertificateChain};
 
 fn convert_to_rustls(cert: Certificate) -> Result<CertificateDer<'static>, Box<dyn std::error::Error>> {
     let rustls_cert: CertificateDer = cert.try_into()?;

@@ -12,9 +12,9 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use tsumiki_pem::FromPem;
 
-use crate::Certificate;
+use crate::cert::Certificate;
+use crate::cert::extensions::BasicConstraints;
 use crate::error::Error;
-use crate::extensions::BasicConstraints;
 
 /// An ordered chain of X.509 certificates.
 ///
