@@ -32,6 +32,7 @@ jobs:
             pkix-types
             pkcs
             x509
+            crl
             cli
             deps
           requireScope: false

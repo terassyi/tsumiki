@@ -3,6 +3,8 @@
 //! The crate is organized into:
 //! - [`cert`]: the [`Certificate`](cert::Certificate) structure and its
 //!   certificate-specific extensions ([`cert::extensions`]).
+//! - [`crl`]: the [`CertificateList`](crl::CertificateList) (CRL) structure
+//!   (RFC 5280 §5).
 //! - [`extensions`]: the shared extension machinery (the
 //!   [`Extension`](extensions::Extension) trait and `Extensions` container) and
 //!   the types reused across X.509 documents (`GeneralName`,
@@ -14,5 +16,6 @@
 #![forbid(unsafe_code)]
 
 pub mod cert;
+pub mod crl;
 pub mod error;
 pub mod extensions;
