@@ -9,7 +9,7 @@ use tsumiki::encoder::{EncodableTo, Encoder};
 use tsumiki_asn1::{ASN1Object, BitString, Element, Integer};
 use tsumiki_pkix_types::{AlgorithmIdentifier, CertificateSerialNumber, Name, Time};
 
-use crate::crl::error::{CrlField, Error};
+use crate::crl::error::{CRLField, Error};
 use crate::extensions::Extensions;
 
 pub mod error;
@@ -131,11 +131,11 @@ impl Decoder<Element, RevokedCertificate> for Element {
 
     fn decode(&self) -> Result<RevokedCertificate, Self::Error> {
         let Element::Sequence(elements) = self else {
-            return Err(Error::ExpectedSequence(CrlField::RevokedCertificate));
+            return Err(Error::ExpectedSequence(CRLField::RevokedCertificate));
         };
         if elements.len() < 2 || elements.len() > 3 {
             return Err(Error::InvalidElementCount {
-                context: CrlField::RevokedCertificate,
+                context: CRLField::RevokedCertificate,
                 expected: "2-3",
                 actual: elements.len(),
             });
@@ -145,14 +145,14 @@ impl Decoder<Element, RevokedCertificate> for Element {
 
         let user_certificate = iter
             .next()
-            .ok_or(Error::MissingField(CrlField::UserCertificate))?
+            .ok_or(Error::MissingField(CRLField::UserCertificate))?
             .decode()?;
 
         let revocation_date = iter
             .next()
-            .ok_or(Error::MissingField(CrlField::RevocationDate))?
+            .ok_or(Error::MissingField(CRLField::RevocationDate))?
             .decode()
-            .map_err(|_| Error::InvalidTime(CrlField::RevocationDate))?;
+            .map_err(|_| Error::InvalidTime(CRLField::RevocationDate))?;
 
         let crl_entry_extensions = iter.next().map(|elem| elem.decode()).transpose()?;
 
@@ -241,13 +241,13 @@ impl Decoder<Element, TBSCertList> for Element {
 
     fn decode(&self) -> Result<TBSCertList, Self::Error> {
         let Element::Sequence(elements) = self else {
-            return Err(Error::ExpectedSequence(CrlField::TBSCertList));
+            return Err(Error::ExpectedSequence(CRLField::TBSCertList));
         };
         // Required: signature, issuer, thisUpdate (3). Optional: version,
         // nextUpdate, revokedCertificates, crlExtensions (up to 7 total).
         if elements.len() < 3 || elements.len() > 7 {
             return Err(Error::InvalidElementCount {
-                context: CrlField::TBSCertList,
+                context: CRLField::TBSCertList,
                 expected: "3-7",
                 actual: elements.len(),
             });
@@ -259,7 +259,7 @@ impl Decoder<Element, TBSCertList> for Element {
         let version = match iter.peek() {
             Some(Element::Integer(_)) => Some(
                 iter.next()
-                    .ok_or(Error::MissingField(CrlField::Version))?
+                    .ok_or(Error::MissingField(CRLField::Version))?
                     .decode()?,
             ),
             _ => None,
@@ -267,19 +267,19 @@ impl Decoder<Element, TBSCertList> for Element {
 
         let signature = iter
             .next()
-            .ok_or(Error::MissingField(CrlField::Signature))?
+            .ok_or(Error::MissingField(CRLField::Signature))?
             .decode()?;
 
         let issuer = iter
             .next()
-            .ok_or(Error::MissingField(CrlField::Issuer))?
+            .ok_or(Error::MissingField(CRLField::Issuer))?
             .decode()?;
 
         let this_update = iter
             .next()
-            .ok_or(Error::MissingField(CrlField::ThisUpdate))?
+            .ok_or(Error::MissingField(CRLField::ThisUpdate))?
             .decode()
-            .map_err(|_| Error::InvalidTime(CrlField::ThisUpdate))?;
+            .map_err(|_| Error::InvalidTime(CRLField::ThisUpdate))?;
 
         // Remaining optional fields appear in a fixed DER order: nextUpdate
         // (Time), revokedCertificates (SEQUENCE OF), crlExtensions ([0]).
@@ -291,7 +291,7 @@ impl Decoder<Element, TBSCertList> for Element {
                 {
                     let time = elem
                         .decode()
-                        .map_err(|_| Error::InvalidTime(CrlField::NextUpdate))?;
+                        .map_err(|_| Error::InvalidTime(CRLField::NextUpdate))?;
                     Ok((Some(time), revoked, crl_exts))
                 }
                 Element::Sequence(items) if revoked.is_empty() && crl_exts.is_none() => {
@@ -304,7 +304,7 @@ impl Decoder<Element, TBSCertList> for Element {
                 Element::ContextSpecific { slot: 0, .. } if crl_exts.is_none() => {
                     Ok((next_update, revoked, Some(elem.decode()?)))
                 }
-                _ => Err(Error::UnexpectedElement(CrlField::TBSCertList)),
+                _ => Err(Error::UnexpectedElement(CRLField::TBSCertList)),
             },
         )?;
 
@@ -390,13 +390,13 @@ impl Decoder<Element, CertificateList> for Element {
 
     fn decode(&self) -> Result<CertificateList, Self::Error> {
         let Element::Sequence(elements) = self else {
-            return Err(Error::ExpectedSequence(CrlField::CertificateList));
+            return Err(Error::ExpectedSequence(CRLField::CertificateList));
         };
         let (tbs_elem, sig_alg_elem, sig_val_elem) = match elements.as_slice() {
             [tbs, sig_alg, sig_val] => (tbs, sig_alg, sig_val),
             _ => {
                 return Err(Error::InvalidElementCount {
-                    context: CrlField::CertificateList,
+                    context: CRLField::CertificateList,
                     expected: "3",
                     actual: elements.len(),
                 });
@@ -407,7 +407,7 @@ impl Decoder<Element, CertificateList> for Element {
         let signature_algorithm = sig_alg_elem.decode()?;
         let signature_value = match sig_val_elem {
             Element::BitString(bs) => bs.clone(),
-            _ => return Err(Error::ExpectedBitString(CrlField::SignatureValue)),
+            _ => return Err(Error::ExpectedBitString(CRLField::SignatureValue)),
         };
 
         Ok(CertificateList {
@@ -441,7 +441,7 @@ impl Decoder<ASN1Object, CertificateList> for ASN1Object {
         let elements = self.elements();
         if elements.len() != 1 {
             return Err(Error::InvalidElementCount {
-                context: CrlField::CertificateList,
+                context: CRLField::CertificateList,
                 expected: "1",
                 actual: elements.len(),
             });
@@ -526,7 +526,7 @@ mod tests {
         let decoded: Result<RevokedCertificate, _> = elem.decode();
         assert!(matches!(
             decoded,
-            Err(Error::InvalidTime(CrlField::RevocationDate))
+            Err(Error::InvalidTime(CRLField::RevocationDate))
         ));
     }
 

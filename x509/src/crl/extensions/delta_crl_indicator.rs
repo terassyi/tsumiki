@@ -31,16 +31,16 @@ that this delta CRL builds upon.
 /// OID: 2.5.29.27
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct DeltaCrlIndicator(Integer);
+pub struct DeltaCRLIndicator(Integer);
 
-impl DeltaCrlIndicator {
+impl DeltaCRLIndicator {
     /// The base CRL number this delta CRL builds upon.
     pub fn base_crl_number(&self) -> &Integer {
         &self.0
     }
 }
 
-impl Extension for DeltaCrlIndicator {
+impl Extension for DeltaCRLIndicator {
     /// OID for deltaCRLIndicator extension (2.5.29.27)
     const OID: &'static str = "2.5.29.27";
 
@@ -48,27 +48,27 @@ impl Extension for DeltaCrlIndicator {
         let asn1_obj = ASN1Object::try_from(value).map_err(error::Error::InvalidAsn1)?;
         match asn1_obj.elements() {
             [elem, ..] => elem.decode(),
-            [] => Err(error::Error::EmptyContent(error::Kind::DeltaCrlIndicator).into()),
+            [] => Err(error::Error::EmptyContent(error::Kind::DeltaCRLIndicator).into()),
         }
     }
 }
 
-impl DecodableFrom<Element> for DeltaCrlIndicator {}
+impl DecodableFrom<Element> for DeltaCRLIndicator {}
 
-impl Decoder<Element, DeltaCrlIndicator> for Element {
+impl Decoder<Element, DeltaCRLIndicator> for Element {
     type Error = Error;
 
-    fn decode(&self) -> Result<DeltaCrlIndicator, Self::Error> {
+    fn decode(&self) -> Result<DeltaCRLIndicator, Self::Error> {
         match self {
-            Element::Integer(integer) => Ok(DeltaCrlIndicator(integer.clone())),
-            _ => Err(error::Error::ExpectedInteger(error::Kind::DeltaCrlIndicator).into()),
+            Element::Integer(integer) => Ok(DeltaCRLIndicator(integer.clone())),
+            _ => Err(error::Error::ExpectedInteger(error::Kind::DeltaCRLIndicator).into()),
         }
     }
 }
 
-impl EncodableTo<DeltaCrlIndicator> for Element {}
+impl EncodableTo<DeltaCRLIndicator> for Element {}
 
-impl Encoder<DeltaCrlIndicator, Element> for DeltaCrlIndicator {
+impl Encoder<DeltaCRLIndicator, Element> for DeltaCRLIndicator {
     type Error = Error;
 
     fn encode(&self) -> Result<Element, Self::Error> {
@@ -76,13 +76,13 @@ impl Encoder<DeltaCrlIndicator, Element> for DeltaCrlIndicator {
     }
 }
 
-impl OidName for DeltaCrlIndicator {
+impl OidName for DeltaCRLIndicator {
     fn oid_name(&self) -> Option<&'static str> {
         Some("deltaCRLIndicator")
     }
 }
 
-impl fmt::Display for DeltaCrlIndicator {
+impl fmt::Display for DeltaCRLIndicator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "            X509v3 Delta CRL Indicator:")?;
         writeln!(f, "                {}", self.0)
@@ -100,7 +100,7 @@ mod tests {
     #[test]
     fn decode_encode_round_trip() {
         let elem = Element::Integer(base(vec![0x0c]));
-        let decoded: DeltaCrlIndicator = elem.decode().unwrap();
+        let decoded: DeltaCRLIndicator = elem.decode().unwrap();
         assert_eq!(decoded.base_crl_number(), &base(vec![0x0c]));
         assert_eq!(decoded.encode().unwrap(), elem);
     }
@@ -109,13 +109,13 @@ mod tests {
     fn parse_from_octet_string() {
         // OCTET STRING content = DER INTEGER 12 (0x02 0x01 0x0c)
         let value = OctetString::from(vec![0x02, 0x01, 0x0c]);
-        let decoded = DeltaCrlIndicator::parse(&value).unwrap();
+        let decoded = DeltaCRLIndicator::parse(&value).unwrap();
         assert_eq!(decoded.base_crl_number(), &base(vec![0x0c]));
     }
 
     #[test]
     fn decode_rejects_non_integer() {
-        let decoded: Result<DeltaCrlIndicator, _> = Element::Null.decode();
+        let decoded: Result<DeltaCRLIndicator, _> = Element::Null.decode();
         assert!(decoded.is_err());
     }
 }

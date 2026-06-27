@@ -29,16 +29,16 @@ CRL issuers MUST NOT use CRLNumber values longer than 20 octets.
 /// OID: 2.5.29.20
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct CrlNumber(Integer);
+pub struct CRLNumber(Integer);
 
-impl CrlNumber {
+impl CRLNumber {
     /// The CRL number value.
     pub fn number(&self) -> &Integer {
         &self.0
     }
 }
 
-impl Extension for CrlNumber {
+impl Extension for CRLNumber {
     /// OID for cRLNumber extension (2.5.29.20)
     const OID: &'static str = "2.5.29.20";
 
@@ -46,27 +46,27 @@ impl Extension for CrlNumber {
         let asn1_obj = ASN1Object::try_from(value).map_err(error::Error::InvalidAsn1)?;
         match asn1_obj.elements() {
             [elem, ..] => elem.decode(),
-            [] => Err(error::Error::EmptyContent(error::Kind::CrlNumber).into()),
+            [] => Err(error::Error::EmptyContent(error::Kind::CRLNumber).into()),
         }
     }
 }
 
-impl DecodableFrom<Element> for CrlNumber {}
+impl DecodableFrom<Element> for CRLNumber {}
 
-impl Decoder<Element, CrlNumber> for Element {
+impl Decoder<Element, CRLNumber> for Element {
     type Error = Error;
 
-    fn decode(&self) -> Result<CrlNumber, Self::Error> {
+    fn decode(&self) -> Result<CRLNumber, Self::Error> {
         match self {
-            Element::Integer(integer) => Ok(CrlNumber(integer.clone())),
-            _ => Err(error::Error::ExpectedInteger(error::Kind::CrlNumber).into()),
+            Element::Integer(integer) => Ok(CRLNumber(integer.clone())),
+            _ => Err(error::Error::ExpectedInteger(error::Kind::CRLNumber).into()),
         }
     }
 }
 
-impl EncodableTo<CrlNumber> for Element {}
+impl EncodableTo<CRLNumber> for Element {}
 
-impl Encoder<CrlNumber, Element> for CrlNumber {
+impl Encoder<CRLNumber, Element> for CRLNumber {
     type Error = Error;
 
     fn encode(&self) -> Result<Element, Self::Error> {
@@ -74,13 +74,13 @@ impl Encoder<CrlNumber, Element> for CrlNumber {
     }
 }
 
-impl OidName for CrlNumber {
+impl OidName for CRLNumber {
     fn oid_name(&self) -> Option<&'static str> {
         Some("cRLNumber")
     }
 }
 
-impl fmt::Display for CrlNumber {
+impl fmt::Display for CRLNumber {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "            X509v3 CRL Number:")?;
         writeln!(f, "                {}", self.0)
@@ -98,7 +98,7 @@ mod tests {
     #[test]
     fn decode_encode_round_trip() {
         let elem = Element::Integer(crl_number(vec![0x2a]));
-        let decoded: CrlNumber = elem.decode().unwrap();
+        let decoded: CRLNumber = elem.decode().unwrap();
         assert_eq!(decoded.number(), &crl_number(vec![0x2a]));
         let encoded = decoded.encode().unwrap();
         assert_eq!(encoded, elem);
@@ -108,13 +108,13 @@ mod tests {
     fn parse_from_octet_string() {
         // OCTET STRING content = DER INTEGER 42 (0x02 0x01 0x2a)
         let value = OctetString::from(vec![0x02, 0x01, 0x2a]);
-        let decoded = CrlNumber::parse(&value).unwrap();
+        let decoded = CRLNumber::parse(&value).unwrap();
         assert_eq!(decoded.number(), &crl_number(vec![0x2a]));
     }
 
     #[test]
     fn decode_rejects_non_integer() {
-        let decoded: Result<CrlNumber, _> = Element::Null.decode();
+        let decoded: Result<CRLNumber, _> = Element::Null.decode();
         assert!(decoded.is_err());
     }
 
@@ -123,7 +123,7 @@ mod tests {
         // CRLNumber may be up to 20 octets; ensure a wide value round-trips.
         let wide = vec![0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
         let elem = Element::Integer(crl_number(wide));
-        let decoded: CrlNumber = elem.decode().unwrap();
+        let decoded: CRLNumber = elem.decode().unwrap();
         assert_eq!(decoded.encode().unwrap(), elem);
     }
 }

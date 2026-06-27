@@ -6,7 +6,7 @@ use thiserror::Error;
 /// parsing or validation failed within a `CertificateList` structure
 /// (RFC 5280 §5.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CrlField {
+pub enum CRLField {
     CertificateList,
     TBSCertList,
     Version,
@@ -18,13 +18,13 @@ pub enum CrlField {
     RevokedCertificate,
     UserCertificate,
     RevocationDate,
-    CrlEntryExtensions,
-    CrlExtensions,
+    CRLEntryExtensions,
+    CRLExtensions,
     SignatureAlgorithm,
     SignatureValue,
 }
 
-impl std::fmt::Display for CrlField {
+impl std::fmt::Display for CRLField {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::CertificateList => write!(f, "CertificateList"),
@@ -38,8 +38,8 @@ impl std::fmt::Display for CrlField {
             Self::RevokedCertificate => write!(f, "revokedCertificate"),
             Self::UserCertificate => write!(f, "userCertificate"),
             Self::RevocationDate => write!(f, "revocationDate"),
-            Self::CrlEntryExtensions => write!(f, "crlEntryExtensions"),
-            Self::CrlExtensions => write!(f, "crlExtensions"),
+            Self::CRLEntryExtensions => write!(f, "crlEntryExtensions"),
+            Self::CRLExtensions => write!(f, "crlExtensions"),
             Self::SignatureAlgorithm => write!(f, "signatureAlgorithm"),
             Self::SignatureValue => write!(f, "signatureValue"),
         }
@@ -55,21 +55,21 @@ impl std::fmt::Display for CrlField {
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("{0}: expected SEQUENCE")]
-    ExpectedSequence(CrlField),
+    ExpectedSequence(CRLField),
     #[error("{0}: missing required field")]
-    MissingField(CrlField),
+    MissingField(CRLField),
     #[error("{context}: expected {expected} elements, got {actual}")]
     InvalidElementCount {
-        context: CrlField,
+        context: CRLField,
         expected: &'static str,
         actual: usize,
     },
     #[error("CertificateList: no elements in ASN1Object")]
     EmptyCertificateList,
     #[error("{0}: unexpected element")]
-    UnexpectedElement(CrlField),
+    UnexpectedElement(CRLField),
     #[error("{0}: expected BIT STRING")]
-    ExpectedBitString(CrlField),
+    ExpectedBitString(CRLField),
 
     // Version errors (CRL version MUST be v2 if present, RFC 5280 §5.1.2.1)
     #[error("version: invalid value {0} (CRL version must be v2)")]
@@ -77,7 +77,7 @@ pub enum Error {
 
     // Time errors
     #[error("{0}: must be UTCTime or GeneralizedTime")]
-    InvalidTime(CrlField),
+    InvalidTime(CRLField),
 
     // External error conversions
     #[error("PKIX types error: {0}")]
