@@ -185,6 +185,19 @@ impl Encoder<ReasonFlags, Element> for ReasonFlags {
     }
 }
 
+impl DecodableFrom<Element> for ReasonFlags {}
+
+impl Decoder<Element, ReasonFlags> for Element {
+    type Error = Error;
+
+    /// Decodes `ReasonFlags` from a BIT STRING element, whether universal or the
+    /// IMPLICIT-tagged form (`[n] ReasonFlags`) the parser exposes as raw bytes.
+    fn decode(&self) -> Result<ReasonFlags, Self::Error> {
+        let bit_string: BitString = self.decode().map_err(Error::InvalidASN1)?;
+        Ok(ReasonFlags::from(bit_string))
+    }
+}
+
 impl DecodableFrom<OctetString> for DistributionPoints {}
 
 impl Decoder<OctetString, DistributionPoints> for OctetString {
@@ -265,14 +278,7 @@ impl Decoder<Element, DistributionPoint> for Element {
                                 }
                                 1 => {
                                     // reasons [1] ReasonFlags (BIT STRING)
-                                    if let Element::BitString(bit_string) = element.as_ref() {
-                                        Ok((dp, Some(bit_string.clone().into()), issuer))
-                                    } else {
-                                        Err(error::Error::ExpectedBitString(
-                                            error::Kind::DistributionPoints,
-                                        )
-                                        .into())
-                                    }
+                                    Ok((dp, Some(element.as_ref().decode()?), issuer))
                                 }
                                 2 => {
                                     // cRLIssuer [2] GeneralNames

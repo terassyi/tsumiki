@@ -7,6 +7,7 @@ use thiserror::Error;
 pub enum Kind {
     CrlNumber,
     DeltaCrlIndicator,
+    IssuingDistributionPoint,
 }
 
 impl std::fmt::Display for Kind {
@@ -14,6 +15,7 @@ impl std::fmt::Display for Kind {
         match self {
             Self::CrlNumber => write!(f, "cRLNumber"),
             Self::DeltaCrlIndicator => write!(f, "deltaCRLIndicator"),
+            Self::IssuingDistributionPoint => write!(f, "issuingDistributionPoint"),
         }
     }
 }
@@ -26,6 +28,21 @@ pub enum Error {
 
     #[error("{0}: expected INTEGER")]
     ExpectedInteger(Kind),
+
+    #[error("{0}: expected SEQUENCE")]
+    ExpectedSequence(Kind),
+
+    #[error("{0}: expected BOOLEAN")]
+    ExpectedBoolean(Kind),
+
+    #[error("{0}: expected BIT STRING")]
+    ExpectedBitString(Kind),
+
+    #[error("{0}: unexpected element type")]
+    UnexpectedElementType(Kind),
+
+    #[error("{kind}: unknown context-specific tag [{slot}]")]
+    UnknownContextTag { kind: Kind, slot: u8 },
 
     /// Invalid ASN.1 structure
     #[error("invalid ASN.1: {0}")]

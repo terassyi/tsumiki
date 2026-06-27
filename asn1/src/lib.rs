@@ -1308,6 +1308,23 @@ impl TryFrom<&[u8]> for BitString {
     }
 }
 
+impl DecodableFrom<Element> for BitString {}
+
+impl Decoder<Element, BitString> for Element {
+    type Error = Error;
+
+    /// Decodes a BIT STRING. Accepts a universal `Element::BitString`, or the
+    /// raw content bytes the parser exposes as an `Element::OctetString` for an
+    /// IMPLICIT-tagged primitive (first content octet = unused-bit count).
+    fn decode(&self) -> Result<BitString, Self::Error> {
+        match self {
+            Element::BitString(bit_string) => Ok(bit_string.clone()),
+            Element::OctetString(octets) => BitString::try_from(octets.as_bytes()),
+            _ => Err(Error::BitStringUnexpectedElement),
+        }
+    }
+}
+
 impl From<BitString> for Vec<u8> {
     fn from(value: BitString) -> Self {
         let mut result = Vec::with_capacity(value.data.len() + 1);

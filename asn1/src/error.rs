@@ -42,6 +42,8 @@ pub enum Error {
     BitStringNoData,
     #[error("BIT STRING: unused bits {0} out of range (must be 0-7)")]
     BitStringUnusedBitsOutOfRange(u8),
+    #[error("BIT STRING: unexpected element type")]
+    BitStringUnexpectedElement,
 
     // String type errors
     #[error("UTF8String: invalid UTF-8")]
