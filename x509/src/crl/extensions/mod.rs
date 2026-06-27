@@ -8,9 +8,11 @@
 use crate::extensions::Extension;
 
 mod crl_number;
+mod delta_crl_indicator;
 pub mod error;
 
 pub use crl_number::CrlNumber;
+pub use delta_crl_indicator::DeltaCrlIndicator;
 
 // Extensions shared with the certificate profile (RFC 5280 §5.2.1/§5.2.2/§5.2.6).
 pub use crate::extensions::authority_key_identifier::AuthorityKeyIdentifier;
