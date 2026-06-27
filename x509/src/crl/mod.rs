@@ -13,6 +13,7 @@ use crate::crl::error::{CrlField, Error};
 use crate::extensions::Extensions;
 
 pub mod error;
+pub mod extensions;
 
 /*
 https://datatracker.ietf.org/doc/html/rfc5280#section-5.1

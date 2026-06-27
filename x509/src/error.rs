@@ -137,4 +137,6 @@ pub enum Error {
     ExtensionError(#[from] error::Error),
     #[error("certificate extension error: {0}")]
     CertExtensionError(#[from] crate::cert::extensions::error::Error),
+    #[error("CRL extension error: {0}")]
+    CrlExtensionError(#[from] crate::crl::extensions::error::Error),
 }
