@@ -9,6 +9,7 @@ pub enum Kind {
     DeltaCRLIndicator,
     IssuingDistributionPoint,
     CRLReason,
+    InvalidityDate,
 }
 
 impl std::fmt::Display for Kind {
@@ -18,6 +19,7 @@ impl std::fmt::Display for Kind {
             Self::DeltaCRLIndicator => write!(f, "deltaCRLIndicator"),
             Self::IssuingDistributionPoint => write!(f, "issuingDistributionPoint"),
             Self::CRLReason => write!(f, "cRLReason"),
+            Self::InvalidityDate => write!(f, "invalidityDate"),
         }
     }
 }
@@ -48,6 +50,9 @@ pub enum Error {
 
     #[error("{0}: expected ENUMERATED")]
     ExpectedEnumerated(Kind),
+
+    #[error("{0}: expected GeneralizedTime")]
+    ExpectedGeneralizedTime(Kind),
 
     #[error("cRLReason: unknown reason code")]
     UnknownReasonCode,

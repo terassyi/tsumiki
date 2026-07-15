@@ -11,11 +11,13 @@ mod crl_number;
 mod crl_reason;
 mod delta_crl_indicator;
 pub mod error;
+mod invalidity_date;
 mod issuing_distribution_point;
 
 pub use crl_number::CRLNumber;
 pub use crl_reason::CRLReason;
 pub use delta_crl_indicator::DeltaCRLIndicator;
+pub use invalidity_date::InvalidityDate;
 pub use issuing_distribution_point::IssuingDistributionPoint;
 
 // Extensions shared with the certificate profile (RFC 5280 §5.2.1/§5.2.2/§5.2.6).
