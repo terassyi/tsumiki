@@ -10,6 +10,7 @@ pub enum Kind {
     IssuingDistributionPoint,
     CRLReason,
     InvalidityDate,
+    CertificateIssuer,
 }
 
 impl std::fmt::Display for Kind {
@@ -20,6 +21,7 @@ impl std::fmt::Display for Kind {
             Self::IssuingDistributionPoint => write!(f, "issuingDistributionPoint"),
             Self::CRLReason => write!(f, "cRLReason"),
             Self::InvalidityDate => write!(f, "invalidityDate"),
+            Self::CertificateIssuer => write!(f, "certificateIssuer"),
         }
     }
 }
@@ -53,6 +55,9 @@ pub enum Error {
 
     #[error("{0}: expected GeneralizedTime")]
     ExpectedGeneralizedTime(Kind),
+
+    #[error("{0}: at least one GeneralName required")]
+    AtLeastOneGeneralNameRequired(Kind),
 
     #[error("cRLReason: unknown reason code")]
     UnknownReasonCode,

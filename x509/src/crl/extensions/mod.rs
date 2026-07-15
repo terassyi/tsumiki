@@ -7,6 +7,7 @@
 
 use crate::extensions::Extension;
 
+mod certificate_issuer;
 mod crl_number;
 mod crl_reason;
 mod delta_crl_indicator;
@@ -14,6 +15,7 @@ pub mod error;
 mod invalidity_date;
 mod issuing_distribution_point;
 
+pub use certificate_issuer::CertificateIssuer;
 pub use crl_number::CRLNumber;
 pub use crl_reason::CRLReason;
 pub use delta_crl_indicator::DeltaCRLIndicator;
