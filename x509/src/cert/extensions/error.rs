@@ -15,7 +15,6 @@ pub enum Kind {
     InhibitAnyPolicy,
     PolicyConstraints,
     PolicyMappings,
-    SubjectAltName,
     SubjectInfoAccess,
     SubjectDirectoryAttributes,
 }
@@ -33,7 +32,6 @@ impl std::fmt::Display for Kind {
             Self::InhibitAnyPolicy => write!(f, "InhibitAnyPolicy"),
             Self::PolicyConstraints => write!(f, "PolicyConstraints"),
             Self::PolicyMappings => write!(f, "PolicyMappings"),
-            Self::SubjectAltName => write!(f, "SubjectAltName"),
             Self::SubjectInfoAccess => write!(f, "SubjectInfoAccess"),
             Self::SubjectDirectoryAttributes => write!(f, "SubjectDirectoryAttributes"),
         }
@@ -180,10 +178,6 @@ pub enum Error {
 
     #[error("SubjectInfoAccess: accessMethod must be OBJECT IDENTIFIER")]
     SubjectInfoAccessExpectedOid,
-
-    // SubjectAltName specific errors
-    #[error("{0}: at least one GeneralName required")]
-    AtLeastOneGeneralNameRequired(Kind),
 
     // SubjectDirectoryAttributes specific errors
     #[error("SubjectDirectoryAttributes: at least one Attribute required")]

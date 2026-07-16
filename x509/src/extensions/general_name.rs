@@ -5,7 +5,7 @@ use ipnet::{IpNet, Ipv4Net, Ipv6Net};
 use serde::{Deserialize, Serialize};
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
-use tsumiki_asn1::{Element, ObjectIdentifier, OctetString};
+use tsumiki_asn1::{ASN1Object, Element, ObjectIdentifier, OctetString};
 use tsumiki_pkix_types::{DirectoryString, Name};
 
 use super::error;
@@ -566,4 +566,161 @@ pub struct EdiPartyName {
     pub name_assigner: Option<String>,
     /// Name of the party
     pub party_name: String,
+}
+
+/// A non-empty sequence of [`GeneralName`]s
+/// (`GeneralNames ::= SEQUENCE SIZE (1..MAX) OF GeneralName`).
+///
+/// Shared building block reused by the `IssuerAltName`, `SubjectAltName`, and
+/// CRL `CertificateIssuer` extensions, which are thin wrappers over it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GeneralNames {
+    pub names: Vec<GeneralName>,
+}
+
+impl DecodableFrom<OctetString> for GeneralNames {}
+
+impl Decoder<OctetString, GeneralNames> for OctetString {
+    type Error = Error;
+
+    fn decode(&self) -> Result<GeneralNames, Self::Error> {
+        let asn1_obj = ASN1Object::try_from(self).map_err(Error::InvalidASN1)?;
+        match asn1_obj.elements() {
+            [elem, ..] => elem.decode(),
+            [] => Err(error::Error::EmptySequence(error::Kind::GeneralNames).into()),
+        }
+    }
+}
+
+impl DecodableFrom<Element> for GeneralNames {}
+
+impl Decoder<Element, GeneralNames> for Element {
+    type Error = Error;
+
+    fn decode(&self) -> Result<GeneralNames, Self::Error> {
+        match self {
+            Element::Sequence(elements) => {
+                if elements.is_empty() {
+                    return Err(error::Error::AtLeastOneGeneralNameRequired(
+                        error::Kind::GeneralNames,
+                    )
+                    .into());
+                }
+                let names = elements
+                    .iter()
+                    .map(|elem| elem.decode())
+                    .collect::<Result<Vec<_>, _>>()?;
+                Ok(GeneralNames { names })
+            }
+            _ => Err(error::Error::ExpectedSequence(error::Kind::GeneralNames).into()),
+        }
+    }
+}
+
+impl EncodableTo<GeneralNames> for Element {}
+
+impl Encoder<GeneralNames, Element> for GeneralNames {
+    type Error = Error;
+
+    fn encode(&self) -> Result<Element, Self::Error> {
+        if self.names.is_empty() {
+            return Err(
+                error::Error::AtLeastOneGeneralNameRequired(error::Kind::GeneralNames).into(),
+            );
+        }
+        let elements = self
+            .names
+            .iter()
+            .map(|name| name.encode())
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Element::Sequence(elements))
+    }
+}
+
+impl fmt::Display for GeneralNames {
+    /// Renders each name on its own indented line. The owning extension prints
+    /// the header line before this.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for name in &self.names {
+            writeln!(f, "                {}", name)?;
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod general_names_tests {
+    use super::*;
+    use rstest::rstest;
+    use std::net::IpAddr;
+
+    fn ctx(slot: u8, bytes: Vec<u8>) -> Element {
+        Element::ContextSpecific {
+            constructed: false,
+            slot,
+            element: Box::new(Element::OctetString(OctetString::from(bytes))),
+        }
+    }
+
+    #[rstest]
+    // dNSName [2], rfc822Name [1], iPAddress [7], URI [6]
+    #[case(
+        Element::Sequence(vec![ctx(2, b"ca.example.com".to_vec())]),
+        vec![GeneralName::DnsName("ca.example.com".to_string())]
+    )]
+    #[case(
+        Element::Sequence(vec![ctx(1, b"ca@example.com".to_vec())]),
+        vec![GeneralName::Rfc822Name("ca@example.com".to_string())]
+    )]
+    #[case(
+        Element::Sequence(vec![ctx(7, vec![192, 0, 2, 1])]),
+        vec![GeneralName::IpAddress(IpAddressOrRange::Address(IpAddr::from([192, 0, 2, 1])))]
+    )]
+    #[case(
+        Element::Sequence(vec![
+            ctx(2, b"ca.example.com".to_vec()),
+            ctx(1, b"ca@example.com".to_vec()),
+            ctx(6, b"https://ca.example.com".to_vec()),
+        ]),
+        vec![
+            GeneralName::DnsName("ca.example.com".to_string()),
+            GeneralName::Rfc822Name("ca@example.com".to_string()),
+            GeneralName::Uri("https://ca.example.com".to_string()),
+        ]
+    )]
+    fn decode_success(#[case] input: Element, #[case] expected: Vec<GeneralName>) {
+        let decoded: GeneralNames = input.decode().unwrap();
+        assert_eq!(decoded, GeneralNames { names: expected });
+    }
+
+    #[test]
+    fn encode_decode_round_trip() {
+        let original = GeneralNames {
+            names: vec![
+                GeneralName::DnsName("example.com".to_string()),
+                GeneralName::Uri("https://example.com".to_string()),
+            ],
+        };
+        let element = original.encode().unwrap();
+        let decoded: GeneralNames = element.decode().unwrap();
+        assert_eq!(original, decoded);
+    }
+
+    #[test]
+    fn decode_rejects_empty_sequence() {
+        let decoded: Result<GeneralNames, _> = Element::Sequence(vec![]).decode();
+        assert!(decoded.is_err());
+    }
+
+    #[test]
+    fn decode_rejects_non_sequence() {
+        let decoded: Result<GeneralNames, _> = Element::Boolean(true).decode();
+        assert!(decoded.is_err());
+    }
+
+    #[test]
+    fn encode_rejects_empty() {
+        let empty = GeneralNames { names: vec![] };
+        assert!(empty.encode().is_err());
+    }
 }

@@ -11,8 +11,8 @@ use thiserror::Error;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     AuthorityKeyIdentifier,
-    IssuerAltName,
     GeneralName,
+    GeneralNames,
     DistributionPoints,
 }
 
@@ -20,8 +20,8 @@ impl std::fmt::Display for Kind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::AuthorityKeyIdentifier => write!(f, "AuthorityKeyIdentifier"),
-            Self::IssuerAltName => write!(f, "IssuerAltName"),
             Self::GeneralName => write!(f, "GeneralName"),
+            Self::GeneralNames => write!(f, "GeneralNames"),
             Self::DistributionPoints => write!(f, "DistributionPoints"),
         }
     }

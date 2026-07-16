@@ -39,17 +39,17 @@ only, attribute certificates only, or a limited set of reason codes.
 /// OID: 2.5.29.28
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IssuingDistributionPoint {
-    /// Distribution point name for this CRL ([0]).
+    /// Distribution point name for this CRL (`[0]`).
     pub distribution_point: Option<DistributionPointName>,
-    /// CRL covers only end-entity certificates ([1], DEFAULT FALSE).
+    /// CRL covers only end-entity certificates (`[1]`, DEFAULT FALSE).
     pub only_contains_user_certs: bool,
-    /// CRL covers only CA certificates ([2], DEFAULT FALSE).
+    /// CRL covers only CA certificates (`[2]`, DEFAULT FALSE).
     pub only_contains_ca_certs: bool,
-    /// CRL is limited to the given revocation reasons ([3]).
+    /// CRL is limited to the given revocation reasons (`[3]`).
     pub only_some_reasons: Option<ReasonFlags>,
-    /// CRL is an indirect CRL ([4], DEFAULT FALSE).
+    /// CRL is an indirect CRL (`[4]`, DEFAULT FALSE).
     pub indirect_crl: bool,
-    /// CRL covers only attribute certificates ([5], DEFAULT FALSE).
+    /// CRL covers only attribute certificates (`[5]`, DEFAULT FALSE).
     pub only_contains_attribute_certs: bool,
 }
 
