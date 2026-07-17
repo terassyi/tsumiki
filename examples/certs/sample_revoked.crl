@@ -1,0 +1,21 @@
+# Test CRL fixture with one revoked entry, generated with OpenSSL
+# (reusing the ca.key / ca.crt / openssl.cnf from sample.crl):
+#
+#   # index.txt with a revoked entry (serial 1001, reason keyCompromise):
+#   printf 'R\t300101000000Z\t250601000000Z,keyCompromise\t1001\tunknown\t/CN=Revoked Leaf\n' > index.txt
+#   echo 1002 > crlnumber
+#   openssl ca -config openssl.cnf -gencrl -keyfile ca.key -cert ca.crt -out sample_revoked.crl
+#
+# (v2 CRL, crlNumber = 0x1002 = 4098; one revoked cert serial 0x1001 with
+#  reasonCode = keyCompromise as a crlEntryExtension)
+-----BEGIN X509 CRL-----
+MIIBmTCBggIBATANBgkqhkiG9w0BAQsFADAaMRgwFgYDVQQDDA9Uc3VtaWtpIFRl
+c3QgQ0EXDTI2MDcxNzA1NTAxNFoXDTI2MDgxNjA1NTAxNFowIzAhAgIQARcNMjUw
+NjAxMDAwMDAwWjAMMAoGA1UdFQQDCgEBoA8wDTALBgNVHRQEBAICEAIwDQYJKoZI
+hvcNAQELBQADggEBAGJjikYWVk+afaDip/YN0KaSjJ32PXH6HPrJkL9xi1t09YN8
+ezFmPJa+o1+v/iAiAotLj8k117FzRvMSQ6Tk2IUC2xFWNBWVxb7ezpiFlvJ4N0TO
+kYbMN+VgDw03l1y5JrjLk6CtA8smtwzVkNS6Oc0cUvhNRKXJZf5Won3Kudo/kXL5
+bLbPXKqbxReAe8QoWrilLb6U8YgUGdLX7GUtH8dT1/Gw+CidKF3Tt/shDKYOp51a
+K3v9BFsY0YM2d0JkTZ9yCXX97xxAzjXImdGosj8qHbG8ypEu8Qhf6ugpxOFBKkd5
+21o1Xt1+hu3VhRSgEBiilsf7Kmi1xq40wmduGEU=
+-----END X509 CRL-----

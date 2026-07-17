@@ -48,7 +48,7 @@ impl Encoder<CRLDistributionPoints, Element> for CRLDistributionPoints {
 
 impl OidName for CRLDistributionPoints {
     fn oid_name(&self) -> Option<&'static str> {
-        Some("CRLDistributionPoints")
+        Some("cRLDistributionPoints")
     }
 }
 

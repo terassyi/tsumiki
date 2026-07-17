@@ -156,7 +156,7 @@ fn extract_san(tbs: &tsumiki_x509::cert::TBSCertificate) -> Result<Vec<String>> 
     };
 
     let san_list = san
-        .names
+        .names()
         .iter()
         .filter_map(|name| match name {
             GeneralName::DnsName(dns) => Some(format!("DNS:{}", dns)),

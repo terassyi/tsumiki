@@ -1286,8 +1286,9 @@ impl TryFrom<Vec<u8>> for BitString {
     type Error = Error;
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         match value.first() {
-            Some(&b) => Ok(BitString {
-                unused: b,
+            Some(&unused) if unused > 7 => Err(Error::BitStringUnusedBitsOutOfRange(unused)),
+            Some(&unused) => Ok(BitString {
+                unused,
                 data: value[1..].to_vec(),
             }),
             None => Err(Error::BitStringNoData),
@@ -1299,11 +1300,29 @@ impl TryFrom<&[u8]> for BitString {
     type Error = Error;
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         match value.first() {
-            Some(&b) => Ok(BitString {
-                unused: b,
+            Some(&unused) if unused > 7 => Err(Error::BitStringUnusedBitsOutOfRange(unused)),
+            Some(&unused) => Ok(BitString {
+                unused,
                 data: value[1..].to_vec(),
             }),
             None => Err(Error::BitStringNoData),
+        }
+    }
+}
+
+impl DecodableFrom<Element> for BitString {}
+
+impl Decoder<Element, BitString> for Element {
+    type Error = Error;
+
+    /// Decodes a BIT STRING. Accepts a universal `Element::BitString`, or the
+    /// raw content bytes the parser exposes as an `Element::OctetString` for an
+    /// IMPLICIT-tagged primitive (first content octet = unused-bit count).
+    fn decode(&self) -> Result<BitString, Self::Error> {
+        match self {
+            Element::BitString(bit_string) => Ok(bit_string.clone()),
+            Element::OctetString(octets) => BitString::try_from(octets.as_bytes()),
+            _ => Err(Error::BitStringUnexpectedElement),
         }
     }
 }

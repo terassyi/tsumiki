@@ -17,6 +17,9 @@ pub(crate) enum Error {
     #[error("X.509 parse error: {0}")]
     X509(#[from] tsumiki_x509::error::Error),
 
+    #[error("CRL parse error: {0}")]
+    Crl(#[from] tsumiki_x509::crl::error::Error),
+
     #[error("PKCS#1 decode error: {0}")]
     Pkcs1(#[from] tsumiki_pkcs::pkcs1::Error),
 

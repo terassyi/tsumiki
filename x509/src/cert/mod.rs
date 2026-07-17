@@ -936,11 +936,14 @@ impl Decoder<Element, UniqueIdentifier> for Element {
                 if *slot != 1 && *slot != 2 {
                     return Err(Error::UniqueIdentifierInvalidTag(*slot));
                 }
-                // IMPLICIT tagging: element is directly the BitString
-                match element.as_ref() {
-                    Element::BitString(bit_string) => Ok(UniqueIdentifier(bit_string.clone())),
-                    _ => Err(Error::UniqueIdentifierExpectedBitString),
-                }
+                // IMPLICIT tagging: the parser exposes the BIT STRING content as
+                // a universal BitString (Element roundtrips) or raw OctetString
+                // (real DER); the shared decoder handles both.
+                let bit_string: BitString = element
+                    .as_ref()
+                    .decode()
+                    .map_err(|_| Error::UniqueIdentifierExpectedBitString)?;
+                Ok(UniqueIdentifier(bit_string))
             }
             Element::BitString(bit_string) => Ok(UniqueIdentifier(bit_string.clone())), // Allow direct BitString for testing
             _ => Err(Error::UniqueIdentifierInvalidElement),

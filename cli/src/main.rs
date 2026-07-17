@@ -2,6 +2,7 @@ use clap::{Parser, Subcommand};
 
 mod asn1;
 mod cert;
+mod crl;
 mod der;
 mod error;
 mod inspect;
@@ -13,6 +14,7 @@ use error::Result;
 
 use asn1::Asn1Commands;
 use cert::CertCommands;
+use crl::CrlCommands;
 use der::DerCommands;
 use pkcs::PkcsCommands;
 
@@ -30,6 +32,11 @@ enum Commands {
     Cert {
         #[command(subcommand)]
         command: CertCommands,
+    },
+    /// CRL (Certificate Revocation List) operations
+    Crl {
+        #[command(subcommand)]
+        command: CrlCommands,
     },
     /// DER encoding operations
     Der {
@@ -62,6 +69,11 @@ fn run() -> Result<()> {
         Commands::Cert { command } => match command {
             CertCommands::Inspect { config } => {
                 cert::inspect::execute(config)?;
+            }
+        },
+        Commands::Crl { command } => match command {
+            CrlCommands::Inspect { config } => {
+                crl::inspect::execute(config)?;
             }
         },
         Commands::Der { command } => match command {

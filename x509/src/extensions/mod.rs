@@ -25,7 +25,7 @@ pub(crate) mod issuer_alt_name;
 pub use distribution_point::{
     DistributionPoint, DistributionPointName, DistributionPoints, ReasonFlags,
 };
-pub use general_name::{EdiPartyName, GeneralName, IpAddressOrRange, OtherName};
+pub use general_name::{EdiPartyName, GeneralName, GeneralNames, IpAddressOrRange, OtherName};
 
 // `authority_key_identifier`, `freshest_crl`, and `issuer_alt_name` are
 // `pub(crate) mod` (above): they appear in both the certificate and CRL
