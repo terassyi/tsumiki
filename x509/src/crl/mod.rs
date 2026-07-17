@@ -517,10 +517,9 @@ impl fmt::Display for CertificateList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let tbs = self.tbs_cert_list();
         writeln!(f, "Certificate Revocation List (CRL):")?;
-        if tbs.version().is_some() {
-            writeln!(f, "        Version 2 (0x1)")?;
-        } else {
-            writeln!(f, "        Version 1 (0x0)")?;
+        match tbs.version() {
+            Some(Version::V2) => writeln!(f, "        Version 2 (0x1)")?,
+            Some(Version::V1) | None => writeln!(f, "        Version 1 (0x0)")?,
         }
         let sig_alg = tbs.signature();
         let sig_name = sig_alg

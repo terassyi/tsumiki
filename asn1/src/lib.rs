@@ -1286,8 +1286,9 @@ impl TryFrom<Vec<u8>> for BitString {
     type Error = Error;
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         match value.first() {
-            Some(&b) => Ok(BitString {
-                unused: b,
+            Some(&unused) if unused > 7 => Err(Error::BitStringUnusedBitsOutOfRange(unused)),
+            Some(&unused) => Ok(BitString {
+                unused,
                 data: value[1..].to_vec(),
             }),
             None => Err(Error::BitStringNoData),
@@ -1299,8 +1300,9 @@ impl TryFrom<&[u8]> for BitString {
     type Error = Error;
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         match value.first() {
-            Some(&b) => Ok(BitString {
-                unused: b,
+            Some(&unused) if unused > 7 => Err(Error::BitStringUnusedBitsOutOfRange(unused)),
+            Some(&unused) => Ok(BitString {
+                unused,
                 data: value[1..].to_vec(),
             }),
             None => Err(Error::BitStringNoData),

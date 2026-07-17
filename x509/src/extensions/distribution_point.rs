@@ -119,7 +119,7 @@ impl From<tsumiki_asn1::BitString> for ReasonFlags {
             };
         }
 
-        let total_bits = bytes.len() * 8 - unused_bits as usize;
+        let total_bits = (bytes.len() * 8).saturating_sub(unused_bits as usize);
 
         // Helper function to check if a specific bit is set
         // RFC 5280: Bit 0 is unused, bit 1 is keyCompromise, etc.
