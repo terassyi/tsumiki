@@ -79,9 +79,19 @@ pub enum Error {
     #[error("{0}: must be UTCTime or GeneralizedTime")]
     InvalidTime(CRLField),
 
+    // PEM decoding (used by CertificateList::from_pem / from_str)
+    #[error("unexpected PEM label: expected {expected}, got {got}")]
+    UnexpectedPemLabel { expected: String, got: String },
+
     // External error conversions
     #[error("PKIX types error: {0}")]
     PKIXTypesError(#[from] tsumiki_pkix_types::Error),
     #[error("X.509 error: {0}")]
     X509Error(#[from] crate::error::Error),
+    #[error("PEM error: {0}")]
+    PemError(#[from] tsumiki_pem::error::Error),
+    #[error("DER error: {0}")]
+    DerError(#[from] tsumiki_der::error::Error),
+    #[error("ASN.1 error: {0}")]
+    Asn1Error(#[from] tsumiki_asn1::error::Error),
 }

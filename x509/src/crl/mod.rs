@@ -4,12 +4,21 @@
 //! `TBSCertList`, and `RevokedCertificate`, reusing the shared PKIX types from
 //! `tsumiki-pkix-types` and the extension machinery from [`crate::extensions`].
 
+use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::str::FromStr;
 use tsumiki::decoder::{DecodableFrom, Decoder};
 use tsumiki::encoder::{EncodableTo, Encoder};
 use tsumiki_asn1::{ASN1Object, BitString, Element, Integer};
-use tsumiki_pkix_types::{AlgorithmIdentifier, CertificateSerialNumber, Name, Time};
+use tsumiki_der::Der;
+use tsumiki_pem::{FromPem, Label, Pem};
+use tsumiki_pkix_types::{AlgorithmIdentifier, CertificateSerialNumber, Name, OidName, Time};
 
 use crate::crl::error::{CRLField, Error};
+use crate::crl::extensions::{
+    AuthorityKeyIdentifier, CRLNumber, CRLReason, CertificateIssuer, DeltaCRLIndicator,
+    FreshestCRL, InvalidityDate, IssuerAltName, IssuingDistributionPoint,
+};
 use crate::extensions::Extensions;
 
 pub mod error;
@@ -52,7 +61,7 @@ Time ::= CHOICE {
 /// and v2 are meaningful: the version field is OPTIONAL and, when present, MUST
 /// be v2. Unlike the certificate version, the CRL version appears as a bare
 /// INTEGER directly in `TBSCertList` (no `[0] EXPLICIT` wrapping).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum Version {
     /// Version 1 (the implied default when the version field is absent).
     V1 = 0,
@@ -100,7 +109,7 @@ impl Encoder<Version, Element> for Version {
 ///
 /// `crlEntryExtensions` is an untagged (bare) SEQUENCE, so the contained
 /// [`Extensions`] carries `tag: None`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct RevokedCertificate {
     user_certificate: CertificateSerialNumber,
     revocation_date: Time,
@@ -186,7 +195,7 @@ impl Encoder<RevokedCertificate, Element> for RevokedCertificate {
 }
 
 /// The to-be-signed portion of a CRL (RFC 5280 §5.1).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TBSCertList {
     version: Option<Version>,
     signature: AlgorithmIdentifier,
@@ -359,7 +368,7 @@ impl Encoder<TBSCertList, Element> for TBSCertList {
 }
 
 /// A complete, signed X.509 Certificate Revocation List (RFC 5280 §5.1).
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CertificateList {
     tbs_cert_list: TBSCertList,
     signature_algorithm: AlgorithmIdentifier,
@@ -460,6 +469,134 @@ impl Encoder<CertificateList, ASN1Object> for CertificateList {
 
     fn encode(&self) -> Result<ASN1Object, Self::Error> {
         Ok(ASN1Object::new(vec![self.encode()?]))
+    }
+}
+
+// PEM <-> CertificateList
+impl DecodableFrom<Pem> for CertificateList {}
+
+impl Decoder<Pem, CertificateList> for Pem {
+    type Error = Error;
+
+    fn decode(&self) -> Result<CertificateList, Self::Error> {
+        CertificateList::from_pem(self)
+    }
+}
+
+impl FromPem for CertificateList {
+    type Error = Error;
+
+    fn expected_label() -> Label {
+        Label::X509Crl
+    }
+
+    fn from_pem(pem: &Pem) -> Result<Self, Self::Error> {
+        if pem.label() != Self::expected_label() {
+            return Err(Error::UnexpectedPemLabel {
+                expected: Self::expected_label().to_string(),
+                got: pem.label().to_string(),
+            });
+        }
+        let der_bytes: Vec<u8> = pem.decode()?;
+        let der: Der = der_bytes.decode()?;
+        let asn1_obj: ASN1Object = der.decode()?;
+        asn1_obj.decode()
+    }
+}
+
+impl FromStr for CertificateList {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let pem = Pem::from_str(s)?;
+        Self::from_pem(&pem)
+    }
+}
+
+impl fmt::Display for CertificateList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let tbs = self.tbs_cert_list();
+        writeln!(f, "Certificate Revocation List (CRL):")?;
+        if tbs.version().is_some() {
+            writeln!(f, "        Version 2 (0x1)")?;
+        } else {
+            writeln!(f, "        Version 1 (0x0)")?;
+        }
+        let sig_alg = tbs.signature();
+        let sig_name = sig_alg
+            .oid_name()
+            .map(|name| name.to_string())
+            .unwrap_or_else(|| sig_alg.algorithm.to_string());
+        writeln!(f, "        Signature Algorithm: {}", sig_name)?;
+        writeln!(f, "        Issuer: {}", tbs.issuer())?;
+        writeln!(f, "        Last Update: {}", tbs.this_update().as_ref())?;
+        match tbs.next_update() {
+            Some(t) => writeln!(f, "        Next Update: {}", t.as_ref())?,
+            None => writeln!(f, "        Next Update: NONE")?,
+        }
+
+        // CRL (global) extensions — RFC 5280 §5.2.
+        if let Some(exts) = tbs.crl_extensions() {
+            writeln!(f, "        CRL extensions:")?;
+            if let Ok(Some(x)) = exts.extension::<AuthorityKeyIdentifier>() {
+                write!(f, "{}", x)?;
+            }
+            if let Ok(Some(x)) = exts.extension::<IssuerAltName>() {
+                write!(f, "{}", x)?;
+            }
+            if let Ok(Some(x)) = exts.extension::<CRLNumber>() {
+                write!(f, "{}", x)?;
+            }
+            if let Ok(Some(x)) = exts.extension::<DeltaCRLIndicator>() {
+                write!(f, "{}", x)?;
+            }
+            if let Ok(Some(x)) = exts.extension::<IssuingDistributionPoint>() {
+                write!(f, "{}", x)?;
+            }
+            if let Ok(Some(x)) = exts.extension::<FreshestCRL>() {
+                write!(f, "{}", x)?;
+            }
+        }
+
+        let revoked = tbs.revoked_certificates();
+        if revoked.is_empty() {
+            writeln!(f, "No Revoked Certificates.")?;
+        } else {
+            writeln!(f, "Revoked Certificates:")?;
+            for entry in revoked {
+                writeln!(f, "    Serial Number: {}", entry.user_certificate())?;
+                writeln!(
+                    f,
+                    "        Revocation Date: {}",
+                    entry.revocation_date().as_ref()
+                )?;
+                // CRL entry extensions — RFC 5280 §5.3.
+                if let Some(exts) = entry.crl_entry_extensions() {
+                    writeln!(f, "        CRL entry extensions:")?;
+                    if let Ok(Some(x)) = exts.extension::<CRLReason>() {
+                        write!(f, "{}", x)?;
+                    }
+                    if let Ok(Some(x)) = exts.extension::<InvalidityDate>() {
+                        write!(f, "{}", x)?;
+                    }
+                    if let Ok(Some(x)) = exts.extension::<CertificateIssuer>() {
+                        write!(f, "{}", x)?;
+                    }
+                }
+            }
+        }
+
+        let outer_alg = self.signature_algorithm();
+        let outer_name = outer_alg
+            .oid_name()
+            .map(|name| name.to_string())
+            .unwrap_or_else(|| outer_alg.algorithm.to_string());
+        writeln!(f, "    Signature Algorithm: {}", outer_name)?;
+        for chunk in self.signature_value().as_bytes().chunks(18) {
+            let hex: Vec<String> = chunk.iter().map(|b| format!("{:02x}", b)).collect();
+            writeln!(f, "        {}", hex.join(":"))?;
+        }
+        Ok(())
     }
 }
 

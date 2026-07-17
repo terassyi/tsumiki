@@ -1,0 +1,29 @@
+# Test CRL fixture generated with OpenSSL:
+#
+#   openssl req -x509 -newkey rsa:2048 -nodes -keyout ca.key -out ca.crt \
+#       -days 1 -subj "/CN=Tsumiki Test CA"
+#
+#   # openssl.cnf:
+#   #   [ca]
+#   #   default_ca = CA_default
+#   #   [CA_default]
+#   #   database      = index.txt
+#   #   default_md    = sha256
+#   #   crlnumber     = crlnumber
+#   #   default_crl_days = 30
+#
+#   printf '' > index.txt
+#   echo 1000 > crlnumber
+#   openssl ca -config openssl.cnf -gencrl -keyfile ca.key -cert ca.crt -out sample.crl
+#
+# (v2 CRL, no revoked entries, crlNumber = 0x1000 = 4096)
+-----BEGIN X509 CRL-----
+MIIBczBdAgEBMA0GCSqGSIb3DQEBCwUAMBoxGDAWBgNVBAMMD1RzdW1pa2kgVGVz
+dCBDQRcNMjYwNzE2MDYxNjQ5WhcNMjYwODE1MDYxNjQ5WqAPMA0wCwYDVR0UBAQC
+AhAAMA0GCSqGSIb3DQEBCwUAA4IBAQBZO3sv4/OCVR8pcDkl+DvmAbxLLUyQav9C
+F+AKlgs4Il8Id1eUzUFMmplzoYzhjQKBu9PzzB1nRVdSPFeMjb93Be/W3yi4l/6K
+oEKkxNI8UagfrKGRggWvESPNdViYsRkvMlqOHC/92gJfQ/tMkOWbtSwB8vxyVNbq
+2/qGb5aK6jV+Y5cNCycMc+HGFBiOEYZ1OEND+GZwKbMrZIWmQZS91QkIs2cBCK8g
+Py2FWhR8KwM6qr8OTlt2Kovueo/rRxjblp9p/0IiS1zJ72p2Hfon9PtcmSKs3sxX
+I476M/QbpTMkAZ69tGZQy/18htZYkFWriW1FiLE3NL+3LbOMxtoz
+-----END X509 CRL-----

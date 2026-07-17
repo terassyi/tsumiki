@@ -1,28 +1,7 @@
-use assert_cmd::Command;
+mod common;
+
+use common::{fixture_path, tsumiki};
 use predicates::prelude::*;
-use std::path::PathBuf;
-
-fn project_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .to_path_buf()
-}
-
-fn test_cert_path(name: &str) -> String {
-    project_root()
-        .join("examples/certs")
-        .join(name)
-        .to_string_lossy()
-        .to_string()
-}
-
-fn tsumiki() -> Command {
-    let bin_path = project_root().join("target/debug/tsumiki");
-    let mut cmd = Command::new(bin_path);
-    cmd.current_dir(project_root());
-    cmd
-}
 
 #[test]
 fn test_cert_inspect_file_brief() {
@@ -30,7 +9,7 @@ fn test_cert_inspect_file_brief() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("server.crt"),
+            &fixture_path("server.crt"),
             "-o",
             "brief",
         ])
@@ -42,7 +21,7 @@ fn test_cert_inspect_file_brief() {
 #[test]
 fn test_cert_inspect_file_text() {
     tsumiki()
-        .args(["cert", "inspect", &test_cert_path("server.crt")])
+        .args(["cert", "inspect", &fixture_path("server.crt")])
         .assert()
         .success()
         .stdout(predicate::str::contains("Certificate:"))
@@ -55,7 +34,7 @@ fn test_cert_inspect_show_subject() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("server.crt"),
+            &fixture_path("server.crt"),
             "--show-subject",
         ])
         .assert()
@@ -70,7 +49,7 @@ fn test_cert_inspect_show_issuer() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("server.crt"),
+            &fixture_path("server.crt"),
             "--show-issuer",
         ])
         .assert()
@@ -84,7 +63,7 @@ fn test_cert_inspect_show_dates() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("server.crt"),
+            &fixture_path("server.crt"),
             "--show-dates",
         ])
         .assert()
@@ -99,7 +78,7 @@ fn test_cert_inspect_show_serial() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("server.crt"),
+            &fixture_path("server.crt"),
             "--show-serial",
         ])
         .assert()
@@ -110,13 +89,7 @@ fn test_cert_inspect_show_serial() {
 #[test]
 fn test_cert_inspect_json_output() {
     tsumiki()
-        .args([
-            "cert",
-            "inspect",
-            &test_cert_path("server.crt"),
-            "-o",
-            "json",
-        ])
+        .args(["cert", "inspect", &fixture_path("server.crt"), "-o", "json"])
         .assert()
         .success()
         .stdout(predicate::str::contains("\"tbs_certificate\""));
@@ -125,13 +98,7 @@ fn test_cert_inspect_json_output() {
 #[test]
 fn test_cert_inspect_yaml_output() {
     tsumiki()
-        .args([
-            "cert",
-            "inspect",
-            &test_cert_path("server.crt"),
-            "-o",
-            "yaml",
-        ])
+        .args(["cert", "inspect", &fixture_path("server.crt"), "-o", "yaml"])
         .assert()
         .success()
         .stdout(predicate::str::contains("tbs_certificate:"));
@@ -153,7 +120,7 @@ fn test_cert_inspect_remote_and_file_exclusive() {
             "inspect",
             "--remote",
             "example.com",
-            &test_cert_path("server.crt"),
+            &fixture_path("server.crt"),
         ])
         .assert()
         .failure()
@@ -190,7 +157,7 @@ fn test_cert_inspect_remote_chain() {
 #[test]
 fn test_cert_inspect_ca_certificate() {
     tsumiki()
-        .args(["cert", "inspect", &test_cert_path("ca.crt"), "-o", "brief"])
+        .args(["cert", "inspect", &fixture_path("ca.crt"), "-o", "brief"])
         .assert()
         .success();
 }
@@ -201,7 +168,7 @@ fn test_cert_inspect_check_self_signed() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("ca.crt"),
+            &fixture_path("ca.crt"),
             "--check-self-signed",
         ])
         .assert()
@@ -214,7 +181,7 @@ fn test_cert_inspect_check_self_signed() {
 #[test]
 fn test_cert_inspect_chain_file() {
     tsumiki()
-        .args(["cert", "inspect", &test_cert_path("chain.pem")])
+        .args(["cert", "inspect", &fixture_path("chain.pem")])
         .assert()
         .success()
         .stdout(predicate::str::contains("--- Certificate 0 ---"))
@@ -226,13 +193,7 @@ fn test_cert_inspect_chain_file() {
 #[test]
 fn test_cert_inspect_chain_brief() {
     tsumiki()
-        .args([
-            "cert",
-            "inspect",
-            &test_cert_path("chain.pem"),
-            "-o",
-            "brief",
-        ])
+        .args(["cert", "inspect", &fixture_path("chain.pem"), "-o", "brief"])
         .assert()
         .success()
         .stdout(predicate::str::contains("CN=localhost"))
@@ -245,7 +206,7 @@ fn test_cert_inspect_chain_show_subject() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("chain.pem"),
+            &fixture_path("chain.pem"),
             "--show-subject",
         ])
         .assert()
@@ -259,13 +220,7 @@ fn test_cert_inspect_chain_show_subject() {
 #[test]
 fn test_cert_inspect_json_structure() {
     let output = tsumiki()
-        .args([
-            "cert",
-            "inspect",
-            &test_cert_path("server.crt"),
-            "-o",
-            "json",
-        ])
+        .args(["cert", "inspect", &fixture_path("server.crt"), "-o", "json"])
         .assert()
         .success()
         .get_output()
@@ -294,13 +249,7 @@ fn test_cert_inspect_json_structure() {
 #[test]
 fn test_cert_inspect_chain_json_structure() {
     let output = tsumiki()
-        .args([
-            "cert",
-            "inspect",
-            &test_cert_path("chain.pem"),
-            "-o",
-            "json",
-        ])
+        .args(["cert", "inspect", &fixture_path("chain.pem"), "-o", "json"])
         .assert()
         .success()
         .get_output()
@@ -330,13 +279,7 @@ fn test_cert_inspect_chain_json_structure() {
 #[test]
 fn test_cert_inspect_json_validity_dates() {
     let output = tsumiki()
-        .args([
-            "cert",
-            "inspect",
-            &test_cert_path("server.crt"),
-            "-o",
-            "json",
-        ])
+        .args(["cert", "inspect", &fixture_path("server.crt"), "-o", "json"])
         .assert()
         .success()
         .get_output()
@@ -357,13 +300,7 @@ fn test_cert_inspect_json_validity_dates() {
 #[test]
 fn test_cert_inspect_json_extensions() {
     let output = tsumiki()
-        .args([
-            "cert",
-            "inspect",
-            &test_cert_path("server.crt"),
-            "-o",
-            "json",
-        ])
+        .args(["cert", "inspect", &fixture_path("server.crt"), "-o", "json"])
         .assert()
         .success()
         .get_output()
@@ -401,7 +338,7 @@ fn test_cert_inspect_chain_first() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("chain.pem"),
+            &fixture_path("chain.pem"),
             "-o",
             "brief",
             "--first",
@@ -418,7 +355,7 @@ fn test_cert_inspect_chain_first_short() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("chain.pem"),
+            &fixture_path("chain.pem"),
             "-o",
             "brief",
             "-1",
@@ -435,7 +372,7 @@ fn test_cert_inspect_chain_index_0() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("chain.pem"),
+            &fixture_path("chain.pem"),
             "-o",
             "brief",
             "--index",
@@ -453,7 +390,7 @@ fn test_cert_inspect_chain_index_1() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("chain.pem"),
+            &fixture_path("chain.pem"),
             "-o",
             "brief",
             "--index",
@@ -471,7 +408,7 @@ fn test_cert_inspect_chain_index_out_of_range() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("chain.pem"),
+            &fixture_path("chain.pem"),
             "--index",
             "5",
         ])
@@ -486,7 +423,7 @@ fn test_cert_inspect_chain_depth_1() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("chain.pem"),
+            &fixture_path("chain.pem"),
             "-o",
             "brief",
             "--depth",
@@ -504,7 +441,7 @@ fn test_cert_inspect_chain_depth_2() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("chain.pem"),
+            &fixture_path("chain.pem"),
             "-o",
             "brief",
             "--depth",
@@ -522,7 +459,7 @@ fn test_cert_inspect_chain_root() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("chain.pem"),
+            &fixture_path("chain.pem"),
             "-o",
             "brief",
             "--root",
@@ -536,7 +473,7 @@ fn test_cert_inspect_chain_root() {
 #[test]
 fn test_cert_inspect_root_not_found() {
     tsumiki()
-        .args(["cert", "inspect", &test_cert_path("server.crt"), "--root"])
+        .args(["cert", "inspect", &fixture_path("server.crt"), "--root"])
         .assert()
         .success()
         .stdout(predicate::str::is_empty());
@@ -548,7 +485,7 @@ fn test_cert_inspect_no_header_brief() {
         .args([
             "cert",
             "inspect",
-            &test_cert_path("chain.pem"),
+            &fixture_path("chain.pem"),
             "-o",
             "brief",
             "--no-header",
@@ -564,12 +501,7 @@ fn test_cert_inspect_no_header_brief() {
 #[test]
 fn test_cert_inspect_no_header_text() {
     tsumiki()
-        .args([
-            "cert",
-            "inspect",
-            &test_cert_path("chain.pem"),
-            "--no-header",
-        ])
+        .args(["cert", "inspect", &fixture_path("chain.pem"), "--no-header"])
         .assert()
         .success()
         .stdout(predicate::str::contains("--- Certificate").not());
