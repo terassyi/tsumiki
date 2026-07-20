@@ -96,6 +96,136 @@ fn test_crl_inspect_der_input() {
         .stdout(predicate::str::contains("Issuer: CN=Tsumiki Test CA"));
 }
 
+// --- filter flags (RFC 5280 §5 field selectors) ---
+
+// A selector flag prints only that field and suppresses the full CRL dump.
+#[test]
+fn test_crl_inspect_show_issuer() {
+    tsumiki()
+        .args([
+            "crl",
+            "inspect",
+            &fixture_path("sample.crl"),
+            "--show-issuer",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Issuer: CN=Tsumiki Test CA"))
+        .stdout(predicate::str::contains("Certificate Revocation List (CRL):").not());
+}
+
+#[test]
+fn test_crl_inspect_show_dates() {
+    tsumiki()
+        .args([
+            "crl",
+            "inspect",
+            &fixture_path("sample.crl"),
+            "--show-dates",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Last Update:"))
+        .stdout(predicate::str::contains("Next Update:"));
+}
+
+#[test]
+fn test_crl_inspect_show_number() {
+    tsumiki()
+        .args([
+            "crl",
+            "inspect",
+            &fixture_path("sample.crl"),
+            "--show-number",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("CRL Number: 4096"));
+}
+
+#[test]
+fn test_crl_inspect_list_revoked() {
+    tsumiki()
+        .args([
+            "crl",
+            "inspect",
+            &fixture_path("sample_revoked.crl"),
+            "--list-revoked",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Revoked Certificates:"))
+        .stdout(predicate::str::contains("Serial Number: 10:01"))
+        .stdout(predicate::str::contains("Revocation Date:"));
+}
+
+#[test]
+fn test_crl_inspect_list_extensions() {
+    tsumiki()
+        .args([
+            "crl",
+            "inspect",
+            &fixture_path("sample.crl"),
+            "--list-extensions",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("CRL extensions:"))
+        .stdout(predicate::str::contains("CRL Number:"));
+}
+
+// nextUpdate-based check, mirroring `cert inspect --check-expiry`: valid CRLs
+// print "CRL is VALID" and exit 0; expired ones print "CRL is EXPIRED" and
+// exit 1. sample.crl's nextUpdate is in the future, so this asserts the VALID
+// path. NOTE: this becomes time-dependent once that nextUpdate passes — the
+// fixture must then be regenerated with a later nextUpdate.
+#[test]
+fn test_crl_inspect_check_expiry() {
+    tsumiki()
+        .args([
+            "crl",
+            "inspect",
+            &fixture_path("sample.crl"),
+            "--check-expiry",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("CRL is VALID"));
+}
+
+// --max-entries is a modifier on --list-revoked and is rejected on its own.
+#[test]
+fn test_crl_inspect_max_entries_requires_list_revoked() {
+    tsumiki()
+        .args([
+            "crl",
+            "inspect",
+            &fixture_path("sample_revoked.crl"),
+            "--max-entries",
+            "1",
+        ])
+        .assert()
+        .failure();
+}
+
+// --max-entries caps the revoked list; the remainder is reported as omitted.
+// sample_revoked.crl has one entry, so `--max-entries 0` omits it.
+#[test]
+fn test_crl_inspect_max_entries() {
+    tsumiki()
+        .args([
+            "crl",
+            "inspect",
+            &fixture_path("sample_revoked.crl"),
+            "--list-revoked",
+            "--max-entries",
+            "0",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("(1 more omitted)"));
+}
+
 #[test]
 fn test_crl_inspect_file_not_found() {
     tsumiki()

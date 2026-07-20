@@ -1,6 +1,6 @@
 # tsumiki CLI Usage
 
-tsumiki provides a command-line tool for inspecting X.509 certificates, ASN.1 structures, and PKCS keys.
+tsumiki provides a command-line tool for inspecting X.509 certificates, Certificate Revocation Lists (CRLs), ASN.1 structures, and PKCS keys.
 
 ## Installation
 
@@ -44,6 +44,7 @@ tsumiki --help
 ```
 tsumiki
 ├── cert inspect    # Inspect X.509 certificates
+├── crl inspect     # Inspect Certificate Revocation Lists (CRLs)
 ├── der inspect     # Convert PEM to DER (binary output)
 ├── der dump        # Display hex dump of DER file
 ├── der encode      # Convert DER to PEM
@@ -357,6 +358,132 @@ Self-Signed: No
 # Show OID values instead of human-readable names
 $ tsumiki cert inspect certificate.pem --show-oid
 ```
+
+## CRL Inspection
+
+The `crl inspect` command displays Certificate Revocation List (CRL) information
+([RFC 5280 §5](https://datatracker.ietf.org/doc/html/rfc5280#section-5)).
+
+### Help Output
+
+```console
+$ tsumiki crl inspect -h
+Inspect and display a Certificate Revocation List (CRL)
+
+Usage: tsumiki crl inspect [OPTIONS] [FILE]
+
+Arguments:
+  [FILE]  Path to the CRL file (PEM or DER format). If not specified, reads from stdin
+
+Options:
+  -o, --output <OUTPUT>            Output format [default: text] [possible values: text, json, yaml, brief]
+      --show-issuer                Show only issuer
+      --show-dates                 Show only update dates (thisUpdate / nextUpdate)
+      --show-number                Show only the CRL number
+      --list-revoked               List revoked certificate entries
+      --list-extensions            List CRL extensions
+      --check-expiry               Check whether the CRL is expired (nextUpdate has passed)
+      --max-entries <MAX_ENTRIES>  Limit the number of revoked entries shown by --list-revoked
+  -h, --help                       Print help
+```
+
+### Basic Usage
+
+```bash
+# Inspect a local CRL file (PEM or DER, auto-detected)
+tsumiki crl inspect crl.pem
+
+# Read from stdin
+cat crl.pem | tsumiki crl inspect
+```
+
+**Example:**
+
+```console
+$ tsumiki crl inspect crl.pem
+Certificate Revocation List (CRL):
+        Version 2 (0x1)
+        Signature Algorithm: sha256WithRSAEncryption
+        Issuer: CN=Tsumiki Test CA
+        Last Update: 2026-07-16 06:16:49
+        Next Update: 2026-08-15 06:16:49
+        CRL extensions:
+            X509v3 CRL Number:
+                4096
+No Revoked Certificates.
+    Signature Algorithm: sha256WithRSAEncryption
+        59:3b:7b:2f:e3:f3:82:55:1f:29:70:39:25:f8:3b:e6:01:bc
+        ...
+```
+
+### Output Formats
+
+```bash
+# Text output (default)
+tsumiki crl inspect crl.pem -o text
+
+# JSON output
+tsumiki crl inspect crl.pem -o json
+
+# YAML output
+tsumiki crl inspect crl.pem -o yaml
+
+# Brief output (one-line summary)
+tsumiki crl inspect crl.pem -o brief
+```
+
+**Brief Example:**
+
+```console
+$ tsumiki crl inspect crl.pem -o brief
+Issuer: CN=Tsumiki Test CA | Revoked: 1
+```
+
+### Display Specific Fields
+
+Any selector flag prints only the requested field(s) and suppresses the full
+CRL dump.
+
+```console
+# Show only issuer
+$ tsumiki crl inspect crl.pem --show-issuer
+Issuer: CN=Tsumiki Test CA
+
+# Show update dates
+$ tsumiki crl inspect crl.pem --show-dates
+Last Update: 2026-07-16 06:16:49
+Next Update: 2026-08-15 06:16:49
+
+# Show the CRL number
+$ tsumiki crl inspect crl.pem --show-number
+CRL Number: 4096
+
+# List revoked certificate entries
+$ tsumiki crl inspect crl.pem --list-revoked
+Revoked Certificates:
+    Serial Number: 10:01
+        Revocation Date: 2025-06-01 00:00:00
+
+# Limit the number of revoked entries shown
+$ tsumiki crl inspect crl.pem --list-revoked --max-entries 20
+Revoked Certificates:
+    Serial Number: 10:01
+        Revocation Date: 2025-06-01 00:00:00
+    ... (5 more omitted)
+
+# List CRL extensions
+$ tsumiki crl inspect crl.pem --list-extensions
+CRL extensions:
+            X509v3 CRL Number:
+                4096
+
+# Check whether the CRL is expired (based on nextUpdate).
+# Exits 0 when valid, 1 when expired — usable as a scripting/CI predicate.
+$ tsumiki crl inspect crl.pem --check-expiry
+CRL is VALID (nextUpdate 2026-08-15 06:16:49 UTC)
+```
+
+The `--max-entries` flag only applies together with `--list-revoked`.
 
 ## DER Operations
 
