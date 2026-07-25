@@ -218,9 +218,8 @@ fn parse_remote_address(remote: &str) -> (&str, u16) {
 }
 
 fn parse_certificate_from_der(input_bytes: Vec<u8>) -> Result<Certificate> {
-    let der = input_bytes.decode()?;
-    let asn1_obj = der.decode()?;
-    Ok(asn1_obj.decode()?)
+    // Decode via the Vec<u8> entry point so the exact tbsCertificate DER is captured.
+    Ok(input_bytes.decode()?)
 }
 
 fn load_certificate_chain(file: Option<&str>) -> Result<CertificateChain> {

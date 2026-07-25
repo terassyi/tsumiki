@@ -67,6 +67,8 @@ pub enum Error {
     EmptyCertificate,
     #[error("Certificate: failed to decode DER")]
     CertificateDerDecodeFailed,
+    #[error("failed to locate the tbs bytes within the DER input")]
+    TbsCaptureFailed,
     #[error("{0}: unexpected element")]
     UnexpectedElement(CertificateField),
     #[error("{0}: expected BIT STRING")]

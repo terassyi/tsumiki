@@ -119,6 +119,10 @@ pub struct Certificate {
     tbs_certificate: TBSCertificate,
     signature_algorithm: AlgorithmIdentifier,
     signature_value: BitString, // BIT STRING
+    /// Exact original DER of `tbsCertificate`, captured when decoded from raw
+    /// DER/PEM bytes. `None` when built directly from an `Element`.
+    #[serde(skip)]
+    tbs_der: Option<Vec<u8>>,
 }
 
 impl Serialize for Certificate {
@@ -177,6 +181,15 @@ impl Certificate {
     /// Get the signature value
     pub fn signature_value(&self) -> &BitString {
         &self.signature_value
+    }
+
+    /// Returns the exact original DER of `tbsCertificate` (the signed portion),
+    /// or `None` if this certificate was not built from raw DER/PEM input.
+    ///
+    /// These are the byte-for-byte bytes covered by the signature, suitable as
+    /// the message for signature verification.
+    pub fn tbs_der(&self) -> Option<&[u8]> {
+        self.tbs_der.as_deref()
     }
 
     /// Returns true if the certificate is self-signed.
@@ -520,10 +533,32 @@ impl Decoder<Element, Certificate> for Element {
                     tbs_certificate,
                     signature_algorithm,
                     signature_value,
+                    tbs_der: None,
                 })
             }
             _ => Err(Error::ExpectedSequence(CertificateField::Certificate)),
         }
+    }
+}
+
+impl DecodableFrom<Vec<u8>> for Certificate {}
+
+// Vec<u8> -> Certificate decoder that also captures the exact tbsCertificate DER.
+// All raw-byte entry points (DER files, PEM via `from_pem`) route through here so
+// that `tbs_der()` is populated; the `Element`/`ASN1Object` decoders leave it `None`.
+impl Decoder<Vec<u8>, Certificate> for Vec<u8> {
+    type Error = Error;
+
+    fn decode(&self) -> Result<Certificate, Self::Error> {
+        let der: tsumiki_der::Der = self.decode()?;
+        let asn1_obj: ASN1Object = der
+            .decode()
+            .map_err(|_| Error::CertificateDerDecodeFailed)?;
+        let certificate: Certificate = asn1_obj.decode()?;
+        Ok(Certificate {
+            tbs_der: Some(crate::capture_tbs_der(self)?),
+            ..certificate
+        })
     }
 }
 
@@ -578,20 +613,10 @@ impl tsumiki_pem::FromPem for Certificate {
             });
         }
 
-        // Decode PEM to DER bytes
+        // Decode PEM to DER bytes, then decode via the byte entry point so the
+        // exact tbsCertificate DER is captured.
         let der_bytes: Vec<u8> = pem.decode()?;
-        let der: tsumiki_der::Der = der_bytes.decode()?;
-
-        // Decode DER to ASN1Object
-        let asn1_obj = der
-            .decode()
-            .map_err(|_| Error::CertificateDerDecodeFailed)?;
-
-        // Get first element
-        let element = asn1_obj.elements().first().ok_or(Error::EmptyCertificate)?;
-
-        // Decode to Certificate
-        element.decode()
+        der_bytes.decode()
     }
 }
 
@@ -2864,5 +2889,43 @@ sDuylxpp9szuj0bvfcO9JcS+V/5gPK0+5QxawidqE/ERQgBD9yj8ouw4F6BmKg==
         } else {
             panic!("TBSCertificate should encode to Sequence");
         }
+    }
+
+    #[test]
+    fn tbs_der_captures_exact_signed_bytes() {
+        let der_bytes: Vec<u8> = Pem::from_str(TEST_CERT_V3_CA).unwrap().decode().unwrap();
+        let cert = Certificate::from_str(TEST_CERT_V3_CA).unwrap();
+
+        let tbs = cert
+            .tbs_der()
+            .expect("tbs_der should be captured from PEM input");
+        // tbsCertificate is a SEQUENCE.
+        assert_eq!(tbs.first(), Some(&0x30));
+        // The captured bytes are an exact contiguous slice of the certificate DER.
+        assert!(
+            der_bytes.windows(tbs.len()).any(|w| w == tbs),
+            "tbs_der must be an exact byte slice of the original DER"
+        );
+        // ...and they decode back to the same tbsCertificate.
+        let der: Der = tbs.to_vec().decode().unwrap();
+        let asn1: ASN1Object = der.decode().unwrap();
+        let reparsed: TBSCertificate = asn1.elements().first().unwrap().decode().unwrap();
+        assert_eq!(&reparsed, cert.tbs_certificate());
+    }
+
+    #[test]
+    fn tbs_der_is_none_when_built_from_element() {
+        let cert = Certificate::from_str(TEST_CERT_V3_CA).unwrap();
+        // Re-decoding from an Element (no raw bytes) leaves tbs_der unset.
+        let element: Element = cert.encode().unwrap();
+        let rebuilt: Certificate = element.decode().unwrap();
+        assert!(rebuilt.tbs_der().is_none());
+    }
+
+    #[test]
+    fn tbs_der_not_serialized() {
+        let cert = Certificate::from_str(TEST_CERT_V3_CA).unwrap();
+        let json = serde_json::to_string(&cert).unwrap();
+        assert!(!json.contains("tbs_der"));
     }
 }
