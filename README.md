@@ -51,6 +51,9 @@ Tsumiki implements the following RFCs:
   - [x] Policy Mappings / Policy Constraints
   - [x] Inhibit Any Policy
   - [x] Freshest CRL
+- [x] CRL (Certificate Revocation List) parsing and encoding (RFC 5280 §5)
+  - [x] CRL-specific extensions (CRL Number, Delta CRL Indicator, Issuing Distribution Point)
+  - [x] CRL entry extensions (Reason Code, Invalidity Date, Certificate Issuer)
 - [x] Certificate chain handling
 - [x] ASN.1 DER parsing and encoding
 - [x] PEM format support (RFC 7468)
@@ -59,14 +62,13 @@ Tsumiki implements the following RFCs:
 - [x] SEC1 EC private keys (RFC 5915)
 - [x] rustls-pki-types integration
 - [x] JSON/YAML serialization (serde)
-- [x] CLI tool for certificate inspection
+- [x] CLI tool for certificate and CRL inspection
 - [x] Remote certificate fetching via TLS
 
 ### Planned
 
 - [ ] Certificate validation
 - [ ] Certificate signing
-- [ ] CRL (Certificate Revocation List) parsing
 - [ ] OCSP support
 - [ ] PKCS#1 / PKCS#8 / SEC1 key generation
 - [ ] PKCS#7 / CMS

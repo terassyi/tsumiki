@@ -22,16 +22,20 @@ focuses on what comes next and why.
 ├─ PKCS#1 / PKCS#8 / SEC1 keys (parse and encode only — no generation yet)
 ├─ rustls-pki-types integration
 ├─ JSON/YAML serde for all public types
-└─ CLI: `tsumiki {cert, der, asn1, pkcs} inspect`, TLS remote fetch
+├─ CRL (Certificate Revocation List) parse and encode (RFC 5280 §5):
+│   CertificateList / TBSCertList / RevokedCertificate, CRL-specific and
+│   entry extensions, PEM `X509 CRL` label
+└─ CLI: `tsumiki {cert, crl, der, asn1, pkcs} inspect`, TLS remote fetch
 
-[In progress]
-└─ Milestone: CRL Support  (Issue #67 library + Issue #68 CLI)
+[Next]
+└─ Milestone: Cryptographic Backend (`tsumiki-crypto`) — design agreed
+    (see docs/crypto_backend.md), not yet implemented
 ```
 
-What tsumiki can do today around revocation is limited to **reading the
-`CRLDistributionPoints` / `FreshestCRL` extensions out of certificates**.
-The CRL document itself cannot yet be parsed; that is the in-progress
-milestone.
+tsumiki can now **parse, inspect, and emit CRLs** (`tsumiki crl inspect`, the
+`tsumiki_x509::crl` module), in addition to reading the `CRLDistributionPoints`
+/ `FreshestCRL` extensions out of certificates. What remains deferred is
+verifying a CRL's signature, which depends on the crypto backend milestone.
 
 ## Milestone Roadmap
 
@@ -40,7 +44,7 @@ milestone.
                                           │
                   ┌───────────────────────┼───────────────────────┐
                   │                       │                       │
-        [In progress: CRL parse]   [Planned: Key gen]      [Planned: OCSP]
+        [Shipped: CRL parse]       [Planned: Key gen]      [Planned: OCSP]
         (Issue #67/#68)            (PKCS#1/#8/SEC1)         (RFC 6960)
                   │                       │                       │
                   │                       │                       │
@@ -62,7 +66,7 @@ milestone.
             (signed data)      (key+cert bundle) (TLS, mTLS, S/MIME, ...)
 ```
 
-### M1. CRL Support (in progress)
+### M1. CRL Support (shipped)
 
 - **Scope**: Parse and encode `CertificateList` / `TBSCertList` /
   `RevokedCertificate` per [RFC 5280 §5]. CRL-specific extensions (cRLNumber,
@@ -77,10 +81,12 @@ milestone.
 
 ### M2. Cryptographic Backend (cross-cutting foundation)
 
-- **Scope**: Introduce a `tsumiki-crypto` (working name) abstraction with
-  pluggable backends. Cover RSA, ECDSA (P-256/P-384/P-521), Ed25519 for both
-  signing and verification. Choose initial adapter (likely `ring` or
-  `rustcrypto`).
+- **Scope**: Introduce a `tsumiki-crypto` abstraction with pluggable backends.
+  Cover RSA, ECDSA (P-256/P-384/P-521), Ed25519 for both signing and
+  verification. The agreed design mirrors rustls: a per-backend-crate split
+  defaulting to `aws-lc-rs`, with `ring` / RustCrypto as alternatives, and
+  verification implemented first. See
+  [docs/crypto_backend.md](./crypto_backend.md) for the full design.
 - **Crypto required**: This *is* the crypto layer.
 - **Why next**: Every subsequent milestone that does anything more than parse
   (verification, signing, validation, OCSP responses, CMS, PKCS#12) depends on
@@ -161,9 +167,11 @@ These topics span multiple milestones and may produce their own follow-up work:
 
 - **Error model consolidation**: errors currently fan out per crate and per
   feature. As OCSP and CMS land, the surface needs a cohesion pass.
-- **Crypto backend selection**: M2's main design decision. Likely `ring`-first
-  with an option to swap in `rustcrypto` for non-`ring` targets.
-- **ASN.1 extensions**: M1 will add `ENUMERATED` support to `tsumiki-asn1`. M8
+- **Crypto backend selection**: M2's main design decision. Agreed design is a
+  pluggable, per-backend-crate split modeled on rustls, defaulting to
+  `aws-lc-rs` with `ring` / RustCrypto as alternatives — see
+  [docs/crypto_backend.md](./crypto_backend.md).
+- **ASN.1 extensions**: M1 added `ENUMERATED` support to `tsumiki-asn1`. M8
   (CMS) will likely require richer `ANY DEFINED BY` modeling. M9 needs PBE
   parameter structures.
 - **CLI growth**: each milestone gains a subcommand
@@ -176,7 +184,7 @@ These topics span multiple milestones and may produce their own follow-up work:
 
 ## Proposed Short-term Sequencing
 
-After M1 (CRL Support) ships, the recommended order is:
+With M1 (CRL Support) shipped, the recommended order is:
 
 1. **M2 Cryptographic Backend** — narrow first cut, just enough to sign and
    verify a few algorithms. Unblocks several milestones in parallel.
