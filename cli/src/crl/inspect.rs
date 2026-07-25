@@ -3,8 +3,6 @@ use std::str::FromStr;
 use chrono::{NaiveDateTime, Utc};
 use clap::Args;
 use tsumiki::decoder::Decoder;
-use tsumiki_asn1::ASN1Object;
-use tsumiki_der::Der;
 use tsumiki_x509::crl::extensions::{
     AuthorityKeyIdentifier, CRLNumber, DeltaCRLIndicator, FreshestCRL, IssuerAltName,
     IssuingDistributionPoint,
@@ -71,18 +69,15 @@ impl Config {
 pub(crate) fn execute(config: Config) -> Result<()> {
     let input_bytes = read_input(config.file.as_deref())?;
 
-    // Parse as PEM first (via `FromStr`), falling back to DER
-    // (`Vec<u8>` -> `Der` -> `ASN1Object` -> `CertificateList` via `Decoder`).
+    // Parse as PEM first (via `FromStr`), falling back to decoding the raw DER
+    // bytes directly (`Vec<u8>` -> `CertificateList`), which also captures the
+    // exact tbsCertList DER.
     let crl = match String::from_utf8(input_bytes.clone())
         .ok()
         .and_then(|contents| CertificateList::from_str(&contents).ok())
     {
         Some(crl) => crl,
-        None => {
-            let der: Der = input_bytes.decode()?;
-            let asn1_obj: ASN1Object = der.decode()?;
-            asn1_obj.decode()?
-        }
+        None => input_bytes.decode()?,
     };
 
     // Show only the requested fields if any selector flag is set.

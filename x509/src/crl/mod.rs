@@ -368,11 +368,25 @@ impl Encoder<TBSCertList, Element> for TBSCertList {
 }
 
 /// A complete, signed X.509 Certificate Revocation List (RFC 5280 §5.1).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CertificateList {
     tbs_cert_list: TBSCertList,
     signature_algorithm: AlgorithmIdentifier,
     signature_value: BitString,
+    /// Exact original DER of `tbsCertList`, captured when decoded from raw
+    /// DER/PEM bytes. `None` when built directly from an `Element`.
+    #[serde(skip)]
+    tbs_der: Option<Vec<u8>>,
+}
+
+impl PartialEq for CertificateList {
+    fn eq(&self, other: &Self) -> bool {
+        // `tbs_der` records capture provenance, not semantic content; ignore it
+        // so that equality means "same decoded CRL".
+        self.tbs_cert_list == other.tbs_cert_list
+            && self.signature_algorithm == other.signature_algorithm
+            && self.signature_value == other.signature_value
+    }
 }
 
 impl CertificateList {
@@ -389,6 +403,15 @@ impl CertificateList {
     /// The CRL issuer's signature over the encoded `tbs_cert_list`.
     pub fn signature_value(&self) -> &BitString {
         &self.signature_value
+    }
+
+    /// Returns the exact original DER of `tbsCertList` (the signed portion),
+    /// or `None` if this CRL was not built from raw DER/PEM input.
+    ///
+    /// These are the byte-for-byte bytes covered by the signature, suitable as
+    /// the message for signature verification.
+    pub fn tbs_der(&self) -> Option<&[u8]> {
+        self.tbs_der.as_deref()
     }
 }
 
@@ -423,6 +446,7 @@ impl Decoder<Element, CertificateList> for Element {
             tbs_cert_list,
             signature_algorithm,
             signature_value,
+            tbs_der: None,
         })
     }
 }
@@ -462,6 +486,25 @@ impl Decoder<ASN1Object, CertificateList> for ASN1Object {
     }
 }
 
+impl DecodableFrom<Vec<u8>> for CertificateList {}
+
+// Vec<u8> -> CertificateList decoder that also captures the exact tbsCertList DER.
+// All raw-byte entry points (DER files, PEM via `from_pem`) route through here so
+// that `tbs_der()` is populated; the `Element`/`ASN1Object` decoders leave it `None`.
+impl Decoder<Vec<u8>, CertificateList> for Vec<u8> {
+    type Error = Error;
+
+    fn decode(&self) -> Result<CertificateList, Self::Error> {
+        let der: Der = self.decode()?;
+        let asn1_obj: ASN1Object = der.decode()?;
+        let crl: CertificateList = asn1_obj.decode()?;
+        Ok(CertificateList {
+            tbs_der: Some(crate::capture_tbs_der(self)?),
+            ..crl
+        })
+    }
+}
+
 impl EncodableTo<CertificateList> for ASN1Object {}
 
 impl Encoder<CertificateList, ASN1Object> for CertificateList {
@@ -497,10 +540,10 @@ impl FromPem for CertificateList {
                 got: pem.label().to_string(),
             });
         }
+        // Decode PEM to DER bytes, then decode via the byte entry point so the
+        // exact tbsCertList DER is captured.
         let der_bytes: Vec<u8> = pem.decode()?;
-        let der: Der = der_bytes.decode()?;
-        let asn1_obj: ASN1Object = der.decode()?;
-        asn1_obj.decode()
+        der_bytes.decode()
     }
 }
 
@@ -735,5 +778,63 @@ mod tests {
         let elem = Element::Sequence(vec![alg_elem(), name_elem()]);
         let decoded: Result<CertificateList, _> = elem.decode();
         assert!(decoded.is_err());
+    }
+
+    // A well-formed CRL Element: SEQUENCE { tbsCertList, sigAlg, sigValue }.
+    fn crl_element() -> Element {
+        let tbs = Element::Sequence(vec![
+            alg_elem(),
+            name_elem(),
+            Element::UTCTime(dt(2024, 1, 1)),
+        ]);
+        Element::Sequence(vec![
+            tbs,
+            alg_elem(),
+            Element::BitString(BitString::new(0, vec![0xde, 0xad, 0xbe, 0xef])),
+        ])
+    }
+
+    #[test]
+    fn tbs_der_captures_exact_signed_bytes() {
+        let der_bytes: Vec<u8> = ASN1Object::new(vec![crl_element()])
+            .encode()
+            .unwrap()
+            .encode()
+            .unwrap();
+
+        let crl: CertificateList = der_bytes.decode().unwrap();
+        let tbs = crl
+            .tbs_der()
+            .expect("tbs_der should be captured from DER input");
+        // tbsCertList is a SEQUENCE.
+        assert_eq!(tbs.first(), Some(&0x30));
+        // The captured bytes are an exact contiguous slice of the CRL DER.
+        assert!(
+            der_bytes.windows(tbs.len()).any(|w| w == tbs),
+            "tbs_der must be an exact byte slice of the original DER"
+        );
+        // ...and they decode back to the same tbsCertList.
+        let re_der: Der = tbs.to_vec().decode().unwrap();
+        let re_asn1: ASN1Object = re_der.decode().unwrap();
+        let reparsed: TBSCertList = re_asn1.elements().first().unwrap().decode().unwrap();
+        assert_eq!(&reparsed, crl.tbs_cert_list());
+    }
+
+    #[test]
+    fn tbs_der_is_none_when_built_from_element() {
+        let crl: CertificateList = crl_element().decode().unwrap();
+        assert!(crl.tbs_der().is_none());
+    }
+
+    #[test]
+    fn tbs_der_not_serialized() {
+        let der_bytes: Vec<u8> = ASN1Object::new(vec![crl_element()])
+            .encode()
+            .unwrap()
+            .encode()
+            .unwrap();
+        let crl: CertificateList = der_bytes.decode().unwrap();
+        let json = serde_json::to_string(&crl).unwrap();
+        assert!(!json.contains("tbs_der"));
     }
 }
