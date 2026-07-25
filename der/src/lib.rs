@@ -573,11 +573,42 @@ pub(crate) fn parse_length(input: &[u8]) -> IResult<&[u8], u64> {
     Ok((input, n as u64))
 }
 
+/// Returns `(header_len, content_len)` for the DER TLV at the start of `input`,
+/// where `header_len` is the number of identifier + length octets and
+/// `content_len` is the declared length of the value.
+///
+/// Only the tag and length octets are inspected; the value is not read, so for
+/// a truncated buffer `content_len` may exceed `input.len() - header_len`.
+/// Callers must bounds-check (e.g. with [`slice::get`]) before slicing.
+///
+/// # Errors
+/// Returns an error if the tag or length octets are missing or malformed, or if
+/// the declared length does not fit in a machine `usize`.
+pub fn tlv_spans(input: &[u8]) -> Result<(usize, usize), Error> {
+    let (after_tag, _tag) = parse_tag(input).map_err(map_nom_err)?;
+    let (after_length, length) = parse_length(after_tag).map_err(map_nom_err)?;
+    let header_len = input
+        .len()
+        .checked_sub(after_length.len())
+        .ok_or(Error::Parser(nom::error::ErrorKind::Eof))?;
+    let content_len = usize::try_from(length).map_err(|_| Error::LengthOverflow(length))?;
+    Ok((header_len, content_len))
+}
+
+/// Maps a `nom` parse error into the crate [`Error`], matching the conversion
+/// used by the `Decoder` implementations.
+fn map_nom_err(err: nom::Err<nom::error::Error<&[u8]>>) -> Error {
+    match err {
+        nom::Err::Error(e) | nom::Err::Failure(e) => Error::Parser(e.code),
+        nom::Err::Incomplete(e) => Error::ParserIncomplete(e),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
 
-    use crate::{Der, PrimitiveTag, Tag, Tlv, Value, parse_length};
+    use crate::{Der, PrimitiveTag, Tag, Tlv, Value, parse_length, tlv_spans};
     use tsumiki::decoder::Decoder;
     use tsumiki::encoder::Encoder;
     use tsumiki_pem::Pem;
@@ -896,5 +927,38 @@ e8ZYGIc4gvs5McdrVUyYGUs=
             .expect("Failed to decode Vec<u8> to Der");
 
         assert_eq!(original_der, decoded_der);
+    }
+
+    #[rstest]
+    // INTEGER 42: tag + short-form length(1) + value(1).
+    #[case(&[0x02, 0x01, 0x2a], 2, 1)]
+    // SEQUENCE wrapping one 3-byte element: tag + short-form length(3).
+    #[case(&[0x30, 0x03, 0x02, 0x01, 0x2a], 2, 3)]
+    fn test_tlv_spans_short_form(
+        #[case] input: &[u8],
+        #[case] header: usize,
+        #[case] content: usize,
+    ) {
+        let (h, c) = tlv_spans(input).expect("tlv_spans should succeed");
+        assert_eq!((h, c), (header, content));
+        // For a complete TLV the header and content cover the whole slice.
+        assert_eq!(h + c, input.len());
+    }
+
+    #[test]
+    fn test_tlv_spans_long_form_length() {
+        // SEQUENCE with long-form length 0x82 0x01 0x00 = 256 (value omitted).
+        let input = [0x30, 0x82, 0x01, 0x00];
+        let (header, content) = tlv_spans(&input).expect("tlv_spans should succeed");
+        assert_eq!(header, 4); // tag(1) + 0x82(1) + length octets(2)
+        assert_eq!(content, 256);
+    }
+
+    #[test]
+    fn test_tlv_spans_errors() {
+        // Empty input: no tag octet.
+        assert!(tlv_spans(&[]).is_err());
+        // Long-form length announces 2 octets but only 1 is present.
+        assert!(tlv_spans(&[0x30, 0x82, 0x01]).is_err());
     }
 }
