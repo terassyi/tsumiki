@@ -11,6 +11,9 @@ pub enum Error {
     /// Parser needs more data to complete parsing.
     #[error("parser incomplete: {0:?}")]
     ParserIncomplete(nom::Needed),
+    /// A declared DER length does not fit in a machine `usize`.
+    #[error("length {0} exceeds usize")]
+    LengthOverflow(u64),
     /// Error occurred while processing PEM data.
     #[error("pem: {0}")]
     Pem(tsumiki_pem::error::Error),
